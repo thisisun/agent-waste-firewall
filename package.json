@@ -1,0 +1,55 @@
+{
+  "name": "agent-waste-firewall",
+  "version": "0.1.0",
+  "description": "AWF is a local-first live monitor, prompt coach, and no-progress circuit breaker for Codex and Claude Code.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thisisun/agent-waste-firewall.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thisisun/agent-waste-firewall/issues"
+  },
+  "homepage": "https://github.com/thisisun/agent-waste-firewall#readme",
+  "bin": {
+    "agent-waste-firewall": "./bin/agent-waste-firewall.mjs"
+  },
+  "files": [
+    ".claude-plugin/",
+    ".codex-plugin/",
+    "assets/",
+    "bin/",
+    "hooks/",
+    "fixtures/",
+    "scripts/",
+    "src/",
+    "docs/",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "design-qa.md",
+    "LICENSE",
+    "README.md",
+    "README.ko.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
+    "benchmark:hook": "node scripts/benchmark-hook.mjs",
+    "check": "node scripts/check.mjs",
+    "prepublishOnly": "npm run check && npm test",
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "guardrails",
+    "hooks",
+    "token-usage"
+  ],
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,7 @@
+.DS_Store
+coverage/
+node_modules/
+*.log
+*.tgz
+.agent-waste-firewall/
+tmp/

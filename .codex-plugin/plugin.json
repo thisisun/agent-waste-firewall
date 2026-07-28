@@ -1,0 +1,29 @@
+{
+  "name": "agent-waste-firewall",
+  "version": "0.1.0",
+  "description": "AWF is a local-first live monitor, prompt coach, and no-progress circuit breaker for coding agents.",
+  "author": {
+    "name": "AWF contributors"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "coding-agents",
+    "token-usage",
+    "guardrails"
+  ],
+  "interface": {
+    "displayName": "AWF — Agent Waste Firewall",
+    "shortDescription": "Monitor coding agents and catch no-progress loops.",
+    "longDescription": "Checks instructions before execution, detects repeated work without repository progress, records strict anonymized semantic traces, and powers a local live dashboard with prompt coaching.",
+    "developerName": "AWF contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": [
+      "Show the latest waste incidents and suggest a stronger task prompt."
+    ]
+  }
+}

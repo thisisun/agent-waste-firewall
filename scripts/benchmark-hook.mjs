@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
+
+import { TraceStore } from "../src/trace-store.mjs";
+
+function integerArgument(name, fallback, maximum) {
+  const index = process.argv.indexOf(name);
+  const raw = index >= 0 ? process.argv[index + 1] : fallback;
+  const value = Number.parseInt(String(raw), 10);
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
+    throw new Error(`${name} must be an integer from 1 to ${maximum}.`);
+  }
+  return value;
+}
+
+function percentile(values, fraction) {
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.max(0, Math.ceil(sorted.length * fraction) - 1);
+  return sorted[index];
+}
+
+const sampleCount = integerArgument("--samples", 100, 10_000);
+const warmupCount = integerArgument("--warmups", 10, 1_000);
+const p95LimitMs = integerArgument("--p95-ms", 100, 60_000);
+const root = fs.mkdtempSync(path.join(os.tmpdir(), "awf-hook-benchmark-"));
+const workspace = path.join(root, "workspace");
+const dataDir = path.join(root, "data");
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const hook = path.join(projectRoot, "scripts", "hook.mjs");
+fs.mkdirSync(workspace, { mode: 0o700 });
+fs.mkdirSync(path.join(workspace, ".git"), { mode: 0o700 });
+
+const env = {
+  ...process.env,
+  AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+  AGENT_WASTE_FIREWALL_MODE: "observe",
+  AGENT_WASTE_FIREWALL_PLATFORM: "codex",
+};
+const traceStore = new TraceStore({ root: dataDir, env });
+traceStore.start({
+  workspace,
+  label: "hook-benchmark",
+  mode: "observe",
+});
+
+function invokeHook(index) {
+  const payload = {
+    session_id: "synthetic-benchmark-session",
+    cwd: workspace,
+    hook_event_name: "PreToolUse",
+    turn_id: "synthetic-benchmark-turn",
+    tool_name: "Bash",
+    tool_use_id: `synthetic-call-${index}`,
+    tool_input: { command: "git status --short" },
+  };
+  const startedAt = performance.now();
+  const result = spawnSync(process.execPath, [hook], {
+    encoding: "utf8",
+    env,
+    input: JSON.stringify(payload),
+  });
+  const elapsedMs = performance.now() - startedAt;
+  if (result.status !== 0) {
+    throw new Error("Hook benchmark subprocess failed.");
+  }
+  try {
+    JSON.parse(result.stdout);
+  } catch {
+    throw new Error("Hook benchmark subprocess returned invalid JSON.");
+  }
+  return elapsedMs;
+}
+
+try {
+  for (let index = 0; index < warmupCount; index += 1) {
+    invokeHook(index);
+  }
+
+  const latencies = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    latencies.push(invokeHook(warmupCount + index));
+  }
+
+  const p95 = percentile(latencies, 0.95);
+  const p95WithinLimit = p95 < p95LimitMs;
+  console.log(
+    JSON.stringify(
+      {
+        sampleCount,
+        warmupCount,
+        activeSemanticTrace: true,
+        p95LimitMs,
+        latencyMs: {
+          p50: percentile(latencies, 0.5),
+          p95,
+          p99: percentile(latencies, 0.99),
+          maximum: Math.max(...latencies),
+        },
+        p95WithinLimit,
+      },
+      null,
+      2,
+    ),
+  );
+  if (!p95WithinLimit) {
+    process.exitCode = 1;
+  }
+} finally {
+  fs.rmSync(root, { recursive: true, force: true });
+}

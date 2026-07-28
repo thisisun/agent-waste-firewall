@@ -1,0 +1,17 @@
+{
+  "name": "agent-waste-firewall",
+  "version": "0.1.0",
+  "description": "AWF is a local-first live monitor, prompt coach, and no-progress circuit breaker for coding agents.",
+  "author": {
+    "name": "AWF contributors"
+  },
+  "license": "Apache-2.0",
+  "hooks": "./hooks/claude-hooks.json",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "coding-agents",
+    "guardrails",
+    "token-usage"
+  ]
+}
