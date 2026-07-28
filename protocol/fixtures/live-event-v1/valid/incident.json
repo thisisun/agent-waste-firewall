@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "seq": 42,
+  "elapsedMs": 3120,
+  "kind": "incident",
+  "platform": "codex",
+  "sessionAlias": "session_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mode": "warn",
+  "family": "shell",
+  "operation": "test",
+  "outcome": "warned",
+  "ruleId": "exact_tool_repeat",
+  "severity": "medium",
+  "attribution": "agent",
+  "occurrences": 2,
+  "progressVersion": 3,
+  "issueIds": [],
+  "incidentCountDelta": 1,
+  "avoidableCallsDelta": 1,
+  "decisionLatencyMs": 11
+}

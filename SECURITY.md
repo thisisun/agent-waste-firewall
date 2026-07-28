@@ -12,6 +12,31 @@ State older than 30 days is removed during hook activity by default, and users c
 `agent-waste-firewall purge --all` at any time. An unsupported detector-state schema is replaced
 when that session next produces a hook event.
 
+Every supported hook also attempts to publish one event to the bounded, always-on `LiveEventV1`
+spool. This path constructs a new object from a closed allowlist; it does not persist the provider
+payload and redact it later. Live events contain only enums, bounded numeric counts and durations,
+rule/issue IDs, and a `session_<HMAC>` alias. They cannot contain free text, paths, file names,
+wall-clock timestamps, raw session/tool/model identifiers, prompts, commands, output, or source
+content.
+
+The spool uses mode `0700` directories and `0600` keys, control files, temporary files, and event
+files where supported. Concurrent hook processes publish private temporary event files and rename
+them atomically under a short global lock. A fresh random 256-bit HMAC key is created for each
+generation. The 4,096-event and 8 MiB limits are hard ceilings. The 24-hour age trigger runs on the
+next publish, read, or `doctor` access; without a background daemon, an idle machine cannot delete
+files exactly at the deadline. All three values may only be configured downward. Rotation removes
+the previous events and key, so a new generation cannot correlate its session alias with an
+earlier generation.
+Partial temporary files and an interrupted pending publication are recovered without exposing
+unaudited bytes. Expensive reconstruction of a damaged control file is reserved for a reader or
+`doctor`, not the hook hot path. If publication is busy or unavailable, the event is dropped and
+the already-computed guard decision remains in force; a rate-limited local diagnostic reports
+degraded presentation.
+
+The always-on spool is short-lived local presentation transport and is not an export format.
+`agent-waste-firewall purge --all` removes it. The current browser dashboard still consumes an
+explicit trace recording; a direct live-spool consumer is planned next.
+
 Explicit live recordings use a stricter boundary than detector state:
 
 - raw hook JSON is never written;

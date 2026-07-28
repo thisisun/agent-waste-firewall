@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "seq": 43,
+  "elapsedMs": 3250,
+  "kind": "progress",
+  "platform": "claude",
+  "sessionAlias": "session_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "mode": "observe",
+  "family": "write",
+  "operation": "progress",
+  "outcome": "succeeded",
+  "ruleId": null,
+  "severity": "none",
+  "attribution": null,
+  "occurrences": 1,
+  "progressVersion": 4,
+  "issueIds": [],
+  "incidentCountDelta": 0,
+  "avoidableCallsDelta": 0,
+  "decisionLatencyMs": 7
+}

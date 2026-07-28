@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "seq": 46,
+  "elapsedMs": 4300,
+  "kind": "tool",
+  "platform": "claude",
+  "sessionAlias": "session_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "mode": "observe",
+  "family": "shell",
+  "operation": "command",
+  "outcome": "observed",
+  "ruleId": "repeated_failure_result",
+  "severity": "high",
+  "attribution": "environment",
+  "occurrences": 3,
+  "progressVersion": 4,
+  "issueIds": [],
+  "incidentCountDelta": 1,
+  "avoidableCallsDelta": 1,
+  "decisionLatencyMs": 12
+}

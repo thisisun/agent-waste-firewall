@@ -10,8 +10,8 @@ AWF (Agent Waste Firewall) is designed around seven constraints:
 4. Blocking must happen before the tool call and only at high confidence.
 5. The guard must fail open and must not create a Stop-continuation loop.
 6. Raw hook payloads must be transformed in memory and must never be written as a recording.
-7. The human-facing monitor must consume the same strict semantic stream that can be safely
-   exported and replayed.
+7. The human-facing monitor and opt-in research trace must consume separate, closed semantic
+   schemas; neither boundary may receive a provider payload.
 
 ## Live sidecar flow
 
@@ -20,17 +20,22 @@ Codex / Claude hook payload (raw in memory only)
             │
             ├──► normalizer ─► detector state ─► allow / warn / deny
             │
-            └──► strict allowlist serializer
-                         │
-                         ├──► trace-scoped semantic JSONL
-                         └──► loopback SSE ─► local dashboard + prompt coach
+            ├──► LiveEventV1 allowlist ─► bounded always-on private spool
+            │                                      │
+            │                                      └──► next live dashboard/native consumer
+            └──► explicit recording? ─► trace-scoped semantic JSONL
+                                              │
+                                              └──► current loopback dashboard + prompt coach
 
 semantic JSONL ─► schema/privacy audit ─► export ─► repository-free replay
 ```
 
-The dashboard never receives the hook payload, detector prose, command, output, path, or source
-content. The HTTP server binds only to loopback and requires a random token in the local URL.
-Browser assets have no external dependencies or outbound requests.
+Both serializers construct new objects from closed allowlists; neither saves raw JSON for later
+redaction. The current dashboard still consumes the explicit trace path. Connecting its projection
+to the always-on spool is the next presentation change. The dashboard never receives the hook
+payload, detector prose, command, output, path, or source content. The HTTP server binds only to
+loopback and requires a random token in the local URL. Browser assets have no external dependencies
+or outbound requests.
 
 ## Portable decision model
 
@@ -80,9 +85,38 @@ from overwriting each other. State is bounded:
 The transcript format is not a dependency because coding-agent transcript files are not stable
 public interfaces.
 
+## Always-on live event model
+
+Every supported hook makes a best-effort `LiveEventV1` publication after the detector decision,
+without requiring `record start`. Projection happens in memory from the normalized detector result.
+The schema has one exact shape and allows only:
+
+- closed event, platform, mode, tool-family, operation, outcome, rule, severity, attribution, and
+  issue-ID vocabularies;
+- bounded numeric sequence, relative elapsed time, occurrence, progress, incident/avoidable-call
+  deltas, and decision-latency fields;
+- one validated `session_<HMAC>` alias.
+
+It rejects unknown keys and cannot represent prose, a wall-clock timestamp, a path or file name,
+a command, output, source content, or a raw provider/model/session/tool identifier.
+
+`LiveEventStore` publishes one private JSON event file by atomic rename under a short global lock.
+The spool uses private directories and files, recovers interrupted pending writes, and revalidates
+every event on read. One generation has hard ceilings of 4,096 events and 8 MiB. A 24-hour age
+trigger is enforced lazily on the next publish, read, or maintenance access because M0 has no
+background daemon. Configuration may lower but not raise any limit. Triggering rotation creates
+a new generation and removes the previous generation. Each generation
+has its own random 256-bit HMAC key, so session aliases are comparable only inside that bounded
+window. Busy or unavailable publication fails open: presentation may miss an event, but the hook
+decision is unchanged.
+
+The live spool is operational UI transport, not an export artifact. The current browser dashboard
+still reads an explicitly started trace; a direct spool reader/projection is the next PR.
+
 ## Semantic trace model
 
-Recording is explicit and scoped to one workspace. A recording may contain multiple concurrent
+Unlike the always-on spool, recording is opt-in, exportable, and scoped to one workspace. A
+recording may contain multiple concurrent
 Codex or Claude sessions observed inside that workspace; each session receives a trace-local HMAC
 alias. The active marker stores only a workspace HMAC alias. On every hook, candidate ancestor paths
 are HMACed in memory until the matching workspace is found, so subdirectories work without

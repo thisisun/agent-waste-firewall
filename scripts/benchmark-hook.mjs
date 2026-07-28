@@ -7,6 +7,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
+import { LiveEventStore } from "../src/live-event-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
 
 function integerArgument(name, fallback, maximum) {
@@ -92,12 +93,20 @@ try {
 
   const p95 = percentile(latencies, 0.95);
   const p95WithinLimit = p95 < p95LimitMs;
+  const liveStatus = new LiveEventStore({ root: dataDir, env }).status();
+  const expectedEventCount = sampleCount + warmupCount;
+  if (liveStatus?.committedSeq !== expectedEventCount) {
+    throw new Error("Always-on live spool did not publish every benchmark event.");
+  }
   console.log(
     JSON.stringify(
       {
         sampleCount,
         warmupCount,
         activeSemanticTrace: true,
+        alwaysOnLiveSpool: true,
+        liveCommittedSequence: liveStatus.committedSeq,
+        liveRetainedEventCount: liveStatus.eventCount,
         p95LimitMs,
         latencyMs: {
           p50: percentile(latencies, 0.5),

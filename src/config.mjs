@@ -3,9 +3,18 @@ import path from "node:path";
 
 export const MODES = new Set(["observe", "warn", "block"]);
 
-function integer(value, fallback, minimum = 1) {
+function integer(
+  value,
+  fallback,
+  minimum = 1,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
   const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallback;
+  return Number.isSafeInteger(parsed) &&
+    parsed >= minimum &&
+    parsed <= maximum
+    ? parsed
+    : fallback;
 }
 
 export function configFromEnv(env = process.env) {
@@ -32,6 +41,24 @@ export function configFromEnv(env = process.env) {
     ),
     maxToolEvents: integer(env.AGENT_WASTE_FIREWALL_MAX_TOOL_EVENTS, 160, 20),
     maxIncidents: integer(env.AGENT_WASTE_FIREWALL_MAX_INCIDENTS, 100, 10),
+    liveMaxEvents: integer(
+      env.AGENT_WASTE_FIREWALL_LIVE_MAX_EVENTS,
+      4096,
+      100,
+      4096,
+    ),
+    liveMaxBytes: integer(
+      env.AGENT_WASTE_FIREWALL_LIVE_MAX_BYTES,
+      8 * 1024 * 1024,
+      64 * 1024,
+      8 * 1024 * 1024,
+    ),
+    liveMaxAgeMinutes: integer(
+      env.AGENT_WASTE_FIREWALL_LIVE_MAX_AGE_MINUTES,
+      24 * 60,
+      1,
+      24 * 60,
+    ),
     retentionDays: integer(env.AGENT_WASTE_FIREWALL_RETENTION_DAYS, 30),
   };
 }

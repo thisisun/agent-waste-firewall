@@ -1,0 +1,24 @@
+{
+  "registryVersion": 1,
+  "protocols": {
+    "liveEvent": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "live-event-v1.schema.json"
+    },
+    "detectorState": {
+      "current": 4,
+      "supported": [
+        4
+      ]
+    },
+    "semanticTrace": {
+      "current": 1,
+      "supported": [
+        1
+      ]
+    }
+  }
+}

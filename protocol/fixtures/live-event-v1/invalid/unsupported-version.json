@@ -1,0 +1,21 @@
+{
+  "v": 2,
+  "seq": 47,
+  "elapsedMs": 4500,
+  "kind": "system",
+  "platform": "codex",
+  "sessionAlias": "session_ffffffffffffffffffffffffffffffff",
+  "mode": "warn",
+  "family": "system",
+  "operation": "progress",
+  "outcome": "observed",
+  "ruleId": null,
+  "severity": "none",
+  "attribution": null,
+  "occurrences": 1,
+  "progressVersion": 4,
+  "issueIds": [],
+  "incidentCountDelta": 0,
+  "avoidableCallsDelta": 0,
+  "decisionLatencyMs": 5
+}

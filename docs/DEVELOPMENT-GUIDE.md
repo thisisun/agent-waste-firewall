@@ -48,19 +48,26 @@ Do not introduce Swift or runtime packaging failures into the existing cross-pla
 
 Goal: create a stable boundary that the native app can consume without raw data.
 
+Implementation status: the dependency-free `LiveEventV1` schema, detector-result projection,
+bounded private store, always-on hook publication, numeric decision latency, privacy fixtures,
+concurrent-writer coverage, and fail-open behavior are implemented. The current browser dashboard
+still consumes an explicit trace. A live-spool reader and shared dashboard projection are the next
+PR and must land before M1 presentation work depends on this transport.
+
 Deliverables:
 
 - `LiveEventV1` closed schema and validator;
 - conversion from a detector result to `LiveEventV1`;
 - a bounded private semantic spool;
-- protocol, state, and trace version constants;
+- live-event, state, and trace version constants;
 - latency instrumentation that records only numeric durations;
 - fixtures for every valid event and adversarial privacy canaries;
-- upgrade behavior for an incompatible event version.
+- rotation to a new unlinkable live generation when a retention boundary is reached.
 
-Put the language-neutral contract and synthetic fixtures under `protocol/`. Keep runtime
-validation dependency-free: a checked-in JSON Schema can document/code-generate the model, while
-the Node and Swift validators must be tested against the same conformance corpus.
+The language-neutral JSON Schema, version registry, and synthetic positive, productive-progress,
+privacy, and incompatible-version fixtures live under `protocol/`. Runtime validation remains
+dependency-free. When the Swift validator is introduced, run it against the same conformance corpus;
+do not make the hook runtime depend on a schema package.
 
 Acceptance:
 
@@ -68,7 +75,7 @@ Acceptance:
 - concurrent hook processes do not corrupt the spool;
 - an unavailable spool does not change the hook response;
 - event creation plus persistence remains below 100 ms at p95;
-- the dashboard can run without an active export recording.
+- the next dashboard consumer can run without an active export recording.
 
 ### M1 — Native read-only shell
 
@@ -185,9 +192,10 @@ Acceptance:
 
 ## Suggested implementation order
 
-### Step 1: define `LiveEventV1`
+### Step 1: define `LiveEventV1` — implemented
 
-Start from the existing trace enums. Keep the live event smaller than the trace event:
+The implementation reuses the existing trace vocabulary while keeping live events smaller than
+trace events. One incident event has this exact closed shape:
 
 ```json
 {
@@ -196,6 +204,8 @@ Start from the existing trace enums. Keep the live event smaller than the trace 
   "elapsedMs": 3120,
   "kind": "incident",
   "platform": "codex",
+  "sessionAlias": "session_0123456789abcdef0123456789abcdef",
+  "mode": "warn",
   "family": "shell",
   "operation": "test",
   "outcome": "warned",
@@ -203,11 +213,17 @@ Start from the existing trace enums. Keep the live event smaller than the trace 
   "severity": "medium",
   "attribution": "agent",
   "occurrences": 2,
-  "progressVersion": 3
+  "progressVersion": 3,
+  "issueIds": [],
+  "incidentCountDelta": 1,
+  "avoidableCallsDelta": 1,
+  "decisionLatencyMs": 4
 }
 ```
 
-All string values must be enums or validated scoped aliases. Do not add:
+All string values are enums or the validated per-generation session alias; all remaining values are
+bounded numbers or enum arrays. The validator requires the exact field set and rejects unknown
+keys before persistence. Do not add:
 
 - warning prose;
 - prompt or recommendation text;
@@ -217,30 +233,36 @@ All string values must be enums or validated scoped aliases. Do not add:
 - model, user, repository, session, turn, or tool identifiers.
 
 The UI owns localized copy for each rule/issue ID. This makes English-default/Korean-optional
-presentation possible without persisting free text.
+presentation possible without persisting free text. A random 256-bit HMAC key scopes session
+equality to one generation and is never included in an event.
 
-### Step 2: build the spool
+### Step 2: build the spool — implemented
 
-Implement a `LiveEventStore` beside, not inside, `TraceStore`.
+`LiveEventStore` lives beside, not inside, `TraceStore`. Every supported hook publishes to it on a
+best-effort basis even when no explicit recording exists.
 
-Requirements:
+Implemented properties:
 
 - private directory and file modes;
 - closed-schema validation before every write and after every read;
 - atomic publication under concurrency;
-- a maximum event count and byte size;
-- short age-based retention;
-- monotonic sequence within one local installation;
+- hard ceilings of 4,096 events and 8 MiB plus a 24-hour age trigger on next access, all
+  configurable only downward;
+- monotonic sequence across normal rotations within one spool lifecycle; explicit purge resets it;
 - safe recovery from a partial temporary file;
 - a no-op, fail-open result when publishing fails.
 
-Keep explicit trace recording unchanged. A live spool is an operational UI transport; a trace is an
-opt-in research/export artifact with a separate key lifecycle.
+Each generation has its own HMAC alias key. Rotation atomically switches to the new generation and
+removes the old events and key. Keep explicit trace recording unchanged: the live spool is
+short-lived operational UI transport, while a trace is an opt-in audit/export/replay artifact with
+a separate key lifecycle.
 
-### Step 3: extract dashboard projection
+### Step 3: connect the dashboard projection — next PR
 
-Move semantic-event-to-dashboard projection into a pure tested module. Both the existing SSE server
-and the macOS shell should consume the same projection.
+Add a validated live-spool cursor and make semantic-event-to-dashboard projection a pure tested
+module. The existing SSE/status server currently reads only an explicitly started trace; the new
+consumer must make the dashboard useful without `record start`. The macOS shell should then consume
+the same projection.
 
 Do not let Swift invent detector meaning. Swift receives typed IDs and numbers, then maps IDs to
 localized copy and visual state.
@@ -405,6 +427,7 @@ npm run check
 npm test
 npm run test:coverage
 npm run benchmark:hook
+npm run benchmark:live-spool
 npm run benchmark:dashboard
 ```
 
@@ -487,5 +510,6 @@ The beta is done when a non-technical user can:
 8. purge local data and uninstall the integration;
 9. reproduce the published evaluation on anonymized semantic fixtures.
 
-The next implementation PR should be **M0 only**: `LiveEventV1`, its privacy validator, the bounded
-spool, and fixture-driven tests. Do not start the native UI until that contract is stable.
+The `LiveEventV1` schema, privacy validator, bounded spool, and fixture-driven publication tests are
+implemented. The next implementation PR should add only the validated live-spool consumer and
+shared dashboard projection. Do not start the native UI until that read path is stable.

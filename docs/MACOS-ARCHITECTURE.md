@@ -162,10 +162,12 @@ Define separate data types for separate trust levels:
 | `UsageSampleV1` | Optional local measurement store | Provider, time bucket, actual token/cost counters when available | Prompt or transcript content |
 | `HealthStatusV1` | App memory | Installed/running/version/latency states | Hook payloads or repository data |
 
-`LiveEventV1` should reuse the strict trace vocabulary but does not need an active export
-recording. It should be written to a bounded, user-only local spool with a short default retention.
-The macOS app consumes only this audited stream. An explicit recording still creates a new
-trace-scoped HMAC key and the stricter export lifecycle already implemented in `TraceStore`.
+`LiveEventV1` reuses the strict trace vocabulary and does not need an active export recording.
+The worker now writes it to a bounded, user-only local spool with hard ceilings of 4,096 events and
+8 MiB plus a 24-hour age trigger enforced on next access; configuration may only lower them. Each
+generation uses a fresh HMAC alias key. The future macOS app will consume only this audited stream.
+An explicit recording still creates a separate trace-scoped HMAC key and uses the stricter export
+lifecycle implemented in `TraceStore`.
 
 Do not implement collection as “save the JSON and redact it later.” Construct each event from a
 closed allowlist and reject unknown fields before the first write.
@@ -180,10 +182,10 @@ Use a small disk-backed semantic spool as the primary transport for the first be
 - It is testable with ordinary fixture files.
 - It contains only audited semantic events.
 
-Publish each event under a short global lock, or as a private temporary file followed by an atomic
-rename into a spool directory. Bound the spool by both event count and age. The app watches the
-directory, validates every event again, updates its in-memory projection, and removes or compacts
-acknowledged events.
+The implemented worker publishes each event under a short global lock as a private temporary file
+followed by an atomic rename. It bounds each generation by event count, bytes, and age, validates
+events again on read, and recovers interrupted pending publications. The app-side watcher and
+dashboard projection remain the next implementation step.
 
 A Unix domain socket can later reduce display latency, but it is an optimization. If added, the
 same event must be validated before sending, the hook must use a very short non-blocking timeout,
@@ -342,21 +344,22 @@ milestone.
 
 ## Versioned migration from the current alpha
 
-1. Extract the existing dashboard projection into a documented `LiveEventV1` schema.
-2. Add a bounded semantic spool and tests while retaining the current explicit trace path.
-3. Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.
-4. Add explicit install/repair/uninstall flows for each provider.
-5. Bundle and sign the worker runtime; add protocol compatibility checks.
-6. Add optional usage adapters only after the decision path is stable.
-7. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
-8. Consider `block` for public use only after the evaluation gates are met.
+1. ~~Define and validate the documented `LiveEventV1` schema.~~ Completed.
+2. ~~Add a bounded semantic spool and tests while retaining the explicit trace path.~~ Completed.
+3. Connect a generation-aware live-spool cursor to the shared dashboard projection.
+4. Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.
+5. Add explicit install/repair/uninstall flows for each provider.
+6. Bundle and sign the worker runtime; add protocol compatibility checks.
+7. Add optional usage adapters only after the decision path is stable.
+8. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
+9. Consider `block` for public use only after the evaluation gates are met.
 
 Current migration debt to address explicitly:
 
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
 - the live dashboard currently depends on one active recording;
-- status and SSE polling repeatedly read the semantic trace rather than following an incremental
-  cursor;
+- status and SSE follow an incremental trace cursor but do not yet consume the always-on live
+  generation;
 - the browser dashboard is a large combined asset module;
 - current manifests invoke `node` from the user's environment;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those

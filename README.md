@@ -5,10 +5,12 @@
 Local-first live monitoring, prompt coaching, and no-progress circuit breakers for Codex and
 Claude Code.
 
-> Status: `0.1.0` research alpha. The live hook path, anonymized recorder, replay, and local
-> dashboard work and are tested. Exact token accounting and one-command installation are not
-> implemented yet. Provider-shaped events pass the real hook executable, but installed Codex and
-> Claude Code acceptance tests are still pending.
+> Status: `0.1.0` research alpha. The live hook path, bounded always-on `LiveEventV1` spool,
+> anonymized recorder, replay, and local dashboard work and are tested. The current dashboard still
+> consumes an explicit trace recording; consuming the always-on spool is the next presentation PR.
+> Exact token accounting and one-command installation are not implemented yet. Provider-shaped
+> events pass the real hook executable, but installed Codex and Claude Code acceptance tests are
+> still pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -29,6 +31,10 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Ignores user-interrupted tool calls and distinguishes identical failures from changing failures.
 - Stores hashes and detector evidence locally. Raw prompts, tool inputs, and tool outputs are not
   persisted.
+- Best-effort publishes one `LiveEventV1` for every supported hook without requiring an explicit
+  recording. The closed schema accepts only enums, bounded numbers, and a per-generation HMAC
+  session alias. The private spool rotates at 4,096 events, 8 MiB, or a 24-hour age trigger;
+  configuration may only lower those limits.
 - Records explicitly scoped workspace activity, including concurrent pseudonymous sessions, as a
   strict semantic JSONL trace using a fresh per-trace HMAC key. The key is removed when recording
   stops.
@@ -60,7 +66,9 @@ node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
 node bin/agent-waste-firewall.mjs report
 ```
 
-Start a live, raw-free pilot for one repository:
+The hook now maintains the bounded raw-free live spool automatically whenever the plugin runs.
+The current web dashboard has not switched to that spool yet. To use the dashboard and create an
+exportable research trace today, start an explicit recording for one repository:
 
 ```bash
 node bin/agent-waste-firewall.mjs record start \
@@ -103,7 +111,8 @@ The plugin packages use the standard `.codex-plugin/plugin.json`,
 No installer edits a user's global configuration in this MVP.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
-outbound requests, and receives semantic events rather than raw hook payloads.
+outbound requests, and receives semantic events rather than raw hook payloads. In this release its
+SSE/status path still reads the explicit trace; a direct `LiveEventV1` consumer is the next PR.
 
 ## Modes
 
@@ -158,6 +167,16 @@ State files do not contain:
 - detector prose or recommendations;
 - source-file content.
 
+Separately, every supported hook makes a best-effort publication to the private `LiveEventV1`
+spool. Each event is constructed from a closed allowlist of enums, bounded numeric counters and
+durations, issue/rule IDs, and one `session_<HMAC>` alias. It contains no free text, path, file name,
+wall-clock timestamp, raw provider ID, prompt, command, output, or source content. A fresh random
+256-bit HMAC key is used for each spool generation, so aliases are not linkable after rotation.
+The generation is replaced when it reaches the hard 4,096-event or 8 MiB ceiling. A 24-hour age
+trigger is enforced on the next publish, read, or `doctor` access; without a background daemon,
+an idle machine cannot delete files exactly at the deadline. Configuration can only lower these
+limits. This spool is short-lived presentation transport and has no export command.
+
 An exported semantic trace is stricter than local detector state. It contains only closed enums,
 numbers, booleans, relative elapsed time, and trace-scoped aliases for prompts, calls, results, and
 file states. It contains no workspace basename, file name, relative path, detector prose, command,
@@ -175,10 +194,12 @@ Session state older than 30 days is deleted during normal hook activity. Change 
 `AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
 `agent-waste-firewall purge`, or all inactive session state with
 `agent-waste-firewall purge --all`. The same command removes expired or inactive semantic traces
-and orphan trace keys. Active hook state and an active trace are skipped and reported; run the
-command again after the coding-agent session stops. Stale locks and orphan atomic-write files are
-cleaned automatically. An unsupported detector-state schema is replaced when that session next
-produces a hook event, so older path-bearing state is not carried into the new schema.
+and orphan trace keys; `purge --all` also removes the live spool. Active hook state and an active
+trace are skipped and reported; run the command again after the coding-agent session stops. Live
+spool rotation removes its previous generation, key, and events. Stale locks and orphan
+atomic-write files are cleaned automatically. An unsupported detector-state schema is replaced
+when that session next produces a hook event, so older path-bearing state is not carried into the
+new schema.
 
 Override the directory with `AGENT_WASTE_FIREWALL_DATA_DIR`. The implementation uses user-only
 directory and file permissions where the operating system supports them.
@@ -198,6 +219,9 @@ All configuration is optional:
 | `AGENT_WASTE_FIREWALL_WAIT_BLOCK_AT` | `5` | Wait/status deny threshold |
 | `AGENT_WASTE_FIREWALL_FAILED_ATTEMPTS_BEFORE_BLOCK` | `2` | Failed attempts allowed before the next identical call can be denied |
 | `AGENT_WASTE_FIREWALL_PROMPT_BLOCK_SCORE` | `35` | Maximum preflight score eligible for blocking |
+| `AGENT_WASTE_FIREWALL_LIVE_MAX_EVENTS` | `4096` | Maximum events in the current live-spool generation |
+| `AGENT_WASTE_FIREWALL_LIVE_MAX_BYTES` | `8388608` | Maximum serialized bytes in the current live-spool generation |
+| `AGENT_WASTE_FIREWALL_LIVE_MAX_AGE_MINUTES` | `1440` | Maximum age of one live-spool generation |
 | `AGENT_WASTE_FIREWALL_RETENTION_DAYS` | `30` | Local session-state retention period |
 
 ## Architecture
@@ -218,8 +242,8 @@ Codex / Claude hook event
           ▼
  strict semantic serializer
           │
-          ├──► loopback live dashboard + prompt coach
-          └──► audit / export / offline replay
+          ├──► bounded always-on LiveEventV1 spool ─► next live consumer
+          └──► explicit trace ─► current loopback dashboard / audit / export / replay
 ```
 
 Hooks are the enforcement path. OpenTelemetry will be the measurement path. This separation keeps
@@ -227,6 +251,7 @@ asynchronous telemetry out of low-latency decisions.
 
 See [core architecture](docs/ARCHITECTURE.md),
 [macOS product architecture](docs/MACOS-ARCHITECTURE.md),
+[macOS implementation status](docs/MACOS-IMPLEMENTATION.md),
 [macOS development guide](docs/DEVELOPMENT-GUIDE.md),
 [GitHub landscape and reuse decision](docs/GITHUB-BENCHMARK-2026-07-29.md),
 [evaluation](docs/EVALUATION.md), the
@@ -251,9 +276,8 @@ See [core architecture](docs/ARCHITECTURE.md),
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.
-4. Package the local dashboard with the
-   [documented native macOS shell](docs/MACOS-ARCHITECTURE.md) after the semantic live-event
-   contract stabilizes.
+4. Switch the dashboard projection to the bounded live spool, then package it with the
+   [documented native macOS shell](docs/MACOS-ARCHITECTURE.md).
 5. Add one-command installation only after safe upgrade/uninstall behavior is tested.
 
 ## License
