@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "seq": 44,
+  "elapsedMs": 3900,
+  "kind": "prompt",
+  "platform": "codex",
+  "sessionAlias": "session_cccccccccccccccccccccccccccccccc",
+  "mode": "block",
+  "family": "prompt",
+  "operation": "prompt",
+  "outcome": "allowed",
+  "ruleId": null,
+  "severity": "none",
+  "attribution": null,
+  "occurrences": 1,
+  "progressVersion": 4,
+  "issueIds": [
+    "target",
+    "verify"
+  ],
+  "incidentCountDelta": 0,
+  "avoidableCallsDelta": 0,
+  "decisionLatencyMs": 9
+}

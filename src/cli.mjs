@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { configFromEnv } from "./config.mjs";
 import { handleHook } from "./engine.mjs";
+import { LiveEventStore } from "./live-event-store.mjs";
 import { evaluatePrompt } from "./prompt-contract.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
@@ -435,6 +437,9 @@ async function commandDoctor(args, env = process.env) {
     "hooks/hooks.json",
     "hooks/claude-hooks.json",
     "scripts/hook.mjs",
+    "src/live-event-schema.mjs",
+    "src/live-event-projection.mjs",
+    "src/live-event-store.mjs",
     "src/trace-schema.mjs",
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
@@ -457,6 +462,24 @@ async function commandDoctor(args, env = process.env) {
       check: "local data directory is writable",
       ok: false,
       detail: error.message,
+    });
+  }
+  try {
+    const liveStatus = new LiveEventStore({
+      root: config.dataDir,
+      env,
+      maxEvents: config.liveMaxEvents,
+      maxBytes: config.liveMaxBytes,
+      maxAgeMs: config.liveMaxAgeMinutes * 60 * 1000,
+    }).status();
+    checks.push({
+      check: "bounded live spool is ready",
+      ok: liveStatus?.v === 1,
+    });
+  } catch {
+    checks.push({
+      check: "bounded live spool is ready",
+      ok: false,
     });
   }
   const major = Number.parseInt(process.versions.node.split(".")[0], 10);
@@ -485,6 +508,13 @@ async function commandPurge(args, env = process.env) {
   const config = configFromEnv(env);
   const store = new StateStore({ root: config.dataDir });
   const traceStore = new TraceStore({ root: config.dataDir, env });
+  const liveStore = new LiveEventStore({
+    root: config.dataDir,
+    env,
+    maxEvents: config.liveMaxEvents,
+    maxBytes: config.liveMaxBytes,
+    maxAgeMs: config.liveMaxAgeMinutes * 60 * 1000,
+  });
   const all = args.includes("--all");
   const details = all
     ? store.purgeAll()
@@ -492,9 +522,13 @@ async function commandPurge(args, env = process.env) {
   const traceDetails = all
     ? traceStore.purgeAll()
     : traceStore.purgeExpired(config.retentionDays);
+  const liveDetails = all
+    ? liveStore.purge()
+    : { liveSpoolRemoved: false };
   const result = {
     ...details,
     ...traceDetails,
+    ...liveDetails,
     scope: all ? "all" : `older-than-${config.retentionDays}-days`,
   };
   if (args.includes("--json")) {
@@ -506,6 +540,13 @@ async function commandPurge(args, env = process.env) {
     console.log(
       `Removed ${result.traceDirectoriesRemoved} anonymized trace(s) and ${result.traceKeysRemoved} orphan trace key(s).`,
     );
+    if (all) {
+      console.log(
+        result.liveSpoolRemoved
+          ? "Removed the bounded live event spool."
+          : "The live event spool was busy and was not removed.",
+      );
+    }
     if (result.activeFilesSkipped > 0) {
       console.log(
         `Skipped ${result.activeFilesSkipped} active file(s); run purge again after the coding-agent session stops.`,
@@ -571,7 +612,7 @@ function recorderWarningOutput(output, env = process.env) {
   }
   if (!shouldWarn) return output;
   const message =
-    "AWF live recording failed for this event; the guard decision still applied. Run `agent-waste-firewall doctor`.";
+    "AWF explicit trace recording failed for this event; the guard decision still applied. Run `agent-waste-firewall doctor`.";
   return {
     ...output,
     systemMessage: output.systemMessage
@@ -580,14 +621,47 @@ function recorderWarningOutput(output, env = process.env) {
   };
 }
 
+function warnLiveSpoolFailure(env = process.env) {
+  const interval = 5 * 60 * 1000;
+  let shouldWarn = true;
+  try {
+    const marker = failOpenMarker(env, "live-spool-warning");
+    if (fs.existsSync(marker)) {
+      shouldWarn = Date.now() - fs.statSync(marker).mtimeMs >= interval;
+    }
+    if (shouldWarn) {
+      fs.writeFileSync(marker, String(Date.now()), { mode: 0o600 });
+    }
+  } catch {
+    // The live spool is optional presentation transport; the guard still runs.
+  }
+  if (shouldWarn) {
+    process.stderr.write(
+      "AWF live monitor degraded: one semantic presentation event was dropped. The guard decision still applied.\n",
+    );
+  }
+}
+
 export async function runHookStdio(options = {}) {
   try {
     const input = await readStdin();
     const payload = JSON.parse(input);
     const env = options.env ?? process.env;
-    const baseConfig = options.config ?? configFromEnv(env);
+    const baseConfig = {
+      ...configFromEnv(env),
+      ...(options.config ?? {}),
+    };
     const traceStore =
       options.traceStore ?? new TraceStore({ root: baseConfig.dataDir, env });
+    const liveStore =
+      options.liveStore ??
+      new LiveEventStore({
+        root: baseConfig.dataDir,
+        env,
+        maxEvents: baseConfig.liveMaxEvents,
+        maxBytes: baseConfig.liveMaxBytes,
+        maxAgeMs: baseConfig.liveMaxAgeMinutes * 60 * 1000,
+      });
     let config = baseConfig;
     let recorderFailed = false;
     try {
@@ -599,11 +673,26 @@ export async function runHookStdio(options = {}) {
       recorderFailed = true;
     }
 
+    const decisionStartedAt = performance.now();
     const result = handleHook(payload, {
       ...options,
       env,
       config,
     });
+    const decisionLatencyMs = performance.now() - decisionStartedAt;
+    try {
+      const publication = liveStore.publish(payload, result, config, {
+        decisionLatencyMs,
+      });
+      if (
+        publication?.published === false &&
+        publication.reason !== "unsupported"
+      ) {
+        warnLiveSpoolFailure(env);
+      }
+    } catch {
+      warnLiveSpoolFailure(env);
+    }
     try {
       traceStore.appendHook(payload, result, config);
     } catch {

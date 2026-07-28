@@ -8,6 +8,12 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
+- Add best-effort `LiveEventV1` publication for every supported hook, independent of explicit
+  recording.
+- Add a private, concurrent-writer-safe live spool with hard 4,096-event/8 MiB ceilings and a
+  24-hour age trigger on next access, with atomic publication and interrupted-write recovery.
+- Scope live session aliases to a fresh per-generation HMAC key and restrict persisted events to a
+  closed enum, bounded-number, rule/issue-ID, and alias allowlist.
 - Add local redacted state, 30-day retention, reporting, purging, and JSONL replay.
 - Add observe, warn, and high-confidence block modes.
 - Add workspace-scoped live recording with a per-trace HMAC key and strict semantic JSONL schema.
@@ -27,3 +33,5 @@
 - Handle malformed local request targets without crashing, close active SSE connections on
   shutdown, recover streams after trace rotation, and display audited-trace failures as a red
   degraded state.
+- Keep the current dashboard on the explicit-trace cursor; direct consumption of the always-on live
+  spool is reserved for the next presentation PR.

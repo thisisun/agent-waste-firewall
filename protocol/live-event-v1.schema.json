@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-waste-firewall:protocol:live-event:v1",
+  "title": "AWF LiveEventV1",
+  "description": "Closed, raw-free semantic event emitted by Agent Waste Firewall.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "seq",
+    "elapsedMs",
+    "kind",
+    "platform",
+    "sessionAlias",
+    "mode",
+    "family",
+    "operation",
+    "outcome",
+    "ruleId",
+    "severity",
+    "attribution",
+    "occurrences",
+    "progressVersion",
+    "issueIds",
+    "incidentCountDelta",
+    "avoidableCallsDelta",
+    "decisionLatencyMs"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "elapsedMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "prompt",
+        "tool",
+        "incident",
+        "progress",
+        "system"
+      ]
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "claude"
+      ]
+    },
+    "sessionAlias": {
+      "type": "string",
+      "pattern": "^session_[0-9a-f]{32}$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "observe",
+        "warn",
+        "block"
+      ]
+    },
+    "family": {
+      "type": "string",
+      "enum": [
+        "prompt",
+        "read",
+        "search",
+        "write",
+        "shell",
+        "wait",
+        "subagent",
+        "system",
+        "other"
+      ]
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "prompt",
+        "command",
+        "test",
+        "build",
+        "verify",
+        "release",
+        "deploy",
+        "sign",
+        "submit",
+        "migrate",
+        "inspect",
+        "wait",
+        "read",
+        "search",
+        "write",
+        "subagent",
+        "progress",
+        "other"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "started",
+        "failed",
+        "interrupted",
+        "succeeded",
+        "observed",
+        "blocked",
+        "warned",
+        "allowed"
+      ]
+    },
+    "ruleId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "prompt_contract",
+        "exact_tool_repeat",
+        "unchanged_reread",
+        "retry_after_same_failure",
+        "repeated_failure_result",
+        "status_polling_loop",
+        "edit_revert_oscillation",
+        null
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "attribution": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "user_instruction",
+        "agent",
+        "environment",
+        "harness",
+        null
+      ]
+    },
+    "occurrences": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "progressVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "issueIds": {
+      "type": "array",
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "broad",
+          "target",
+          "success",
+          "verify",
+          "stop",
+          "conflict"
+        ]
+      }
+    },
+    "incidentCountDelta": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "avoidableCallsDelta": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "decisionLatencyMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ruleId": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "ruleId"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "prompt",
+              "tool",
+              "progress",
+              "system"
+            ]
+          },
+          "severity": {
+            "const": "none"
+          },
+          "attribution": {
+            "type": "null"
+          },
+          "occurrences": {
+            "const": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "kind": {
+            "const": "incident"
+          },
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "attribution": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "incidentCountDelta": {
+            "const": 1
+          }
+        },
+        "required": [
+          "incidentCountDelta"
+        ]
+      },
+      "then": {
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "avoidableCallsDelta": {
+            "const": 1
+          }
+        },
+        "required": [
+          "avoidableCallsDelta"
+        ]
+      },
+      "then": {
+        "properties": {
+          "incidentCountDelta": {
+            "const": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "issueIds": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "issueIds"
+        ]
+      },
+      "then": {
+        "properties": {
+          "family": {
+            "const": "prompt"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -21,6 +21,7 @@
     "bin/",
     "hooks/",
     "fixtures/",
+    "protocol/",
     "scripts/",
     "src/",
     "docs/",
@@ -35,6 +36,7 @@
   "scripts": {
     "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
     "benchmark:hook": "node scripts/benchmark-hook.mjs",
+    "benchmark:live-spool": "node scripts/benchmark-live-spool.mjs",
     "check": "node scripts/check.mjs",
     "prepublishOnly": "npm run check && npm test",
     "test": "node --test",

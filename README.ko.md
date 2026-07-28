@@ -12,15 +12,17 @@ AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실�
 2. 에이전트가 저장소 변화 없이 같은 읽기·테스트·실패·대기를 반복하는가?
 3. 관찰된 낭비 원인이 사용자 지시, 에이전트, 실행 환경, 연결 도구 중 어디에 가까운가?
 
-현재 `0.1.0`은 연구용 알파입니다. 실시간 훅, 프롬프트 점검, 반복 차단기, 원문 비저장
-녹화, 익명 의미 재생, 로컬 대시보드가 동작합니다. 훅에는 정확한 토큰 사용량이 없으므로
-아직 “몇 토큰을 절약했다”고 주장하지 않고, 절감 후보 호출 수와 감지 시점을 보여줍니다.
+현재 `0.1.0`은 연구용 알파입니다. 실시간 훅, 프롬프트 점검, 반복 차단기, 상시
+`LiveEventV1` 의미 이벤트 저장소, 원문 비저장 녹화, 익명 의미 재생, 로컬 대시보드가
+동작합니다. 훅에는 정확한 토큰 사용량이 없으므로 아직 “몇 토큰을 절약했다”고 주장하지
+않고, 절감 후보 호출 수와 감지 시점을 보여줍니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했지만, 각 프로그램에 설치한
 상태의 승인·업그레이드·제거 검증은 아직 남아 있습니다.
 대시보드는 시작할 때 trace 전체를 한 번 엄격하게 검사한 뒤 완성된 신규 의미 이벤트만
 증분 검사하며, 같은 작업공간의 여러 가명 세션도 진행 상태를 섞지 않고 처리합니다.
 신규 기록 검증에 실패하면 마지막 정상 상태만 유지하고 감시 표시를 빨간색 `검증 오류`
-상태로 바꿉니다.
+상태로 바꿉니다. 현재 대시보드는 아직 명시적으로 시작한 trace를 읽습니다. 상시
+`LiveEventV1` 저장소를 직접 읽는 화면 연결은 다음 PR 범위입니다.
 
 ## 현재 감지하는 것
 
@@ -44,7 +46,10 @@ npm test
 node bin/agent-waste-firewall.mjs doctor
 ```
 
-관찰할 저장소 하나를 지정해 녹화를 시작합니다.
+플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
+`LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 현재 웹
+대시보드를 사용하고 내보낼 수 있는 연구용 trace를 만들려면 관찰할 저장소 하나를
+지정해 명시적 녹화를 시작합니다.
 
 ```bash
 node bin/agent-waste-firewall.mjs record start \
@@ -95,6 +100,15 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 로컬 탐지 상태에도 작업공간 이름, 파일명·경로, provider 도구명은 남기지 않습니다.
 프롬프트·호출·결과·파일·작업공간은 세션 범위의 키 기반 별칭으로만 연결합니다.
 
+상시 `LiveEventV1` 저장소에는 허용된 열거형, 제한된 숫자·시간값, 규칙·문제 ID와
+`session_<HMAC>` 별칭만 들어갑니다. 원문, 경로, 파일명, 벽시계 시각, provider 원본 ID는
+허용되지 않습니다. 세대마다 새로운 256비트 HMAC 키를 사용하고, 이벤트 4,096개 또는
+8 MiB의 고정 상한에 도달하면 이전 세대와 키를 삭제하고 교체합니다. 24시간 제한은 다음
+훅 발행·읽기·`doctor` 실행 때 적용됩니다. 백그라운드 데몬이 없는 현재 단계에서는
+아무 프로세스도 실행되지 않는 동안 정확히 만료 시각에 파일을 지울 수는 없습니다.
+설정으로 각 제한을 더 줄일 수만 있습니다. 이 저장소는 짧게 유지되는 로컬 화면
+전달용이며 공개 export 대상이 아닙니다.
+
 공개 가능한 trace에는 다음만 들어갑니다.
 
 - `prompt`, `tool_pre`, `tool_post`, `stop` 이벤트 종류
@@ -117,6 +131,10 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 프로젝트가 추정될 수 있으므로 “완전 익명”보다는 “강하게 최소화된 가명 데이터”가 정확한
 표현입니다.
 
+상시 저장소와 명시적 trace는 수명과 용도가 다릅니다. 전자는 화면 연결을 위한 제한된
+운영 데이터이고, 후자만 사용자가 `record start`로 선택하여 감사·export·재생할 수
+있습니다. `agent-waste-firewall purge --all`은 상시 저장소도 제거합니다.
+
 ## 플랫폼 연결
 
 - Claude Code: 체크아웃을 `claude --plugin-dir /absolute/path/to/agent-waste-firewall`로
@@ -136,7 +154,8 @@ manifest로 처리하며 탐지 코어와 대시보드는 공유합니다.
 
 영문 문서는 [README.md](README.md), 코어 설계는
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), macOS 제품 구조는
-[docs/MACOS-ARCHITECTURE.md](docs/MACOS-ARCHITECTURE.md), 단계별 개발 가이드는
+[docs/MACOS-ARCHITECTURE.md](docs/MACOS-ARCHITECTURE.md), 현재 구현 상태는
+[docs/MACOS-IMPLEMENTATION.md](docs/MACOS-IMPLEMENTATION.md), 단계별 개발 가이드는
 [docs/DEVELOPMENT-GUIDE.md](docs/DEVELOPMENT-GUIDE.md), GitHub 경쟁·재사용 조사는
 [docs/GITHUB-BENCHMARK-2026-07-29.md](docs/GITHUB-BENCHMARK-2026-07-29.md), 평가 기준은
 [docs/EVALUATION.md](docs/EVALUATION.md), 최신 실제 검증 결과는

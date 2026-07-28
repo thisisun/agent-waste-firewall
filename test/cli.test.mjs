@@ -44,6 +44,12 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
         check.check === "src/dashboard-trace-cursor.mjs" && check.ok === true,
     ),
   );
+  assert.ok(
+    report.checks.some(
+      (check) =>
+        check.check === "bounded live spool is ready" && check.ok === true,
+    ),
+  );
 });
 
 test("replays a JSONL incident fixture", () => {
@@ -72,9 +78,11 @@ test("replays a JSONL incident fixture", () => {
   );
 });
 
-test("records, audits, exports, and replays an anonymized live hook trace", () => {
+test("records, audits, exports, replays, and purges local semantic data", (context) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "awf-cli-data-"));
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "awf-cli-workspace-"));
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  context.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
   fs.mkdirSync(path.join(workspace, ".git"));
   const cli = path.join(root, "bin/agent-waste-firewall.mjs");
   const hook = path.join(root, "scripts/hook.mjs");
@@ -158,4 +166,12 @@ test("records, audits, exports, and replays an anonymized live hook trace", () =
   assert.equal(replay.actionCounts.block, 1);
   assert.equal(replay.eventCount, 1);
   assert.equal(replayed.stdout.includes(exportedPath), false);
+
+  const purged = run(["purge", "--all", "--json"]);
+  assert.equal(purged.status, 0, purged.stderr);
+  assert.equal(JSON.parse(purged.stdout).liveSpoolRemoved, true);
+  assert.equal(
+    fs.existsSync(path.join(dataDir, "live-v1", "control.json")),
+    false,
+  );
 });

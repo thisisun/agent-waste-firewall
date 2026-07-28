@@ -11,6 +11,8 @@ The current Node.js product path works as a research alpha:
 - Codex- and Claude-shaped hook events reach the real stdin/stdout hook worker.
 - Prompt-contract, repeated-call, and repeated-failure decisions work.
 - Observe, warn, and block policies behave differently as designed.
+- Supported hook events now make a best-effort publication to a bounded, always-on `LiveEventV1`
+  spool without requiring an explicit trace.
 - Multi-session semantic recording, audit, export, replay, and the loopback dashboard work.
 - The hook hot path is below the proposed 100 ms p95 target on this machine.
 - Warm dashboard status remains below the proposed 100 ms p95 target at 100,000 events on this
@@ -22,7 +24,7 @@ It is not yet a distributable macOS application:
 - there is no SwiftUI/AppKit target, menu-bar app, transparent `NSPanel`, signed helper, DMG,
   notarization, or one-click integration manager;
 - exact token usage is not measured;
-- the always-on transport is not yet a bounded `LiveEventV1` spool;
+- the current dashboard still consumes an explicit trace rather than the new always-on spool;
 - actual Codex and Claude installations have not yet passed the provider acceptance matrix.
 
 ## Environment
@@ -38,22 +40,23 @@ marketplaces. Claude Code was not installed. Provider integration results below 
 real AWF hook executable with synthetic official-shape events, not an installed-provider
 smoke test.
 
-## Current verification
+## Current M0 verification
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 30 JavaScript files and 5 JSON manifests |
-| `npm test` | Pass: 100/100 |
-| Line coverage | 94.53% |
-| Branch coverage | 82.02% |
-| Function coverage | 93.62% |
-| `src/cli.mjs` line coverage | 57.32% |
-| `npm pack --dry-run --json` | Pass: 52 files, approximately 1.73 MB packed |
+| `npm run check` | Pass: 41 JavaScript files and 13 JSON files |
+| `npm test` | Pass: 128/128 |
+| Line coverage | 94.70% |
+| Branch coverage | 82.32% |
+| Function coverage | 95.07% |
+| `src/cli.mjs` line coverage | 63.09% |
+| `npm pack --dry-run --json` | Pass: 65 files, 1,746,640 bytes packed |
 | `npm audit --omit=dev --ignore-scripts` | Pass: 0 known vulnerabilities |
-| `doctor --json` | Pass: all 13 current checks |
+| `doctor --json` | Pass: all 17 current checks, including live-spool readiness |
 
-The doctor command currently proves repository files, data-directory access, and the Node version.
-It does not prove that Codex or Claude has loaded and trusted the plugin.
+The doctor command currently proves repository files, data-directory access, live-spool
+initialization/maintenance, and the Node version. It does not prove that Codex or Claude has loaded
+and trusted the plugin.
 
 ## Functional end-to-end results
 
@@ -117,6 +120,16 @@ The real dashboard CLI was started on a random loopback port and random access t
   temporary workspace path.
 - DetectorStateV4 persisted none of the injected workspace basename/path, file name/path, provider
   tool name, prompt, input, output, or source canaries.
+- `LiveEventV1` accepts one exact object shape made only from closed enums, bounded numbers,
+  rule/issue IDs, and a per-generation HMAC session alias. Unknown keys and synthetic raw prompt,
+  input, output, path, file-name, and source canaries are rejected before publication.
+- The live store uses mode `0700` directories and mode `0600` key, control, temporary, and event
+  files in its fixtures.
+- Concurrent synthetic publishers are serialized without duplicate sequence numbers; partial
+  temporary and pending publications are recovered from audited event files.
+- The live generation rotates at the configured event, byte, or age boundary. Production uses
+  hard 4,096-event/8 MiB ceilings and a 24-hour age trigger on next access, with a new unlinkable
+  HMAC alias key after rotation.
 - Current-version unknown fields were removed before the next atomic state write.
 - Session, workspace, file, command, result, and incident identifiers were represented only by
   domain-separated, session-scoped aliases or fingerprints.
@@ -146,13 +159,27 @@ The earlier three-condition snapshot was:
 The active recording added about 1.2 ms at p95 in that controlled comparison. Trace length did not
 materially slow the hook because append does not reread the complete event file.
 
-The CLI now lazily imports the dashboard so every hook process no longer parses the dashboard
-bundle or loads its images. The checked-in `npm run benchmark:hook` gate, with an active semantic
-trace, then measured:
+The CLI lazily imports the dashboard so every hook process does not parse the dashboard bundle or
+load its images. The current checked-in `npm run benchmark:hook` gate measured the real subprocess
+with both the always-on spool and an active explicit semantic trace:
 
 | Condition | Samples | p50 | p95 | p99 | Max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Active semantic recording | 100 | 36.62 ms | 39.37 ms | 40.15 ms | 40.36 ms |
+| Always-on spool + active semantic recording | 200 | 39.24 ms | 41.10 ms | 41.91 ms | 42.37 ms |
+
+Twenty excluded warmups plus 200 measured calls committed sequence `220` with no missing live
+event.
+
+The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
+forcing rotation:
+
+| Condition | p50 | p95 | p99 | Max / rotation |
+| --- | ---: | ---: | ---: | ---: |
+| Semantic publish before rotation | 0.74 ms | 1.08 ms | 1.35 ms | 3.95 ms |
+| Replace a full generation | — | — | — | 272.53 ms |
+
+The steady-state gate is 100 ms p95 and the full-generation rotation gate is 1,000 ms. Both passed
+on this machine.
 
 The product target remains 100 ms p95. GitHub Actions enforces that budget on Ubuntu; the shared
 macOS runner uses a separate 150 ms CI budget because cold Node process creation showed materially
@@ -160,7 +187,8 @@ higher runner variance. Local macOS performance is reported against the 100 ms p
 
 Not yet covered:
 
-- concurrent lock contention;
+- concurrent live-spool lock latency under a long-running workload (concurrent correctness has a
+  regression fixture);
 - large post-tool outputs;
 - file-content hash work;
 - slow or nearly full disks;
@@ -226,8 +254,9 @@ reproduction. A same-machine post-fix run produced:
 | 100,000 | 322.95 ms | 4.09 ms | 3.27 ms |
 
 The cold audit intentionally remains proportional to trace size; steady-state polling no longer
-rereads or reparses the whole file. Bounded `LiveEventV1` retention is still required for the
-always-on beta transport.
+rereads or reparses the whole file. The bounded `LiveEventV1` transport is now implemented, but
+this dashboard measurement still covers the explicit-trace cursor. A generation-aware live-spool
+consumer is the next presentation PR.
 
 Malformed loopback request targets now return a closed `400` response, active SSE connections no
 longer prevent shutdown, trace rotation resets existing streams, and an invalid complete append
@@ -270,17 +299,34 @@ prose are excluded. Regression coverage includes raw canaries, injected unknown 
 state replacement, session-scoped aliases, an edit-revert positive fixture, and a productive
 `A → B → C` counterexample.
 
+### Resolved M0 transport gap — No bounded always-on semantic spool
+
+Each supported hook now projects its detector result directly into the exact `LiveEventV1` shape
+and attempts publication even when no trace recording is active. The private store uses
+per-generation HMAC session aliases, atomic event-file rename under a short global lock, monotonic
+sequence allocation across rotations until explicit purge, strict validation on write/read, and
+recovery for interrupted temporary or pending publication. It rotates the whole generation at hard
+4,096-event/8 MiB ceilings or when
+the 24-hour age trigger is observed on next access. Busy or unavailable publication is fail-open
+and cannot change the already-computed hook decision.
+
+This closes the transport-write gap, not the presentation-read gap. Explicit traces remain the
+only format with user-invoked trace audit, export, and replay commands, and the current dashboard
+still requires one. The next PR must consume the live spool without weakening its closed schema.
+
 ## Recommended next implementation order
 
 1. ~~Fix the P0 session/trace ownership contract and add a two-session regression test.~~ Completed.
 2. ~~Implement an incrementally audited cursor and session-aware dashboard projection.~~ Completed.
-3. Implement `LiveEventV1`, a bounded always-on spool independent of explicit recording.
-4. Run the configured hook/dashboard checks on macOS and Linux CI after the repository is
+3. ~~Implement `LiveEventV1`, a bounded always-on spool independent of explicit recording.~~
+   Completed.
+4. Connect the current dashboard projection to a generation-aware live-spool cursor.
+5. Run the configured hook/dashboard checks on macOS and Linux CI after the repository is
    published.
-5. Add real Codex and Claude install/trust smoke tests.
-6. Build the SwiftUI/AppKit shell, menu bar, and transparent sentinel.
-7. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
-8. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
-9. Add optional actual-usage adapters and run the observe-only evaluation corpus.
+6. Add real Codex and Claude install/trust smoke tests.
+7. Build the SwiftUI/AppKit shell, menu bar, and transparent sentinel.
+8. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
+9. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
+10. Add optional actual-usage adapters and run the observe-only evaluation corpus.
 
 Current release classification: **working Node research alpha; no-go as an installable macOS beta**.

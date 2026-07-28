@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "seq": 45,
+  "elapsedMs": 4100,
+  "kind": "tool",
+  "platform": "codex",
+  "sessionAlias": "session_dddddddddddddddddddddddddddddddd",
+  "mode": "warn",
+  "family": "read",
+  "operation": "read",
+  "outcome": "started",
+  "ruleId": null,
+  "severity": "none",
+  "attribution": null,
+  "occurrences": 1,
+  "progressVersion": 4,
+  "issueIds": [],
+  "incidentCountDelta": 0,
+  "avoidableCallsDelta": 0,
+  "decisionLatencyMs": 4,
+  "message": "SYNTHETIC_FREE_TEXT_CANARY user@example.invalid https://example.invalid/private"
+}
