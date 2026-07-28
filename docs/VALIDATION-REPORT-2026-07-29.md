@@ -154,6 +154,10 @@ trace, then measured:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Active semantic recording | 100 | 36.62 ms | 39.37 ms | 40.15 ms | 40.36 ms |
 
+The product target remains 100 ms p95. GitHub Actions enforces that budget on Ubuntu; the shared
+macOS runner uses a separate 150 ms CI budget because cold Node process creation showed materially
+higher runner variance. Local macOS performance is reported against the 100 ms product target.
+
 Not yet covered:
 
 - concurrent lock contention;
