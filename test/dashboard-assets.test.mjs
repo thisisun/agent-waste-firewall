@@ -30,13 +30,27 @@ test("dashboard exports a complete English-first, local-only document", () => {
   assert.match(DASHBOARD_HTML, /id="metric-incidents"/u);
   assert.match(DASHBOARD_HTML, /id="metric-avoidable"/u);
   assert.match(DASHBOARD_HTML, /id="metric-elapsed"/u);
+  assert.match(DASHBOARD_HTML, /id="activity-chart"/u);
+  assert.match(DASHBOARD_HTML, /id="mix-chart"/u);
+  assert.match(DASHBOARD_HTML, /id="detail-dialog"/u);
+  assert.match(DASHBOARD_HTML, /data-detail-target="signal"/u);
+  assert.match(DASHBOARD_HTML, /data-detail-panel="coach"/u);
   assert.match(DASHBOARD_HTML, /id="timeline-list"/u);
   assert.match(DASHBOARD_HTML, /id="warning-card"/u);
   assert.match(DASHBOARD_HTML, /id="prompt-template"/u);
   assert.match(DASHBOARD_HTML, /On this device, without raw content/u);
-  assert.match(DASHBOARD_HTML, /WATCH THE WORK\./u);
+  assert.match(DASHBOARD_HTML, /LIVE SESSION/u);
+  assert.match(DASHBOARD_HTML, /Live session · local and raw-free/u);
+  assert.doesNotMatch(
+    DASHBOARD_HTML,
+    /실시간 세션 · 원문 없이 로컬에서/u,
+  );
+  assert.doesNotMatch(DASHBOARD_HTML, /ONE SCREEN\./u);
+  assert.doesNotMatch(DASHBOARD_HTML, /ZERO BLIND SPOTS\./u);
+  assert.match(DASHBOARD_HTML, /UP TO 80 EVENTS/u);
   assert.match(DASHBOARD_HTML, /Content-Security-Policy/u);
   assert.doesNotMatch(DASHBOARD_HTML, /https?:\/\//iu);
+  assert.doesNotMatch(DASHBOARD_HTML, /<svg\b|style="/iu);
 });
 
 test("dashboard styles are responsive, accessible, and self-contained", () => {
@@ -51,6 +65,24 @@ test("dashboard styles are responsive, accessible, and self-contained", () => {
   assert.match(DASHBOARD_CSS, /url\("\/assets\/paper-grid\.webp"\)/u);
   assert.match(DASHBOARD_CSS, /--lime:\s*#00e58b/u);
   assert.match(DASHBOARD_CSS, /:focus-visible/u);
+  assert.match(DASHBOARD_CSS, /\.monitor-grid\s*\{/u);
+  assert.match(DASHBOARD_CSS, /\.detail-dialog::backdrop/u);
+  const activityChartBlock =
+    /\.activity-chart\s*\{\s*(?<body>min-height:[^}]*)\}/u.exec(
+      DASHBOARD_CSS,
+    )?.groups?.body ??
+    "";
+  const mixChartBlock =
+    /\.mix-chart\s*\{\s*(?<body>min-height:[^}]*)\}/u.exec(DASHBOARD_CSS)
+      ?.groups?.body ?? "";
+  assert.match(activityChartBlock, /max-height:\s*132px/u);
+  assert.match(mixChartBlock, /max-height:\s*64px/u);
+  assert.doesNotMatch(activityChartBlock, /height:\s*100%/u);
+  assert.doesNotMatch(mixChartBlock, /height:\s*100%/u);
+  assert.match(
+    DASHBOARD_CSS,
+    /@media \(max-width:\s*960px\)[\s\S]*?\.trend-panel\s*\{[\s\S]*?min-height:\s*210px/u,
+  );
   assert.doesNotMatch(DASHBOARD_CSS, /@import|url\(\s*["']?https?:/iu);
   assert.doesNotMatch(DASHBOARD_CSS, /magenta|pink|#ff00ff/iu);
 });
@@ -70,6 +102,12 @@ test("dashboard script uses same-origin status and event endpoints safely", () =
     /\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write|\beval\s*\(|new Function/u,
   );
   assert.doesNotMatch(DASHBOARD_JS, /https?:\/\//iu);
+  assert.doesNotMatch(
+    DASHBOARD_JS,
+    /\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b/u,
+  );
+  assert.match(DASHBOARD_JS, /MAX_TIMELINE_ITEMS = 80/u);
+  assert.match(DASHBOARD_JS, /getContext\("2d"\)/u);
 
   for (const ruleId of [
     "prompt_contract",
@@ -117,6 +155,8 @@ class FakeElement {
     this.hidden = false;
     this.listeners = new Map();
     this.parent = null;
+    this.open = false;
+    this.focused = false;
     this._textContent = "";
   }
 
@@ -167,7 +207,20 @@ class FakeElement {
     return this.listeners.get("click")?.();
   }
 
-  focus() {}
+  focus() {
+    this.focused = true;
+  }
+
+  showModal() {
+    this.open = true;
+    this.setAttribute("open", "");
+  }
+
+  close() {
+    this.open = false;
+    this.removeAttribute("open");
+    this.listeners.get("close")?.({ target: this });
+  }
 
   querySelector() {
     return null;
@@ -215,6 +268,18 @@ function dashboardHarness() {
   const connection = new FakeElement("span");
   connection.dataset.connection = "connecting";
   const warningCard = new FakeElement("section");
+  warningCard.dataset.detailPanel = "signal";
+  const detailPanels = ["activity", "coach", "system"].map((name) => {
+    const element = new FakeElement("section");
+    element.dataset.detailPanel = name;
+    return element;
+  });
+  detailPanels.push(warningCard);
+  const detailTriggers = ["activity", "signal", "coach", "system"].map((name) => {
+    const element = new FakeElement("button");
+    element.dataset.detailTarget = name;
+    return element;
+  });
   const languageButtons = ["en", "ko"].map((language) => {
     const element = new FakeElement("button");
     element.dataset.language = language;
@@ -226,7 +291,14 @@ function dashboardHarness() {
     element.dataset.i18n = theme === "light" ? "themeLight" : "themeDark";
     return element;
   });
-  const staticElements = ["heroTitleOne", "privacyTitle"].map((key) => {
+  const staticElements = [
+    "brandSubtitle",
+    "overviewEyebrow",
+    "overviewTitle",
+    "overviewSub",
+    "privacyTitle",
+    "footerBrand",
+  ].map((key) => {
     const element = new FakeElement("span");
     element.dataset.i18n = key;
     return element;
@@ -265,6 +337,24 @@ function dashboardHarness() {
     "sentinel-image",
     "sentinel-status",
     "sentinel-live",
+    "overview-status-label",
+    "overview-status-title",
+    "signal-summary-label",
+    "signal-summary-title",
+    "signal-summary-copy",
+    "signal-summary-action",
+    "coach-summary-count",
+    "coach-summary-status",
+    "system-summary-label",
+    "system-summary-title",
+    "system-summary-copy",
+    "activity-chart",
+    "activity-chart-readout",
+    "mix-chart",
+    "mix-chart-readout",
+    "detail-dialog",
+    "detail-title",
+    "detail-close",
   ]) {
     ids.set(id, new FakeElement());
   }
@@ -287,6 +377,8 @@ function dashboardHarness() {
       if (selector === "[data-contract]") return contractElements;
       if (selector === "[data-language]") return languageButtons;
       if (selector === "[data-theme-option]") return themeButtons;
+      if (selector === "[data-detail-target]") return detailTriggers;
+      if (selector === "[data-detail-panel]") return detailPanels;
       if (selector === "[data-i18n]") {
         return [...staticElements, ...themeButtons];
       }
@@ -356,6 +448,8 @@ function dashboardHarness() {
     themeButtons,
     staticElements,
     ariaElements,
+    detailPanels,
+    detailTriggers,
     viewToggle: ids.get("view-toggle"),
     compactSentinel: ids.get("compact-sentinel"),
   };
@@ -535,7 +629,7 @@ test("status renderer accepts enums, numbers, aliases, and issue IDs only", asyn
 
   harness.languageButtons[1].click();
   assert.equal(harness.document.documentElement.lang, "ko");
-  assert.equal(harness.document.title, "[점검] AWF — Agent Waste Firewall");
+  assert.equal(harness.document.title, "[점검] AWF — 에이전트 낭비 방화벽");
   assert.equal(harness.ids.get("active-mode-label").textContent, "차단");
   assert.match(harness.ids.get("coach-status").textContent, /보완할 항목 2개/u);
   assert.match(harness.ids.get("warning-heading").textContent, /요청 계약이 충분하지 않아요/u);
@@ -547,6 +641,134 @@ test("status renderer accepts enums, numbers, aliases, and issue IDs only", asyn
 
   harness.themeButtons[0].click();
   assert.equal(harness.document.documentElement.dataset.theme, "light");
+});
+
+test("one-screen summaries open localized raw-free detail panels", async () => {
+  const harness = dashboardHarness();
+  await new Promise((resolve) => setImmediate(resolve));
+  const stream = FakeEventSource.instances[0];
+  const secret = "RAW_DETAIL_TEXT_MUST_NEVER_RENDER";
+
+  stream.emit(
+    {
+      kind: "status",
+      connected: true,
+      traceHealth: "healthy",
+      mode: "warn",
+      metrics: {
+        events: 20,
+        incidents: 4,
+        avoidableCalls: 2,
+        elapsedMs: 91000,
+      },
+      currentWarning: {
+        ruleId: "exact_tool_repeat",
+        severity: "medium",
+        attribution: "agent",
+        occurrences: 2,
+        issueIds: ["target", "verify"],
+        message: secret,
+      },
+      prompt: secret,
+      output: secret,
+    },
+    "status",
+  );
+
+  assert.equal(harness.ids.get("overview-status-label").textContent, "REVIEW");
+  assert.match(
+    harness.ids.get("signal-summary-title").textContent,
+    /same tool call is repeating/iu,
+  );
+  assert.equal(
+    harness.ids.get("activity-chart-readout").textContent,
+    "Recent events shown · 0 · session totals 20 observed · 4 signals · 2 avoidable",
+  );
+  assert.equal(harness.ids.get("coach-summary-count").textContent, "3 / 5");
+  assert.equal(
+    harness.ids.get("system-summary-title").textContent,
+    "Warn · Healthy",
+  );
+
+  const signalTrigger = harness.detailTriggers.find(
+    (element) => element.dataset.detailTarget === "signal",
+  );
+  signalTrigger.click();
+  assert.equal(harness.ids.get("detail-dialog").open, true);
+  assert.equal(harness.document.documentElement.dataset.detailOpen, "true");
+  assert.equal(harness.ids.get("detail-title").textContent, "Current signal");
+  assert.equal(
+    harness.detailPanels.find(
+      (element) => element.dataset.detailPanel === "signal",
+    ).hidden,
+    false,
+  );
+  assert.equal(
+    harness.detailPanels.find(
+      (element) => element.dataset.detailPanel === "activity",
+    ).hidden,
+    true,
+  );
+
+  harness.languageButtons[1].click();
+  assert.equal(harness.ids.get("detail-title").textContent, "현재 신호");
+  assert.equal(harness.ids.get("coach-summary-count").textContent, "3 / 5");
+  assert.match(
+    harness.ids.get("activity-chart-readout").textContent,
+    /최근 표시 0개 · 세션 20 관찰 · 4 신호 · 2 절감 후보/u,
+  );
+
+  const rendered = Array.from(harness.ids.values())
+    .flatMap((element) => [
+      element.textContent,
+      ...element.attributes.values(),
+    ])
+    .join("\\n");
+  assert.doesNotMatch(rendered, new RegExp(secret, "u"));
+
+  harness.ids.get("detail-close").click();
+  assert.equal(harness.ids.get("detail-dialog").open, false);
+  assert.equal(harness.document.documentElement.dataset.detailOpen, "false");
+  assert.equal(
+    signalTrigger.attributes.get("aria-expanded"),
+    "false",
+  );
+  assert.equal(signalTrigger.focused, true);
+});
+
+test("language modes keep overview and live-event copy in one language", async () => {
+  const harness = dashboardHarness();
+  await new Promise((resolve) => setImmediate(resolve));
+  const stream = FakeEventSource.instances[0];
+  const staticText = (key) =>
+    harness.staticElements.find((element) => element.dataset.i18n === key)
+      ?.textContent;
+
+  stream.emit({ kind: "system" });
+
+  assert.equal(staticText("brandSubtitle"), "Agent Waste Firewall / Local live guidance");
+  assert.equal(staticText("overviewEyebrow"), "AGENT WASTE FIREWALL");
+  assert.equal(staticText("overviewSub"), "Live session · local and raw-free");
+  assert.equal(staticText("footerBrand"), "AWF — Agent Waste Firewall");
+  assert.match(harness.ids.get("timeline-list").textContent, /SY/u);
+  assert.match(harness.ids.get("timeline-list").textContent, /LIVE/u);
+
+  harness.languageButtons[1].click();
+
+  assert.equal(staticText("brandSubtitle"), "에이전트 낭비 방화벽 / 로컬 실시간 가이드");
+  assert.equal(staticText("overviewEyebrow"), "에이전트 낭비 방화벽");
+  assert.equal(staticText("overviewSub"), "실시간 세션 · 원문 없이 로컬에서");
+  assert.equal(staticText("footerBrand"), "AWF — 에이전트 낭비 방화벽");
+  assert.match(harness.ids.get("timeline-list").textContent, /계통/u);
+  assert.match(harness.ids.get("timeline-list").textContent, /실시간/u);
+  assert.doesNotMatch(harness.ids.get("timeline-list").textContent, /\bLIVE\b|\bSY\b/u);
+  assert.equal(harness.document.title, "[정상] AWF — 에이전트 낭비 방화벽");
+
+  harness.languageButtons[0].click();
+
+  assert.equal(staticText("overviewSub"), "Live session · local and raw-free");
+  assert.match(harness.ids.get("timeline-list").textContent, /SY/u);
+  assert.match(harness.ids.get("timeline-list").textContent, /LIVE/u);
 });
 
 test("compact sentinel is localized and expands from the status artwork", async () => {
@@ -704,7 +926,7 @@ test("compact sentinel derives only allowlisted live signal levels", async () =>
 
   harness.languageButtons[1].click();
   assert.equal(harness.ids.get("sentinel-status").textContent, "연결 끊김");
-  assert.equal(harness.document.title, "[연결 끊김] AWF — Agent Waste Firewall");
+  assert.equal(harness.document.title, "[연결 끊김] AWF — 에이전트 낭비 방화벽");
 });
 
 test("historical SSE events render without double-counting status metrics", async () => {

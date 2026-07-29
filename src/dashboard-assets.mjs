@@ -96,56 +96,27 @@ export const DASHBOARD_HTML = String.raw`<!doctype html>
       </header>
 
       <main id="main">
-        <section class="hero" aria-labelledby="dashboard-title">
-          <div class="hero-copy-block">
-            <p class="eyebrow" data-i18n="heroEyebrow">LIVE AGENT SIDECAR</p>
-            <h1 id="dashboard-title">
-              <span data-i18n="heroTitleOne">WATCH THE WORK.</span>
-              <span class="hero-accent" data-i18n="heroTitleTwo">STOP THE LOOP.</span>
-            </h1>
-            <p class="hero-copy" data-i18n="heroCopy">
-              Observe semantic signals from Codex and Claude Code without retaining raw content.
+        <section class="overview-header" aria-labelledby="dashboard-title">
+          <div class="overview-copy">
+            <p class="eyebrow" data-i18n="overviewEyebrow">AGENT WASTE FIREWALL</p>
+            <h1 id="dashboard-title" data-i18n="overviewTitle">LIVE SESSION</h1>
+            <p class="overview-sub" data-i18n="overviewSub">
+              Live session · local and raw-free
             </p>
           </div>
-
-          <figure class="guardian-figure">
-            <figcaption class="guardian-tag" data-i18n="heroTag">LIVE / GUARDIAN 01</figcaption>
+          <div class="overview-now" aria-live="polite">
             <img
-              class="guardian-art"
+              class="overview-guardian"
               src="/assets/guardian-mark.webp"
               alt=""
-              width="512"
-              height="512"
+              width="176"
+              height="176"
             >
-          </figure>
-
-          <div class="mode-panel" aria-labelledby="mode-title">
-            <div class="mode-heading">
-              <span id="mode-title" data-i18n="modeTitle">Current protection mode</span>
-              <strong id="active-mode-label">Observe</strong>
+            <div class="overview-now-copy">
+              <span class="overview-now-kicker" data-i18n="nowLabel">NOW</span>
+              <strong id="overview-status-label">CLEAR</strong>
+              <p id="overview-status-title">No current warning</p>
             </div>
-            <div
-              class="mode-track"
-              role="list"
-              aria-label="Protection mode levels"
-              data-i18n-aria-label="modeAria"
-            >
-              <span class="mode-chip" data-mode="observe" role="listitem">
-                <span aria-hidden="true">01</span>
-                <b data-i18n="modeObserve">Observe</b>
-              </span>
-              <span class="mode-chip" data-mode="warn" role="listitem">
-                <span aria-hidden="true">02</span>
-                <b data-i18n="modeWarn">Warn</b>
-              </span>
-              <span class="mode-chip" data-mode="block" role="listitem">
-                <span aria-hidden="true">03</span>
-                <b data-i18n="modeBlock">Block</b>
-              </span>
-            </div>
-            <p id="mode-description" class="mode-description">
-              Record signals without intervening in the agent's work.
-            </p>
           </div>
         </section>
 
@@ -154,59 +125,159 @@ export const DASHBOARD_HTML = String.raw`<!doctype html>
           aria-label="Session summary"
           data-i18n-aria-label="metricsAria"
         >
-          <article class="metric-card">
+          <button class="metric-card" type="button" data-detail-target="activity">
             <span class="metric-label" data-i18n="metricEvents">Observed events</span>
             <strong id="metric-events" class="metric-value">0</strong>
             <span class="metric-unit" data-i18n="unitEvents">events</span>
-          </article>
-          <article class="metric-card">
+          </button>
+          <button class="metric-card" type="button" data-detail-target="activity">
             <span class="metric-label" data-i18n="metricIncidents">Detected signals</span>
             <strong id="metric-incidents" class="metric-value">0</strong>
             <span class="metric-unit" data-i18n="unitIncidents">incidents</span>
-          </article>
-          <article class="metric-card accent-card">
+          </button>
+          <button class="metric-card accent-card" type="button" data-detail-target="signal">
             <span class="metric-label" data-i18n="metricAvoidable">Potentially avoidable calls</span>
             <strong id="metric-avoidable" class="metric-value">0</strong>
             <span class="metric-unit" data-i18n="unitCalls">calls</span>
-          </article>
-          <article class="metric-card">
+          </button>
+          <button class="metric-card" type="button" data-detail-target="system">
             <span class="metric-label" data-i18n="metricElapsed">Observed time</span>
             <strong id="metric-elapsed" class="metric-value">00:00</strong>
             <span class="metric-unit" data-i18n="unitElapsed">elapsed</span>
-          </article>
+          </button>
         </section>
 
-        <div class="content-grid">
-          <section class="panel timeline-panel" aria-labelledby="timeline-title">
-            <div class="panel-heading">
+        <section class="monitor-grid" aria-label="Live summary" data-i18n-aria-label="overviewAria">
+          <article class="overview-panel trend-panel">
+            <div class="summary-heading">
               <div>
-                <p class="eyebrow" data-i18n="streamEyebrow">SEMANTIC STREAM</p>
-                <h2 id="timeline-title" data-i18n="timelineTitle">Live workstream</h2>
+                <p class="eyebrow" data-i18n="trendEyebrow">RECENT WINDOW · UP TO 80 EVENTS</p>
+                <h2 data-i18n="trendTitle">Waste signals over time</h2>
               </div>
-              <span class="live-pill">
-                <span aria-hidden="true"></span><b data-i18n="liveLabel">LIVE</b>
-              </span>
+              <button class="detail-link" type="button" data-detail-target="activity">
+                <span data-i18n="viewDetails">VIEW DETAILS</span>
+              </button>
             </div>
-            <ol id="timeline-list" class="timeline" aria-live="polite" aria-relevant="additions">
-              <li id="timeline-empty" class="timeline-empty">
-                <span class="empty-orbit" aria-hidden="true"></span>
-                <strong data-i18n="timelineEmptyTitle">Waiting for the first semantic event</strong>
-                <span data-i18n="timelineEmptyCopy">Raw commands and outputs never reach this screen.</span>
-              </li>
-            </ol>
-          </section>
+            <canvas
+              id="activity-chart"
+              class="activity-chart"
+              width="760"
+              height="184"
+              role="img"
+              aria-label="Recent event and waste-signal trajectory"
+            ></canvas>
+            <div class="chart-footer">
+              <p id="activity-chart-readout" class="chart-readout">0 observed · 0 signals · 0 avoidable</p>
+              <div class="chart-legend" aria-hidden="true">
+                <span><i data-series="events"></i><b data-i18n="legendEvents">EVENTS</b></span>
+                <span><i data-series="signals"></i><b data-i18n="legendSignals">SIGNALS</b></span>
+              </div>
+            </div>
+          </article>
 
-          <aside
-            class="side-stack"
-            aria-label="Current guidance"
-            data-i18n-aria-label="guidanceAria"
-          >
+          <button class="overview-panel signal-summary" type="button" data-detail-target="signal">
+            <span class="summary-card-topline">
+              <span class="eyebrow" data-i18n="signalEyebrow">CURRENT SIGNAL</span>
+              <span id="signal-summary-label" class="summary-index">CLEAR</span>
+            </span>
+            <strong id="signal-summary-title">No current warning</strong>
+            <span id="signal-summary-copy">
+              No repetition signal is currently blocking progress.
+            </span>
+            <span id="signal-summary-action" class="summary-action">
+              Continue observing semantic signals until the work changes.
+            </span>
+            <span class="summary-open" data-i18n="openSignalDetail">OPEN SIGNAL DETAIL</span>
+          </button>
+
+          <article class="overview-panel mix-panel">
+            <div class="summary-heading compact-summary-heading">
+              <div>
+                <p class="eyebrow" data-i18n="mixEyebrow">SESSION LOAD</p>
+                <h2 data-i18n="mixTitle">What AWF has observed</h2>
+              </div>
+              <button class="detail-link" type="button" data-detail-target="activity">
+                <span data-i18n="viewDetails">VIEW DETAILS</span>
+              </button>
+            </div>
+            <canvas
+              id="mix-chart"
+              class="mix-chart"
+              width="360"
+              height="104"
+              role="img"
+              aria-label="Observed events, detected signals, and avoidable calls"
+            ></canvas>
+            <p id="mix-chart-readout" class="chart-readout">No activity yet</p>
+          </article>
+
+          <button class="overview-panel coach-summary" type="button" data-detail-target="coach">
+            <span class="summary-card-topline">
+              <span class="eyebrow" data-i18n="coachEyebrow">PROMPT COACH</span>
+              <span id="coach-summary-count" class="summary-index">0 / 5</span>
+            </span>
+            <strong data-i18n="coachSummaryTitle">Prompt contract</strong>
+            <span id="coach-summary-status">
+              Fill in all five items to keep the task on course.
+            </span>
+            <span class="summary-open" data-i18n="openCoachDetail">OPEN PROMPT GUIDE</span>
+          </button>
+
+          <button class="overview-panel system-summary" type="button" data-detail-target="system">
+            <span class="summary-card-topline">
+              <span class="eyebrow" data-i18n="systemEyebrow">LOCAL MONITOR</span>
+              <span id="system-summary-label" class="summary-index">LOCAL</span>
+            </span>
+            <strong id="system-summary-title">Observe · Healthy</strong>
+            <span id="system-summary-copy">Live semantic coverage · raw content excluded</span>
+            <span class="summary-open" data-i18n="openSystemDetail">OPEN SYSTEM DETAIL</span>
+          </button>
+        </section>
+
+        <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title">
+          <div class="detail-shell">
+            <header class="detail-header">
+              <div>
+                <p class="eyebrow" data-i18n="detailEyebrow">EVIDENCE, NOT BLAME</p>
+                <h2 id="detail-title">Live workstream</h2>
+              </div>
+              <button
+                id="detail-close"
+                class="detail-close"
+                type="button"
+                aria-label="Close detail"
+                data-i18n-aria-label="closeDetail"
+              >
+                <span data-i18n="closeLabel">CLOSE</span>
+              </button>
+            </header>
+
+            <section data-detail-panel="activity" aria-labelledby="timeline-title">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow" data-i18n="streamEyebrow">SEMANTIC STREAM</p>
+                  <h2 id="timeline-title" data-i18n="timelineTitle">Live workstream</h2>
+                </div>
+                <span class="live-pill">
+                  <span aria-hidden="true"></span><b data-i18n="liveLabel">LIVE</b>
+                </span>
+              </div>
+              <ol id="timeline-list" class="timeline" aria-live="polite" aria-relevant="additions">
+                <li id="timeline-empty" class="timeline-empty">
+                  <strong data-i18n="timelineEmptyTitle">Waiting for the first semantic event</strong>
+                  <span data-i18n="timelineEmptyCopy">Raw commands and outputs never reach this screen.</span>
+                </li>
+              </ol>
+            </section>
+
             <section
               id="warning-card"
-              class="panel warning-card"
+              class="warning-card"
+              data-detail-panel="signal"
               data-severity="none"
               aria-labelledby="warning-heading"
               aria-live="assertive"
+              hidden
             >
               <div class="warning-topline">
                 <p class="eyebrow" data-i18n="signalEyebrow">CURRENT SIGNAL</p>
@@ -223,7 +294,7 @@ export const DASHBOARD_HTML = String.raw`<!doctype html>
               <span id="warning-occurrences" class="occurrence-badge" hidden></span>
             </section>
 
-            <section class="panel coach-card" aria-labelledby="coach-title">
+            <section class="coach-card" data-detail-panel="coach" aria-labelledby="coach-title" hidden>
               <div class="panel-heading compact-heading">
                 <div>
                   <p class="eyebrow" data-i18n="coachEyebrow">PROMPT COACH</p>
@@ -265,25 +336,55 @@ Verify with: [test, build, or manual check]
 Stop when: report and stop after the same failure repeats twice</pre>
               <span id="copy-feedback" class="sr-only" role="status" aria-live="polite"></span>
             </section>
-          </aside>
-        </div>
 
-        <section class="privacy-note" aria-labelledby="privacy-title">
-          <span class="privacy-kicker" data-i18n="privacyKicker">LOCAL / RAW-FREE</span>
-          <div>
-            <h2 id="privacy-title" data-i18n="privacyTitle">On this device, without raw content</h2>
-            <p data-i18n="privacyCopy">
-              Prompts, commands, outputs, source code, and absolute paths are never
-              received or displayed. This view uses only approved semantic categories,
-              numbers, and session aliases.
-            </p>
+            <section class="system-detail" data-detail-panel="system" hidden>
+              <div class="mode-panel" aria-labelledby="mode-title">
+                <div class="mode-heading">
+                  <span id="mode-title" data-i18n="modeTitle">Current protection mode</span>
+                  <strong id="active-mode-label">Observe</strong>
+                </div>
+                <div
+                  class="mode-track"
+                  role="list"
+                  aria-label="Protection mode levels"
+                  data-i18n-aria-label="modeAria"
+                >
+                  <span class="mode-chip" data-mode="observe" role="listitem">
+                    <span aria-hidden="true">01</span>
+                    <b data-i18n="modeObserve">Observe</b>
+                  </span>
+                  <span class="mode-chip" data-mode="warn" role="listitem">
+                    <span aria-hidden="true">02</span>
+                    <b data-i18n="modeWarn">Warn</b>
+                  </span>
+                  <span class="mode-chip" data-mode="block" role="listitem">
+                    <span aria-hidden="true">03</span>
+                    <b data-i18n="modeBlock">Block</b>
+                  </span>
+                </div>
+                <p id="mode-description" class="mode-description">
+                  Record signals without intervening in the agent's work.
+                </p>
+              </div>
+              <section class="privacy-note" aria-labelledby="privacy-title">
+                <span class="privacy-kicker" data-i18n="privacyKicker">LOCAL / RAW-FREE</span>
+                <div>
+                  <h2 id="privacy-title" data-i18n="privacyTitle">On this device, without raw content</h2>
+                  <p data-i18n="privacyCopy">
+                    Prompts, commands, outputs, source code, and absolute paths are never
+                    received or displayed. This view uses only approved semantic categories,
+                    numbers, and session aliases.
+                  </p>
+                </div>
+                <span class="local-only" data-i18n="localOnly">LOCAL ONLY</span>
+              </section>
+            </section>
           </div>
-          <span class="local-only" data-i18n="localOnly">LOCAL ONLY</span>
-        </section>
+        </dialog>
       </main>
 
       <footer>
-        <span>AWF — Agent Waste Firewall</span>
+        <span data-i18n="footerBrand">AWF — Agent Waste Firewall</span>
         <span data-i18n="footerCopy">Data moves only between this browser and the local process.</span>
       </footer>
     </div>
@@ -2376,6 +2477,679 @@ footer {
     animation: none;
   }
 }
+
+/* One-screen executive monitor — summary first, audited detail on demand. */
+.app-shell {
+  width: min(1180px, calc(100% - 40px));
+}
+
+.topbar {
+  min-height: 64px;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.brand-copy small {
+  margin-top: 3px;
+}
+
+.topbar-actions {
+  gap: 8px;
+}
+
+main {
+  padding: 14px 0 10px;
+}
+
+.overview-header {
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.52fr);
+  gap: 30px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.overview-copy {
+  min-width: 0;
+}
+
+.overview-copy .eyebrow {
+  margin-bottom: 7px;
+}
+
+.overview-copy h1 {
+  display: block;
+  max-width: none;
+  margin: 0;
+  font-size: clamp(24px, 2.8vw, 34px);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  white-space: nowrap;
+}
+
+.overview-copy h1 span {
+  display: inline-block;
+}
+
+.overview-sub {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font: 600 10px/1.45 var(--font-mono);
+}
+
+.overview-now {
+  min-width: 0;
+  height: 72px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  border-left: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.overview-guardian {
+  width: 86px;
+  height: 86px;
+  align-self: end;
+  object-fit: contain;
+  object-position: center bottom;
+}
+
+.overview-now-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding: 12px 16px 12px 12px;
+}
+
+.overview-now-kicker,
+.summary-index,
+.summary-open {
+  font: 800 8px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.overview-now-kicker {
+  display: inline-block;
+  padding: 5px 7px;
+  color: #001408;
+  background: var(--lime);
+}
+
+#overview-status-label {
+  display: block;
+  margin-top: 8px;
+  color: var(--lime-deep);
+  font: 900 20px/1 var(--font-mono);
+  letter-spacing: -0.04em;
+}
+
+#overview-status-title {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font: 600 9px/1.35 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 12px 0;
+}
+
+.metric-card {
+  min-width: 0;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  gap: 4px 12px;
+  align-items: end;
+  padding: 13px 16px;
+  color: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+
+.metric-card::after {
+  top: 13px;
+  right: 14px;
+  width: 5px;
+  height: 5px;
+}
+
+.metric-card:hover,
+.metric-card:focus-visible {
+  background: var(--surface-soft);
+}
+
+.metric-card.accent-card:hover,
+.metric-card.accent-card:focus-visible {
+  color: #001408;
+  background: var(--lime);
+}
+
+.metric-label {
+  grid-column: 1 / -1;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-value {
+  margin: 0;
+  font-size: clamp(23px, 2.6vw, 34px);
+  line-height: 0.95;
+}
+
+.metric-unit {
+  align-self: end;
+  padding-bottom: 2px;
+  text-align: right;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: minmax(230px, 1fr) 148px;
+  gap: 12px;
+}
+
+.overview-panel {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+button.overview-panel {
+  font: inherit;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+
+button.overview-panel:hover,
+button.overview-panel:focus-visible {
+  border-color: var(--lime-deep);
+  background: var(--surface-soft);
+}
+
+.trend-panel {
+  grid-column: 1 / span 7;
+  grid-row: 1;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: space-between;
+  padding: 17px 18px 13px;
+}
+
+.signal-summary {
+  grid-column: 8 / -1;
+  grid-row: 1;
+}
+
+.mix-panel {
+  grid-column: 1 / span 4;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: space-between;
+  padding: 13px 15px 10px;
+}
+
+.coach-summary {
+  grid-column: 5 / span 4;
+  grid-row: 2;
+}
+
+.system-summary {
+  grid-column: 9 / -1;
+  grid-row: 2;
+}
+
+.summary-heading,
+.summary-card-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-heading .eyebrow,
+.summary-card-topline .eyebrow {
+  margin: 0;
+}
+
+.summary-heading h2 {
+  margin: 4px 0 0;
+  font: 800 16px/1.15 var(--font-mono);
+  letter-spacing: -0.04em;
+}
+
+.compact-summary-heading h2 {
+  font-size: 12px;
+}
+
+.detail-link {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 800 8px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.detail-link:hover,
+.detail-link:focus-visible {
+  color: #001408;
+  border-color: var(--lime);
+  background: var(--lime);
+}
+
+.activity-chart,
+.mix-chart {
+  display: block;
+  width: 100%;
+}
+
+.activity-chart {
+  min-height: 96px;
+  height: clamp(96px, 16vh, 132px);
+  max-height: 132px;
+  margin: 7px 0 3px;
+}
+
+.mix-chart {
+  min-height: 48px;
+  height: clamp(48px, 8vh, 64px);
+  max-height: 64px;
+  margin-top: 5px;
+}
+
+.chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-readout {
+  margin: 0;
+  color: var(--muted);
+  font: 600 8px/1.25 var(--font-mono);
+}
+
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font: 800 8px/1 var(--font-mono);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-legend i {
+  width: 11px;
+  height: 3px;
+  display: block;
+  background: var(--muted);
+}
+
+.chart-legend i[data-series="signals"] {
+  background: var(--lime-deep);
+}
+
+.signal-summary,
+.coach-summary,
+.system-summary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 17px 14px;
+}
+
+.signal-summary {
+  border-top: 5px solid var(--lime);
+  padding-top: 13px;
+}
+
+:root[data-signal="warn"] .signal-summary {
+  border-top-color: var(--amber);
+}
+
+:root[data-signal="danger"] .signal-summary,
+:root[data-signal="critical"] .signal-summary {
+  border-top-color: var(--red);
+}
+
+.summary-index {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  color: #001408;
+  background: var(--lime);
+}
+
+:root[data-signal="warn"] #signal-summary-label {
+  background: var(--amber);
+}
+
+:root[data-signal="danger"] #signal-summary-label,
+:root[data-signal="critical"] #signal-summary-label {
+  color: #fff;
+  background: var(--red);
+}
+
+.signal-summary > strong,
+.coach-summary > strong,
+.system-summary > strong {
+  display: block;
+  margin-top: 13px;
+  font: 800 17px/1.18 var(--font-mono);
+  letter-spacing: -0.045em;
+}
+
+.coach-summary > strong,
+.system-summary > strong {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+#signal-summary-copy,
+#coach-summary-status,
+#system-summary-copy {
+  display: -webkit-box;
+  margin-top: 8px;
+  overflow: hidden;
+  color: var(--muted);
+  font: 600 10px/1.45 var(--font-mono);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.summary-action {
+  display: -webkit-box;
+  margin-top: 11px;
+  padding: 9px 10px;
+  overflow: hidden;
+  background: var(--surface-soft);
+  font: 700 10px/1.4 var(--font-mono);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.summary-open {
+  margin-top: auto;
+  padding-top: 11px;
+  color: var(--lime-deep);
+}
+
+.detail-dialog {
+  inset: 0 0 0 auto;
+  width: min(540px, 92vw);
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  border: 0;
+  border-left: 1px solid var(--line-strong);
+  background: var(--bg);
+  box-shadow: -28px 0 70px rgba(0, 20, 8, 0.18);
+}
+
+.detail-dialog::backdrop {
+  background: rgba(0, 20, 8, 0.48);
+}
+
+.detail-shell {
+  min-height: 100%;
+  padding: 26px 28px 32px;
+  overflow-y: auto;
+}
+
+.detail-header {
+  position: sticky;
+  z-index: 4;
+  top: -26px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: -26px -28px 26px;
+  padding: 22px 28px 18px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--bg);
+}
+
+.detail-header .eyebrow {
+  margin-bottom: 5px;
+}
+
+.detail-header h2 {
+  margin: 0;
+  font: 800 22px/1.1 var(--font-mono);
+  letter-spacing: -0.05em;
+}
+
+.detail-close {
+  min-width: 68px;
+  padding: 8px 9px;
+  color: #001408;
+  border: 1px solid var(--lime);
+  border-radius: 0;
+  background: var(--lime);
+  cursor: pointer;
+  font: 900 8px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.detail-dialog [data-detail-panel][hidden] {
+  display: none;
+}
+
+.detail-dialog .panel-heading {
+  padding-bottom: 18px;
+}
+
+.detail-dialog .timeline {
+  max-height: none;
+}
+
+.detail-dialog .timeline-empty {
+  min-height: 360px;
+}
+
+.detail-dialog .warning-card,
+.detail-dialog .coach-card {
+  padding: 6px 0 0;
+  border: 0;
+  background: transparent;
+}
+
+.detail-dialog .warning-card::before {
+  display: none;
+}
+
+.detail-dialog .mode-panel {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.detail-dialog .mode-heading {
+  min-height: 88px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-dialog .mode-track {
+  margin: 20px;
+}
+
+.detail-dialog .mode-description {
+  padding: 0 20px 20px;
+}
+
+.detail-dialog .privacy-note {
+  grid-template-columns: 1fr;
+  margin-top: 18px;
+}
+
+.detail-dialog .local-only {
+  width: fit-content;
+}
+
+footer {
+  min-height: 36px;
+  font-size: 8px;
+}
+
+@media (min-width: 1100px) and (min-height: 740px) {
+  :root[data-view="expanded"] body {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 960px) {
+  .overview-header {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .overview-copy h1 {
+    white-space: normal;
+  }
+
+  .monitor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+
+  .trend-panel,
+  .signal-summary,
+  .mix-panel,
+  .coach-summary,
+  .system-summary {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .trend-panel {
+    grid-column: 1 / -1;
+    min-height: 210px;
+  }
+}
+
+@media (max-width: 680px) {
+  .topbar {
+    min-height: 0;
+  }
+
+  .overview-header {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding-bottom: 14px;
+  }
+
+  .overview-copy h1 {
+    font-size: clamp(26px, 9vw, 38px);
+  }
+
+  .overview-now {
+    border: 1px solid var(--line-strong);
+  }
+
+  .metrics,
+  .monitor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card,
+  .metric-card:nth-child(2) {
+    min-height: 72px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .trend-panel {
+    grid-column: auto;
+  }
+
+  .detail-shell {
+    padding-inline: 20px;
+  }
+
+  .detail-header {
+    margin-inline: -20px;
+    padding-inline: 20px;
+  }
+}
+
+@media (max-height: 780px) and (min-width: 1100px) {
+  .topbar {
+    min-height: 58px;
+  }
+
+  main {
+    padding-top: 10px;
+  }
+
+  .overview-header {
+    min-height: 76px;
+  }
+
+  .overview-now {
+    height: 66px;
+  }
+
+  .overview-guardian {
+    width: 78px;
+    height: 78px;
+  }
+
+  .metrics {
+    margin: 10px 0;
+  }
+
+  .metric-card {
+    min-height: 70px;
+    padding-block: 10px;
+  }
+
+  .monitor-grid {
+    grid-template-rows: 220px 138px;
+    gap: 10px;
+  }
+
+  .trend-panel {
+    padding-block: 14px 10px;
+  }
+
+  footer {
+    min-height: 30px;
+  }
+}
 `;
 
 export const DASHBOARD_JS = String.raw`(() => {
@@ -2515,6 +3289,26 @@ export const DASHBOARD_JS = String.raw`(() => {
         heroTitleTwo: "STOP THE LOOP.",
         heroTag: "LIVE / GUARDIAN 01",
         heroCopy: "Observe semantic signals from Codex and Claude Code without retaining raw content.",
+        overviewEyebrow: "AGENT WASTE FIREWALL",
+        overviewTitle: "LIVE SESSION",
+        overviewSub: "Live session · local and raw-free",
+        overviewAria: "Live one-screen summary",
+        nowLabel: "NOW",
+        trendEyebrow: "RECENT WINDOW · UP TO 80 EVENTS",
+        trendTitle: "Waste signals over time",
+        mixEyebrow: "SESSION LOAD",
+        mixTitle: "What AWF has observed",
+        viewDetails: "VIEW DETAILS",
+        legendEvents: "EVENTS",
+        legendSignals: "SIGNALS",
+        coachSummaryTitle: "Prompt contract",
+        openSignalDetail: "OPEN SIGNAL DETAIL",
+        openCoachDetail: "OPEN PROMPT GUIDE",
+        systemEyebrow: "LOCAL MONITOR",
+        openSystemDetail: "OPEN SYSTEM DETAIL",
+        detailEyebrow: "EVIDENCE, NOT BLAME",
+        closeDetail: "Close detail",
+        closeLabel: "CLOSE",
         modeTitle: "Current protection mode",
         modeAria: "Protection mode levels",
         modeObserve: "Observe",
@@ -2552,6 +3346,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         privacyCopy: "Prompts, commands, outputs, source code, and absolute paths are never received or displayed. This view uses only approved semantic categories, numbers, and session aliases.",
         privacyKicker: "LOCAL / RAW-FREE",
         localOnly: "LOCAL ONLY",
+        footerBrand: "AWF — Agent Waste Firewall",
         footerCopy: "Data moves only between this browser and the local process."
       }),
       rules: Object.freeze({
@@ -2668,6 +3463,14 @@ export const DASHBOARD_JS = String.raw`(() => {
         allowed: "Allowed",
         progressed: "Progressed"
       }),
+      kindMarks: Object.freeze({
+        prompt: "PR",
+        tool: "TL",
+        progress: "GO",
+        incident: "!",
+        decision: "GD",
+        system: "SY"
+      }),
       signals: Object.freeze({
         clear: Object.freeze({
           label: "CLEAR",
@@ -2728,6 +3531,29 @@ export const DASHBOARD_JS = String.raw`(() => {
         viewExpand: "EXPAND",
         viewCompactAria: "Switch to compact sentinel",
         viewExpandAria: "Expand full dashboard",
+        detailActivityTitle: "Live workstream",
+        detailSignalTitle: "Current signal",
+        detailCoachTitle: "Prompt guide",
+        detailSystemTitle: "Local monitor",
+        activityReadout: "observed",
+        signalReadout: "signals",
+        avoidableReadout: "avoidable",
+        noActivity: "No activity yet",
+        recentWindow: "Recent semantic window",
+        recentShownPrefix: "Recent events shown · ",
+        recentShownSuffix: " · session totals ",
+        sessionTotals: "Session totals",
+        sourceLive: "Live",
+        sourceTrace: "Trace",
+        sourceUnknown: "Starting",
+        coverageComplete: "complete coverage",
+        coverageIncomplete: "partial coverage",
+        coverageUnknown: "coverage pending",
+        healthHealthy: "Healthy",
+        healthStale: "Stale",
+        healthDegraded: "Degraded",
+        rawFreeSummary: "raw content excluded",
+        localLabel: "LOCAL",
         copy: "Copy",
         copied: "Copied",
         copySuccess: "Request structure copied.",
@@ -2737,11 +3563,11 @@ export const DASHBOARD_JS = String.raw`(() => {
       promptTemplate: "Task: [what to change]\nScope: [target files/features and explicit exclusions]\nDone when: [observable result]\nVerify with: [test, build, or manual check]\nStop when: report and stop after the same failure repeats twice"
     }),
     ko: Object.freeze({
-      title: "AWF — Agent Waste Firewall — 실시간 가이드",
+      title: "AWF — 에이전트 낭비 방화벽 — 실시간 가이드",
       static: Object.freeze({
         skipLink: "본문으로 건너뛰기",
-        brandLabel: "AWF — Agent Waste Firewall 대시보드",
-        brandSubtitle: "Agent Waste Firewall / 로컬 실시간 가이드",
+        brandLabel: "AWF — 에이전트 낭비 방화벽 대시보드",
+        brandSubtitle: "에이전트 낭비 방화벽 / 로컬 실시간 가이드",
         languageLabel: "언어",
         themeLabel: "화면 테마",
         themeLight: "화이트",
@@ -2752,6 +3578,26 @@ export const DASHBOARD_JS = String.raw`(() => {
         heroTitleTwo: "반복을 멈춥니다.",
         heroTag: "실시간 / 가디언 01",
         heroCopy: "Codex와 Claude Code의 원문을 보관하지 않고 의미 신호만 관찰합니다.",
+        overviewEyebrow: "에이전트 낭비 방화벽",
+        overviewTitle: "실시간 세션",
+        overviewSub: "실시간 세션 · 원문 없이 로컬에서",
+        overviewAria: "실시간 한 화면 요약",
+        nowLabel: "현재",
+        trendEyebrow: "최근 구간 · 최대 80개 이벤트",
+        trendTitle: "시간에 따른 낭비 신호",
+        mixEyebrow: "세션 부하",
+        mixTitle: "AWF가 관찰한 내용",
+        viewDetails: "세부 보기",
+        legendEvents: "이벤트",
+        legendSignals: "신호",
+        coachSummaryTitle: "요청 계약",
+        openSignalDetail: "신호 세부 열기",
+        openCoachDetail: "요청 가이드 열기",
+        systemEyebrow: "로컬 모니터",
+        openSystemDetail: "시스템 세부 열기",
+        detailEyebrow: "비난이 아닌 근거",
+        closeDetail: "세부 화면 닫기",
+        closeLabel: "닫기",
         modeTitle: "현재 보호 모드",
         modeAria: "보호 모드 단계",
         modeObserve: "관찰",
@@ -2789,6 +3635,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         privacyCopy: "프롬프트·명령어·출력·소스 코드·절대 경로는 받거나 표시하지 않습니다. 이 화면은 허용된 의미 분류, 숫자와 세션 별칭만 사용합니다.",
         privacyKicker: "로컬 / 원문 없음",
         localOnly: "로컬 전용",
+        footerBrand: "AWF — 에이전트 낭비 방화벽",
         footerCopy: "데이터는 브라우저와 로컬 프로세스 사이에서만 이동합니다."
       }),
       rules: Object.freeze({
@@ -2905,41 +3752,49 @@ export const DASHBOARD_JS = String.raw`(() => {
         allowed: "허용",
         progressed: "진행"
       }),
+      kindMarks: Object.freeze({
+        prompt: "요청",
+        tool: "도구",
+        progress: "진행",
+        incident: "!",
+        decision: "판단",
+        system: "계통"
+      }),
       signals: Object.freeze({
         clear: Object.freeze({
           label: "정상",
-          title: "[정상] AWF — Agent Waste Firewall",
+          title: "[정상] AWF — 에이전트 낭비 방화벽",
           announcement: "현재 낭비 신호가 없습니다."
         }),
         warn: Object.freeze({
           label: "점검",
-          title: "[점검] AWF — Agent Waste Firewall",
+          title: "[점검] AWF — 에이전트 낭비 방화벽",
           announcement: "점검이 필요한 낭비 신호가 있습니다."
         }),
         danger: Object.freeze({
           label: "중단",
-          title: "[중단] AWF — Agent Waste Firewall",
+          title: "[중단] AWF — 에이전트 낭비 방화벽",
           announcement: "심각도가 높은 낭비 신호를 확인해야 합니다."
         }),
         critical: Object.freeze({
           label: "긴급",
-          title: "[긴급] AWF — Agent Waste Firewall",
+          title: "[긴급] AWF — 에이전트 낭비 방화벽",
           announcement: "심각도가 높은 신호가 반복되어 즉시 확인해야 합니다."
         }),
         connecting: Object.freeze({
           label: "연결 중",
-          title: "[연결 중] AWF — Agent Waste Firewall",
+          title: "[연결 중] AWF — 에이전트 낭비 방화벽",
           announcement: "로컬 모니터를 연결하고 있습니다."
         }),
         offline: Object.freeze({
           label: "연결 끊김",
-          title: "[연결 끊김] AWF — Agent Waste Firewall",
+          title: "[연결 끊김] AWF — 에이전트 낭비 방화벽",
           announcement: "로컬 모니터 연결이 끊겼습니다."
         }),
         degraded: Object.freeze({
           label: "검증 오류",
-          title: "[검증 오류] AWF — Agent Waste Firewall",
-          announcement: "실시간 trace 검증에 실패해 마지막 정상 상태를 표시합니다."
+          title: "[검증 오류] AWF — 에이전트 낭비 방화벽",
+          announcement: "실시간 추적 데이터 검증에 실패해 마지막 정상 상태를 표시합니다."
         })
       }),
       dynamic: Object.freeze({
@@ -2965,6 +3820,29 @@ export const DASHBOARD_JS = String.raw`(() => {
         viewExpand: "펼치기",
         viewCompactAria: "감시 표시만 남기고 축소",
         viewExpandAria: "전체 대시보드 펼치기",
+        detailActivityTitle: "실시간 작업 흐름",
+        detailSignalTitle: "현재 신호",
+        detailCoachTitle: "요청 가이드",
+        detailSystemTitle: "로컬 모니터",
+        activityReadout: "관찰",
+        signalReadout: "신호",
+        avoidableReadout: "절감 후보",
+        noActivity: "아직 활동 없음",
+        recentWindow: "최근 의미 이벤트 구간",
+        recentShownPrefix: "최근 표시 ",
+        recentShownSuffix: "개 · 세션 ",
+        sessionTotals: "세션 합계",
+        sourceLive: "실시간",
+        sourceTrace: "기록",
+        sourceUnknown: "시작 중",
+        coverageComplete: "전체 범위",
+        coverageIncomplete: "일부 범위",
+        coverageUnknown: "범위 확인 중",
+        healthHealthy: "정상",
+        healthStale: "지연",
+        healthDegraded: "검증 오류",
+        rawFreeSummary: "원문 제외",
+        localLabel: "로컬",
         copy: "복사",
         copied: "복사됨",
         copySuccess: "요청 틀을 복사했습니다.",
@@ -2976,12 +3854,12 @@ export const DASHBOARD_JS = String.raw`(() => {
   });
 
   const KINDS = Object.freeze({
-    prompt: "PR",
-    tool: "TL",
-    progress: "GO",
-    incident: "!",
-    decision: "GD",
-    system: "SY"
+    prompt: true,
+    tool: true,
+    progress: true,
+    incident: true,
+    decision: true,
+    system: true
   });
 
   const SEVERITIES = Object.freeze({
@@ -3002,6 +3880,13 @@ export const DASHBOARD_JS = String.raw`(() => {
     warn: true,
     danger: true,
     critical: true
+  });
+
+  const DETAIL_PANELS = Object.freeze({
+    activity: true,
+    signal: true,
+    coach: true,
+    system: true
   });
 
   const SIGNAL_IMAGES = Object.freeze({
@@ -3126,8 +4011,388 @@ export const DASHBOARD_JS = String.raw`(() => {
     seenEventIdOrder: [],
     timelineEmpty: byId("timeline-empty"),
     eventCount: 0,
-    baselineSequence: 0
+    baselineSequence: 0,
+    detail: "activity",
+    detailTrigger: null
   };
+
+  function paintTokens() {
+    const styles =
+      typeof window.getComputedStyle === "function"
+        ? window.getComputedStyle(document.documentElement)
+        : null;
+    const read = (name, fallback) => {
+      if (!styles || typeof styles.getPropertyValue !== "function") {
+        return fallback;
+      }
+      const value = styles.getPropertyValue(name).trim();
+      return value || fallback;
+    };
+    const dark = state.theme === "dark";
+    return {
+      ink: read("--ink", dark ? "#effff5" : "#111713"),
+      muted: read("--muted", dark ? "#93aa9b" : "#59645d"),
+      line: read("--line-strong", dark ? "#496252" : "#a9b0aa"),
+      surface: read("--surface-soft", dark ? "#12301e" : "#edf0e9"),
+      accent: read("--lime", "#00e58b"),
+      accentDeep: read("--lime-deep", dark ? "#00e58b" : "#008d57"),
+      warning: read("--amber", "#b86a00")
+    };
+  }
+
+  function prepareCanvas(id) {
+    const canvas = byId(id);
+    if (!canvas || typeof canvas.getContext !== "function") return null;
+    const width = Math.max(
+      1,
+      Math.floor(canvas.clientWidth || canvas.width || 1)
+    );
+    const height = Math.max(
+      1,
+      Math.floor(canvas.clientHeight || canvas.height || 1)
+    );
+    const ratio = Math.min(
+      2,
+      Math.max(1, Number(window.devicePixelRatio) || 1)
+    );
+    const pixelWidth = Math.max(1, Math.floor(width * ratio));
+    const pixelHeight = Math.max(1, Math.floor(height * ratio));
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    if (typeof context.setTransform === "function") {
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+    context.clearRect(0, 0, width, height);
+    return { canvas, context, width, height };
+  }
+
+  function recentActivityBuckets() {
+    const buckets = Array.from({ length: 8 }, () => ({
+      events: 0,
+      signals: 0
+    }));
+    const entries = state.timelineEntries.slice().reverse();
+    if (entries.length === 0) return buckets;
+    for (let index = 0; index < entries.length; index += 1) {
+      const bucketIndex = Math.min(
+        buckets.length - 1,
+        Math.floor((index * buckets.length) / entries.length)
+      );
+      buckets[bucketIndex].events += 1;
+      buckets[bucketIndex].signals += entries[index].incidentCountDelta;
+    }
+    return buckets;
+  }
+
+  function overviewReadout() {
+    const copy = currentCopy();
+    return (
+      formatCount(state.metrics.events) +
+      " " +
+      copy.dynamic.activityReadout +
+      " · " +
+      formatCount(state.metrics.incidents) +
+      " " +
+      copy.dynamic.signalReadout +
+      " · " +
+      formatCount(state.metrics.avoidableCalls) +
+      " " +
+      copy.dynamic.avoidableReadout
+    );
+  }
+
+  function drawActivityChart() {
+    const prepared = prepareCanvas("activity-chart");
+    const copy = currentCopy();
+    const readout =
+      copy.dynamic.recentShownPrefix +
+      state.timelineEntries.length +
+      copy.dynamic.recentShownSuffix +
+      overviewReadout();
+    const readoutElement = byId("activity-chart-readout");
+    if (readoutElement) readoutElement.textContent = readout;
+    const canvas = byId("activity-chart");
+    if (canvas) {
+      canvas.setAttribute(
+        "aria-label",
+        copy.static.trendTitle + ". " + readout
+      );
+    }
+    if (!prepared) return;
+
+    const { context, width, height } = prepared;
+    const colors = paintTokens();
+    const buckets = recentActivityBuckets();
+    const inset = { top: 12, right: 10, bottom: 14, left: 10 };
+    const chartWidth = Math.max(1, width - inset.left - inset.right);
+    const chartHeight = Math.max(1, height - inset.top - inset.bottom);
+    const slot = chartWidth / buckets.length;
+    const maxEvents = Math.max(1, ...buckets.map((bucket) => bucket.events));
+    const maxSignals = Math.max(1, ...buckets.map((bucket) => bucket.signals));
+
+    context.strokeStyle = colors.line;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(inset.left, inset.top + chartHeight);
+    context.lineTo(width - inset.right, inset.top + chartHeight);
+    context.stroke();
+
+    for (let index = 0; index < buckets.length; index += 1) {
+      const bucket = buckets[index];
+      const barWidth = Math.max(4, slot * 0.52);
+      const barHeight = (bucket.events / maxEvents) * chartHeight;
+      const x = inset.left + index * slot + (slot - barWidth) / 2;
+      const y = inset.top + chartHeight - barHeight;
+      context.fillStyle = colors.surface;
+      context.fillRect(x, inset.top, barWidth, chartHeight);
+      context.fillStyle = colors.muted;
+      context.fillRect(x, y, barWidth, barHeight);
+    }
+
+    context.strokeStyle = colors.accentDeep;
+    context.fillStyle = colors.accent;
+    context.lineWidth = 2;
+    context.beginPath();
+    for (let index = 0; index < buckets.length; index += 1) {
+      const x = inset.left + index * slot + slot / 2;
+      const y =
+        inset.top +
+        chartHeight -
+        (buckets[index].signals / maxSignals) * chartHeight;
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.stroke();
+
+    for (let index = 0; index < buckets.length; index += 1) {
+      const x = inset.left + index * slot + slot / 2;
+      const y =
+        inset.top +
+        chartHeight -
+        (buckets[index].signals / maxSignals) * chartHeight;
+      context.fillRect(x - 2, y - 2, 4, 4);
+    }
+  }
+
+  function drawMixChart() {
+    const prepared = prepareCanvas("mix-chart");
+    const copy = currentCopy();
+    const values = [
+      {
+        label: copy.dynamic.activityReadout,
+        value: state.metrics.events,
+        color: "muted"
+      },
+      {
+        label: copy.dynamic.signalReadout,
+        value: state.metrics.incidents,
+        color: "accentDeep"
+      },
+      {
+        label: copy.dynamic.avoidableReadout,
+        value: state.metrics.avoidableCalls,
+        color: "warning"
+      }
+    ];
+    const readoutElement = byId("mix-chart-readout");
+    if (readoutElement) {
+      readoutElement.textContent =
+        state.metrics.events === 0
+          ? copy.dynamic.noActivity
+          : copy.dynamic.sessionTotals + " · " + overviewReadout();
+    }
+    const canvas = byId("mix-chart");
+    if (canvas) {
+      canvas.setAttribute(
+        "aria-label",
+        copy.static.mixTitle + ". " + overviewReadout()
+      );
+    }
+    if (!prepared) return;
+
+    const { context, width, height } = prepared;
+    const colors = paintTokens();
+    const maximum = Math.max(1, ...values.map((item) => item.value));
+    const labelWidth = Math.min(76, width * 0.27);
+    const valueWidth = 32;
+    const trackLeft = labelWidth;
+    const trackWidth = Math.max(16, width - labelWidth - valueWidth - 6);
+    const rowHeight = height / values.length;
+    context.font = '700 8px "SFMono-Regular", monospace';
+    context.textBaseline = "middle";
+
+    for (let index = 0; index < values.length; index += 1) {
+      const item = values[index];
+      const y = rowHeight * index + rowHeight / 2;
+      context.fillStyle = colors.muted;
+      context.textAlign = "left";
+      context.fillText(item.label.toUpperCase(), 0, y);
+      context.fillStyle = colors.surface;
+      context.fillRect(trackLeft, y - 3, trackWidth, 6);
+      context.fillStyle = colors[item.color];
+      context.fillRect(
+        trackLeft,
+        y - 3,
+        (item.value / maximum) * trackWidth,
+        6
+      );
+      context.fillStyle = colors.ink;
+      context.textAlign = "right";
+      context.fillText(formatCount(item.value), width, y);
+    }
+  }
+
+  function renderOverview() {
+    const copy = currentCopy();
+    const chromeKey = chromeState();
+    const signalCopy = copy.signals[chromeKey] || copy.signals.clear;
+    const warningCopy = state.warning ? copy.rules[state.warning.ruleId] : null;
+    const title = warningCopy
+      ? warningCopy.title
+      : state.connection === "connected"
+        ? copy.dynamic.noWarningTitle
+        : signalCopy.announcement;
+    const explanation = warningCopy
+      ? warningCopy.explanation
+      : copy.dynamic.noWarningExplanation;
+    const action = warningCopy
+      ? warningCopy.recommendation
+      : copy.dynamic.noWarningAction;
+
+    for (const id of ["overview-status-label", "signal-summary-label"]) {
+      const element = byId(id);
+      if (element) element.textContent = signalCopy.label;
+    }
+    const overviewTitle = byId("overview-status-title");
+    if (overviewTitle) overviewTitle.textContent = title;
+    const signalTitle = byId("signal-summary-title");
+    if (signalTitle) signalTitle.textContent = title;
+    const signalExplanation = byId("signal-summary-copy");
+    if (signalExplanation) signalExplanation.textContent = explanation;
+    const signalAction = byId("signal-summary-action");
+    if (signalAction) signalAction.textContent = action;
+
+    const contracts = new Set(
+      state.issueIds.map((id) => ISSUES[id].contract)
+    );
+    const coachCount = byId("coach-summary-count");
+    if (coachCount) coachCount.textContent = 5 - contracts.size + " / 5";
+    const coachStatus = byId("coach-summary-status");
+    if (coachStatus) {
+      coachStatus.textContent =
+        contracts.size === 0
+          ? copy.dynamic.coachDefault
+          : copy.dynamic.coachNeedsPrefix +
+            contracts.size +
+            copy.dynamic.coachNeedsSuffix;
+    }
+
+    const sourceKey =
+      state.source === "live"
+        ? "sourceLive"
+        : state.source === "trace"
+          ? "sourceTrace"
+          : "sourceUnknown";
+    const coverageKey =
+      state.coverage === "complete"
+        ? "coverageComplete"
+        : state.coverage === "incomplete"
+          ? "coverageIncomplete"
+          : "coverageUnknown";
+    const healthKey =
+      state.traceHealth === "stale"
+        ? "healthStale"
+        : state.traceHealth === "degraded"
+          ? "healthDegraded"
+          : "healthHealthy";
+    const systemLabel = byId("system-summary-label");
+    if (systemLabel) systemLabel.textContent = copy.dynamic.localLabel;
+    const systemTitle = byId("system-summary-title");
+    if (systemTitle) {
+      systemTitle.textContent =
+        copy.modes[state.mode].label + " · " + copy.dynamic[healthKey];
+    }
+    const systemCopy = byId("system-summary-copy");
+    if (systemCopy) {
+      systemCopy.textContent =
+        copy.dynamic[sourceKey] +
+        " · " +
+        copy.dynamic[coverageKey] +
+        " · " +
+        copy.dynamic.rawFreeSummary;
+    }
+
+    const detailTitle = byId("detail-title");
+    if (detailTitle) {
+      const detailKeys = {
+        activity: "detailActivityTitle",
+        signal: "detailSignalTitle",
+        coach: "detailCoachTitle",
+        system: "detailSystemTitle"
+      };
+      detailTitle.textContent = copy.dynamic[detailKeys[state.detail]];
+    }
+    drawActivityChart();
+    drawMixChart();
+  }
+
+  function showDetailPanel(name) {
+    const detail = enumValue(name, DETAIL_PANELS);
+    if (!detail) return false;
+    state.detail = detail;
+    for (const panel of document.querySelectorAll("[data-detail-panel]")) {
+      const active = panel.dataset.detailPanel === detail;
+      panel.hidden = !active;
+      panel.setAttribute("aria-hidden", active ? "false" : "true");
+    }
+    renderOverview();
+    return true;
+  }
+
+  function restoreDetailFocus() {
+    document.documentElement.dataset.detailOpen = "false";
+    for (const trigger of document.querySelectorAll("[data-detail-target]")) {
+      trigger.setAttribute("aria-expanded", "false");
+    }
+    const trigger = state.detailTrigger;
+    state.detailTrigger = null;
+    if (trigger && typeof trigger.focus === "function") trigger.focus();
+  }
+
+  function openDetail(name, trigger) {
+    const dialog = byId("detail-dialog");
+    if (!dialog || !showDetailPanel(name)) return;
+    for (const item of document.querySelectorAll("[data-detail-target]")) {
+      item.setAttribute(
+        "aria-expanded",
+        item === trigger ? "true" : "false"
+      );
+    }
+    state.detailTrigger = trigger || null;
+    document.documentElement.dataset.detailOpen = "true";
+    if (typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+      dialog.open = true;
+    }
+    const close = byId("detail-close");
+    if (close && typeof close.focus === "function") close.focus();
+  }
+
+  function closeDetail() {
+    const dialog = byId("detail-dialog");
+    if (!dialog) return;
+    if (typeof dialog.close === "function" && dialog.open) {
+      dialog.close();
+      return;
+    }
+    dialog.removeAttribute("open");
+    dialog.open = false;
+    restoreDetailFocus();
+  }
 
   function visualStateForWarning(warning) {
     if (!warning) return "clear";
@@ -3229,6 +4494,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     if (label) label.textContent = currentCopy().connections[connection];
     document.documentElement.dataset.connection = connection;
     renderSentinel();
+    renderOverview();
   }
 
   function setMode(value) {
@@ -3248,6 +4514,7 @@ export const DASHBOARD_JS = String.raw`(() => {
       }
     }
     document.documentElement.dataset.mode = mode;
+    renderOverview();
   }
 
   function setTheme(value) {
@@ -3261,6 +4528,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         button.dataset.themeOption === theme ? "true" : "false"
       );
     }
+    renderOverview();
   }
 
   function setLanguage(value) {
@@ -3297,6 +4565,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     renderWarning(state.warning);
     updateCoach(state.issueIds);
     renderTimeline();
+    renderOverview();
   }
 
   function renderMetrics() {
@@ -3308,6 +4577,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     if (incidents) incidents.textContent = formatCount(state.metrics.incidents);
     if (avoidable) avoidable.textContent = formatCount(state.metrics.avoidableCalls);
     if (elapsed) elapsed.textContent = formatElapsed(state.metrics.elapsedMs);
+    renderOverview();
   }
 
   function normalizeMetrics(value) {
@@ -3379,6 +4649,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         occurrences.hidden = true;
         occurrences.textContent = "";
       }
+      renderOverview();
       return;
     }
 
@@ -3406,7 +4677,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         copy.dynamic.occurrenceSuffix;
       occurrences.hidden = warning.occurrences < 2;
     }
-    updateCoach(warning.issueIds);
+    renderOverview();
   }
 
   function updateCoach(issueIds) {
@@ -3423,10 +4694,14 @@ export const DASHBOARD_JS = String.raw`(() => {
       }
     }
     const status = byId("coach-status");
-    if (!status) return;
+    if (!status) {
+      renderOverview();
+      return;
+    }
     const copy = currentCopy();
     if (safeIds.length === 0) {
       status.textContent = copy.dynamic.coachDefault;
+      renderOverview();
       return;
     }
     const labels = safeIds.map((id) => copy.issues[id]);
@@ -3436,6 +4711,7 @@ export const DASHBOARD_JS = String.raw`(() => {
       copy.dynamic.coachNeedsSuffix +
       " · " +
       labels.join(" · ");
+    renderOverview();
   }
 
   function normalizeStatus(payload) {
@@ -3791,7 +5067,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     const mark = document.createElement("span");
     mark.className = "event-mark";
     mark.setAttribute("aria-hidden", "true");
-    mark.textContent = KINDS[event.kind];
+    mark.textContent = languageCopy.kindMarks[event.kind];
 
     const eventCopy = document.createElement("div");
     eventCopy.className = "event-copy";
@@ -3824,7 +5100,9 @@ export const DASHBOARD_JS = String.raw`(() => {
     const relative = document.createElement("span");
     relative.className = "event-time";
     relative.textContent =
-      event.elapsedMs === null ? "LIVE" : formatRelative(event.elapsedMs);
+      event.elapsedMs === null
+        ? languageCopy.static.liveLabel
+        : formatRelative(event.elapsedMs);
 
     item.append(mark, eventCopy, relative);
     return item;
@@ -3901,6 +5179,7 @@ export const DASHBOARD_JS = String.raw`(() => {
         occurrences: event.occurrences,
         issueIds: event.issueIds
       });
+      updateCoach(event.issueIds);
     } else if (state.source === null && event.kind === "progress") {
       renderWarning(null);
     } else if (state.source === null && event.issueIds.length) {
@@ -4037,6 +5316,25 @@ export const DASHBOARD_JS = String.raw`(() => {
     }
   }
 
+  function setupDetailControls() {
+    const dialog = byId("detail-dialog");
+    for (const trigger of document.querySelectorAll("[data-detail-target]")) {
+      trigger.setAttribute("aria-haspopup", "dialog");
+      trigger.setAttribute("aria-controls", "detail-dialog");
+      trigger.setAttribute("aria-expanded", "false");
+      trigger.addEventListener("click", () => {
+        openDetail(trigger.dataset.detailTarget, trigger);
+      });
+    }
+    const close = byId("detail-close");
+    if (close) close.addEventListener("click", closeDetail);
+    if (!dialog) return;
+    dialog.addEventListener("close", restoreDetailFocus);
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) closeDetail();
+    });
+  }
+
   function setupCopyButton() {
     const button = byId("copy-template");
     const template = byId("prompt-template");
@@ -4062,6 +5360,7 @@ export const DASHBOARD_JS = String.raw`(() => {
   setupLanguageControls();
   setupThemeControls();
   setupViewControls();
+  setupDetailControls();
   setupCopyButton();
   setTheme("light");
   setView("expanded");
@@ -4076,6 +5375,10 @@ export const DASHBOARD_JS = String.raw`(() => {
   window.addEventListener("beforeunload", () => {
     if (statusTimer !== null) window.clearInterval(statusTimer);
     if (stream) stream.close();
+  });
+  window.addEventListener("resize", () => {
+    drawActivityChart();
+    drawMixChart();
   });
 })();
 `;
