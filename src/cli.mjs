@@ -9,6 +9,10 @@ import { dashboardReady } from "./dashboard-ready-schema.mjs";
 import { handleHook } from "./engine.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
 import { evaluatePrompt } from "./prompt-contract.mjs";
+import {
+  providerIntegrationStatus,
+  providerIntegrationStatusAsync,
+} from "./provider-integration-status.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
 import { TraceStore } from "./trace-store.mjs";
@@ -100,6 +104,7 @@ Usage:
   agent-waste-firewall replay <events.jsonl> [--mode observe|warn|block] [--json]
   agent-waste-firewall report [--json]
   agent-waste-firewall purge [--all] [--json]
+  agent-waste-firewall integration status [--json]
   agent-waste-firewall doctor [--json]
 
 Modes:
@@ -107,6 +112,109 @@ Modes:
   AGENT_WASTE_FIREWALL_MODE=warn     record and add concise context (default)
   AGENT_WASTE_FIREWALL_MODE=block    block only high-confidence repeats
 `;
+}
+
+export function integrationStatus(
+  env = process.env,
+  runner = undefined,
+) {
+  return providerIntegrationStatus({
+    env,
+    runner,
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+  });
+}
+
+export async function integrationStatusAsync(
+  env = process.env,
+  runner = undefined,
+  options = {},
+) {
+  return providerIntegrationStatusAsync({
+    env,
+    runner,
+    probeTimeoutMs: options.probeTimeoutMs,
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+  });
+}
+
+export function summarizeProviderMonitoring(integration) {
+  const providerInstalled = integration.providers.some((provider) =>
+    ["needs_enable", "installed_unverified", "active"].includes(
+      provider.state,
+    )
+  );
+  let monitoring;
+  if (integration.providers.some((provider) => provider.state === "active")) {
+    monitoring = "active";
+  } else if (
+    integration.providers.some((provider) =>
+      ["needs_install", "needs_enable", "installed_unverified"].includes(
+        provider.state,
+      )
+    )
+  ) {
+    monitoring = "attention";
+  } else if (
+    integration.providers.every(
+      (provider) => provider.state === "not_detected",
+    )
+  ) {
+    monitoring = "inactive";
+  } else {
+    monitoring = "unknown";
+  }
+  return {
+    providerInstalled,
+    monitoringActive: monitoring === "active",
+    monitoring,
+  };
+}
+
+function providerStatusLine(provider) {
+  const labels = {
+    active: "activity observed",
+    installed_unverified: "installed; delivery not yet observed",
+    needs_enable: "installed but disabled",
+    needs_install: "AWF plugin not installed",
+    not_detected: "CLI not detected",
+    unknown: "status unavailable",
+  };
+  const version = provider.version
+    ? ` ${provider.version.major}.${provider.version.minor}.${provider.version.patch}`
+    : "";
+  const name = provider.provider === "codex" ? "Codex" : "Claude Code";
+  return `${name}${version}: ${labels[provider.state]}`;
+}
+
+function providerStatusPrefix(provider) {
+  if (provider.state === "active") return "PASS";
+  if (provider.state === "not_detected") return "MISS";
+  if (provider.state === "unknown") return "WARN";
+  return "WAIT";
+}
+
+async function commandIntegration(args, env = process.env) {
+  const [action] = positionalArguments(args);
+  if (action !== "status") {
+    throw new Error("integration requires status.");
+  }
+  const integration = await integrationStatusAsync(env);
+  const { monitoring } = summarizeProviderMonitoring(integration);
+  if (args.includes("--json")) {
+    console.log(JSON.stringify(integration, null, 2));
+    return;
+  }
+  console.log(`Monitoring: ${monitoring}`);
+  for (const provider of integration.providers) {
+    console.log(providerStatusLine(provider));
+  }
 }
 
 async function commandCheckPrompt(args) {
@@ -457,6 +565,7 @@ async function commandDoctor(args, env = process.env) {
     "src/live-event-schema.mjs",
     "src/live-event-projection.mjs",
     "src/live-event-store.mjs",
+    "src/provider-integration-status.mjs",
     "src/trace-schema.mjs",
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
@@ -467,6 +576,7 @@ async function commandDoctor(args, env = process.env) {
     "src/dashboard-projection.mjs",
     "src/dashboard-trace-cursor.mjs",
     "src/dashboard-assets.mjs",
+    "protocol/provider-integration-status-v1.schema.json",
   ];
   const checks = requiredFiles.map((relativePath) => ({
     check: relativePath,
@@ -505,10 +615,20 @@ async function commandDoctor(args, env = process.env) {
   }
   const major = Number.parseInt(process.versions.node.split(".")[0], 10);
   checks.push({ check: "Node.js >= 18", ok: major >= 18, detail: process.version });
+  const providerIntegration = await integrationStatusAsync(env);
+  const providerMonitoring =
+    summarizeProviderMonitoring(providerIntegration);
+  const monitoring = providerMonitoring.monitoring;
+  const engineReady = checks.every((current) => current.ok);
   const result = {
-    ok: checks.every((current) => current.ok),
+    ok: engineReady,
+    engineReady,
+    providerInstalled: providerMonitoring.providerInstalled,
+    monitoringActive: providerMonitoring.monitoringActive,
+    monitoring,
     mode: config.mode,
     dataDir: config.dataDir,
+    providerIntegration,
     checks,
   };
   if (args.includes("--json")) {
@@ -519,6 +639,10 @@ async function commandDoctor(args, env = process.env) {
     }
     console.log(`Mode: ${config.mode}`);
     console.log(`Data: ${config.dataDir}`);
+    console.log(`Monitoring: ${monitoring}`);
+    for (const provider of providerIntegration.providers) {
+      console.log(`${providerStatusPrefix(provider)}  ${providerStatusLine(provider)}`);
+    }
   }
   if (!result.ok) {
     process.exitCode = 1;
@@ -754,6 +878,8 @@ export async function main(args, options = {}) {
       await commandReport(rest, options.env);
     } else if (command === "purge") {
       await commandPurge(rest, options.env);
+    } else if (command === "integration") {
+      await commandIntegration(rest, options.env);
     } else if (command === "doctor") {
       await commandDoctor(rest, options.env);
     } else {

@@ -365,6 +365,181 @@ struct DashboardStatus: Equatable, Sendable {
     }
 }
 
+enum ProviderName: String, Sendable {
+    case codex
+    case claude
+}
+
+enum ProviderState: String, Sendable {
+    case notDetected = "not_detected"
+    case needsInstall = "needs_install"
+    case needsEnable = "needs_enable"
+    case installedUnverified = "installed_unverified"
+    case active
+    case unknown
+}
+
+enum ProviderActivity: String, Sendable {
+    case notObserved = "not_observed"
+    case observed
+    case unknown
+}
+
+struct ProviderVersion: Equatable, Sendable {
+    let major: Int
+    let minor: Int
+    let patch: Int
+}
+
+struct ProviderStatus: Equatable, Sendable {
+    let provider: ProviderName
+    let state: ProviderState
+    let version: ProviderVersion?
+    let activity: ProviderActivity
+}
+
+struct ProviderIntegrationStatus: Equatable, Sendable {
+    private static let statusKeys: Set<String> = [
+        "v",
+        "kind",
+        "providers",
+    ]
+    private static let providerKeys: Set<String> = [
+        "provider",
+        "state",
+        "version",
+        "activity",
+    ]
+    private static let versionKeys: Set<String> = [
+        "major",
+        "minor",
+        "patch",
+    ]
+
+    let providers: [ProviderStatus]
+
+    init(data: Data) throws {
+        let error = PresentationProtocolError.invalidIntegration
+        let object = try ClosedJSON.object(
+            from: data,
+            maximumBytes: 16 * 1_024,
+            error: error
+        )
+        try ClosedJSON.requireExactKeys(
+            object,
+            Self.statusKeys,
+            error: error
+        )
+        guard
+            try ClosedJSON.integer(object["v"], error: error) == 1,
+            try ClosedJSON.string(object["kind"], error: error) ==
+                "provider_integration_status",
+            let rawProviders = object["providers"] as? [Any],
+            rawProviders.count == 2
+        else {
+            throw error
+        }
+        let providers = try rawProviders.map {
+            try Self.provider($0, error: error)
+        }
+        guard
+            providers[0].provider == .codex,
+            providers[1].provider == .claude
+        else {
+            throw error
+        }
+        self.providers = providers
+    }
+
+    var hasObservedActivity: Bool {
+        providers.contains { $0.activity == .observed }
+    }
+
+    private static func provider(
+        _ value: Any,
+        error: PresentationProtocolError
+    ) throws -> ProviderStatus {
+        let object = try ClosedJSON.nestedObject(value, error: error)
+        try ClosedJSON.requireExactKeys(
+            object,
+            providerKeys,
+            error: error
+        )
+        guard
+            let provider = ProviderName(
+                rawValue: try ClosedJSON.string(
+                    object["provider"],
+                    error: error
+                )
+            ),
+            let state = ProviderState(
+                rawValue: try ClosedJSON.string(
+                    object["state"],
+                    error: error
+                )
+            ),
+            let activity = ProviderActivity(
+                rawValue: try ClosedJSON.string(
+                    object["activity"],
+                    error: error
+                )
+            )
+        else {
+            throw error
+        }
+        let version = try Self.version(object["version"], error: error)
+        let detected = state != .notDetected && state != .unknown
+        guard
+            !(state == .notDetected && version != nil),
+            !detected || version != nil,
+            state != .active || activity == .observed,
+            activity != .observed ||
+                state == .active ||
+                state == .unknown
+        else {
+            throw error
+        }
+        return ProviderStatus(
+            provider: provider,
+            state: state,
+            version: version,
+            activity: activity
+        )
+    }
+
+    private static func version(
+        _ value: Any?,
+        error: PresentationProtocolError
+    ) throws -> ProviderVersion? {
+        if value is NSNull {
+            return nil
+        }
+        let object = try ClosedJSON.nestedObject(value, error: error)
+        try ClosedJSON.requireExactKeys(
+            object,
+            versionKeys,
+            error: error
+        )
+        return ProviderVersion(
+            major: try ClosedJSON.integer(
+                object["major"],
+                maximum: 999_999,
+                error: error
+            ),
+            minor: try ClosedJSON.integer(
+                object["minor"],
+                maximum: 999_999,
+                error: error
+            ),
+            patch: try ClosedJSON.integer(
+                object["patch"],
+                maximum: 999_999,
+                error: error
+            )
+        )
+    }
+}
+
 struct DashboardStatusReducer: Sendable {
     private(set) var current: DashboardStatus?
 

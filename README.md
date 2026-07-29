@@ -10,7 +10,8 @@ Claude Code.
 > replay work and are tested. The source tree now also contains a SwiftUI/AppKit menu-bar shell,
 > local `WKWebView`, and transparent floating sentinel. It is not a signed, notarized, or packaged
 > release and still needs an installed Node.js 18+ runtime. Exact token accounting, one-command
-> installation, and installed Codex/Claude acceptance tests remain pending.
+> installation, user-owned Codex hook trust/live delivery, and installed Claude acceptance remain
+> pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -41,6 +42,9 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Serves a token-protected, loopback-only dashboard from the bounded live spool by default, with an
   English-default incident timeline, Korean localization, a prompt-contract coach, and a one-click
   compact sentinel. `dashboard <trace-id>` remains available for explicit historical traces.
+- Reports a closed, raw-free integration status for Codex and Claude Code. The CLI and dashboard
+  distinguish an engine that is ready to run from a provider whose AWF hook activity has actually
+  been observed recently; an empty healthy spool is not presented as active monitoring.
 - Reads live generations without taking the publisher lock, validates only committed semantic
   records during steady-state polling, and periodically re-audits the complete bounded generation.
   Rotation emits an atomic reset, sequence gaps or dropped publications show incomplete coverage,
@@ -69,6 +73,7 @@ Requirements: Node.js 18 or newer.
 ```bash
 npm test
 node bin/agent-waste-firewall.mjs doctor
+node bin/agent-waste-firewall.mjs integration status
 node bin/agent-waste-firewall.mjs check-prompt \
   "Refactor the whole repository and keep going until it is perfect"
 node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
@@ -83,8 +88,50 @@ node bin/agent-waste-firewall.mjs dashboard
 ```
 
 Open the printed `127.0.0.1` URL in a browser. The URL contains a random local access token. Start
-Codex or Claude Code with this plugin loaded. An empty but healthy spool is shown as connected and
-waiting; live events appear as the hooks publish them.
+Codex or Claude Code with this plugin loaded. The provider cards summarize installation state and
+audited activity. An empty but healthy spool is shown as connected and waiting, not as active
+provider monitoring. Live events appear as the hooks publish them.
+
+`doctor` answers whether the local AWF engine, files, Node.js runtime, and bounded spool are ready.
+It reports those checks as `engineReady`, plugin presence as `providerInstalled`, and fresh
+provider evidence as `monitoringActive`. A one-shot CLI probe deliberately does not promote
+retained spool events to current activity, so the engine and plugin can be present while
+`monitoringActive` is false and `monitoring` is `attention`. Use the provider-specific status
+command when diagnosing that distinction:
+
+```bash
+node bin/agent-waste-firewall.mjs integration status
+node bin/agent-waste-firewall.mjs integration status --json
+```
+
+The JSON form is the closed `ProviderIntegrationStatusV1` object. It contains only provider enums,
+numeric version components, and `observed`/`not_observed`/`unknown` activity. States such as
+`needs_install`, `needs_enable`, and `installed_unverified` do not mean that hooks are delivering
+events. For the live dashboard, activity means a new audited semantic event observed after that
+dashboard server started. The evidence expires after five minutes. Retained spool events from
+before startup and events in an explicit historical trace never mark current monitoring as active.
+Read-only provider subprocesses receive only a closed environment allowlist for executable and
+local configuration discovery; API keys and unrelated process secrets are not forwarded. The
+shipped CLI and dashboard run the Codex and Claude probes concurrently. Each provider's version
+and plugin-list steps share one three-second probe budget and resolve to a closed `unknown` state
+on timeout instead of holding the dashboard open indefinitely. Process startup and other CLI work
+sit outside that provider-probe budget.
+
+Contributors with the Codex plugin CLI can run the isolated acceptance gate:
+
+```bash
+npm run acceptance:codex
+```
+
+The gate uses private temporary `HOME` and `CODEX_HOME` directories, stages the reviewed plugin
+subset, adds its temporary marketplace, installs and lists the plugin, and directly executes the
+installed `UserPromptSubmit`, `PreToolUse`, and `PostToolUse` hooks. It requires a closed Codex
+`LiveEventV1` prompt incident, scans the bounded temporary tree for short per-field nonce markers
+placed at both ends of raw prompt/session/turn/workspace/tool-ID/input/output values, and removes
+only the fresh child directory it created under the validated system temp tree. A regression
+fixture confirms that persisting only an initial raw fragment still fails the gate. It does not
+invoke Codex `/hooks`, modify the user's provider configuration, approve hook trust, or prove
+delivery from a real user-owned Codex session.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
@@ -143,7 +190,18 @@ The plugin packages use the standard `.codex-plugin/plugin.json`,
   Follow the official [Codex plugin development guide](https://learn.chatgpt.com/docs/build-plugins)
   until the repository has a published marketplace entry.
 
-No installer edits a user's global configuration in this MVP.
+Installing a plugin is not the same as reviewing and trusting its hooks. AWF does not bypass that
+provider-controlled step. No installer edits a user's global configuration in this MVP; global
+installation, enablement, hook review, and trust remain explicit user actions.
+
+On the validation Mac used for this repository, the shell-inherited CLI probe detects Codex
+`0.146.0` with state `needs_install`; Claude Code is `not_detected` on that shell `PATH`. The
+native supervisor's closed search path also finds Claude Code `2.1.207` in a safe user-local
+location and reports `needs_install`. These are machine-specific snapshots of the user-owned
+configuration. On the same Mac, `npm run acceptance:codex` passed its
+isolated marketplace add/install/list, installed-hook execution, closed-event, raw-canary, and
+cleanup checks. That temporary result is not a claim that the user's Codex hooks were reviewed,
+trusted, or observed delivering live events.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
 outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE
@@ -151,12 +209,12 @@ endpoints share one audited cursor snapshot so a generation change cannot mix ol
 events.
 
 The native preview does not widen that observation boundary. Its supervisor receives one bounded,
-closed `dashboard_ready` record, and its status client accepts only the closed `DashboardStatusV1`
-shape. The embedded WebKit store is non-persistent and navigation is restricted to the exact
-tokenized `127.0.0.1` dashboard origin. Raw prompts, tool inputs, outputs, transcripts, source
-content, and detector state are never sent to Swift. The preview is not App Sandbox-contained
-because it must launch an external Node executable; this is another reason it is a source preview,
-not a public security-hardened build.
+closed `dashboard_ready` record, and its status client accepts only the closed
+`DashboardStatusV1` and `ProviderIntegrationStatusV1` shapes. The embedded WebKit store is
+non-persistent and navigation is restricted to the exact tokenized `127.0.0.1` dashboard origin.
+Raw prompts, tool inputs, outputs, transcripts, source content, and detector state are never sent
+to Swift. The preview is not App Sandbox-contained because it must launch an external Node
+executable; this is another reason it is a source preview, not a public security-hardened build.
 
 ## Modes
 
@@ -314,6 +372,9 @@ See [core architecture](docs/ARCHITECTURE.md),
   signal until a later observation exposes the change.
 - Codex hosted tools such as web search may not emit local pre/post tool hooks.
 - Hook coverage is a useful guardrail, not a complete security boundary.
+- Provider detection is read-only evidence. Installation or enablement alone does not prove hook
+  delivery. The dashboard requires fresh post-start audited evidence, and full user-owned
+  install/trust/live-delivery acceptance remains pending.
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.

@@ -39,17 +39,48 @@ test("Codex and Claude load platform-specific hook event sets", () => {
 });
 
 test("all hook commands resolve the bundled script from the plugin root", () => {
-  for (const relativePath of ["hooks/hooks.json", "hooks/claude-hooks.json"]) {
+  for (const [relativePath, rootVariable] of [
+    ["hooks/hooks.json", "PLUGIN_ROOT"],
+    ["hooks/claude-hooks.json", "CLAUDE_PLUGIN_ROOT"],
+  ]) {
     const config = readJson(relativePath);
     for (const groups of Object.values(config.hooks)) {
       for (const group of groups) {
         for (const hook of group.hooks) {
           const command = [hook.command, ...(hook.args ?? [])].join(" ");
-          assert.match(command, /CLAUDE_PLUGIN_ROOT/u);
+          assert.match(command, new RegExp(`\\$\\{${rootVariable}\\}`, "u"));
           assert.equal(hook.type, "command");
           assert.ok(hook.timeout <= 3);
         }
       }
     }
   }
+});
+
+test("repo marketplace exposes the root plugin without external paths", () => {
+  const packageManifest = readJson("package.json");
+  const marketplace = readJson(".agents/plugins/marketplace.json");
+  assert.ok(
+    packageManifest.files.includes(".agents/"),
+    "the published package must retain the Codex repo marketplace",
+  );
+  assert.deepEqual(Object.keys(marketplace).sort(), [
+    "interface",
+    "name",
+    "plugins",
+  ]);
+  assert.equal(marketplace.name, "agent-waste-firewall");
+  assert.equal(marketplace.plugins.length, 1);
+  assert.deepEqual(marketplace.plugins[0], {
+    name: "agent-waste-firewall",
+    source: {
+      source: "local",
+      path: "./",
+    },
+    policy: {
+      installation: "AVAILABLE",
+      authentication: "ON_INSTALL",
+    },
+    category: "Productivity",
+  });
 });

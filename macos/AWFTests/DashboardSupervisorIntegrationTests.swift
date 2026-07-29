@@ -11,6 +11,9 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
                 "HOME": "/Users/example",
                 "TMPDIR": "/tmp/example",
                 "LANG": "en_US.UTF-8",
+                "CODEX_HOME": "/Users/example/.codex-alt",
+                "CLAUDE_CONFIG_DIR": "/Users/example/.claude-alt",
+                "XDG_CONFIG_HOME": "/Users/example/.config-alt",
                 "AGENT_WASTE_FIREWALL_MODE": "warn",
                 "DYLD_INSERT_LIBRARIES": "/tmp/injected.dylib",
                 "NODE_OPTIONS": "--require=/tmp/injected.cjs",
@@ -24,10 +27,44 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
                 "HOME": "/Users/example",
                 "TMPDIR": "/tmp/example",
                 "LANG": "en_US.UTF-8",
-                "PATH": "/usr/bin:/bin",
+                "CODEX_HOME": "/Users/example/.codex-alt",
+                "CLAUDE_CONFIG_DIR": "/Users/example/.claude-alt",
+                "XDG_CONFIG_HOME": "/Users/example/.config-alt",
+                "PATH": [
+                    "/Applications/ChatGPT.app/Contents/Resources",
+                    "/opt/homebrew/bin",
+                    "/usr/local/bin",
+                    "/Users/example/.local/bin",
+                    "/Users/example/.npm-global/bin",
+                    "/Users/example/.volta/bin",
+                    "/usr/bin",
+                    "/bin",
+                ].joined(separator: ":"),
                 "AGENT_WASTE_FIREWALL_MODE": "warn",
             ]
         )
+    }
+
+    func testWorkerEnvironmentDoesNotInjectUnsafeHomeIntoProviderPath() {
+        let projected = DashboardSupervisor.workerEnvironment(
+            from: [
+                "HOME": "/Users/example:/tmp/injected",
+                "PATH": "/tmp/untrusted",
+            ]
+        )
+
+        XCTAssertEqual(
+            projected["PATH"],
+            [
+                "/Applications/ChatGPT.app/Contents/Resources",
+                "/opt/homebrew/bin",
+                "/usr/local/bin",
+                "/usr/bin",
+                "/bin",
+            ].joined(separator: ":")
+        )
+        XCTAssertFalse(projected["PATH", default: ""].contains("injected"))
+        XCTAssertFalse(projected["PATH", default: ""].contains("untrusted"))
     }
 
     func testImmediateReadinessEOFStopsChildAndReportsInvalidReadiness() async throws {
@@ -188,7 +225,8 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
         XCTAssertEqual(endpoint.source, .live)
         XCTAssertGreaterThan(endpoint.port, 0)
 
-        let status = try await DashboardStatusClient().fetch(endpoint)
+        let client = DashboardStatusClient()
+        let status = try await client.fetch(endpoint)
         XCTAssertTrue(status.connected)
         XCTAssertEqual(status.source, .live)
         XCTAssertEqual(status.sourceState, .empty)
@@ -199,6 +237,13 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
         XCTAssertEqual(status.metrics.events, 0)
         XCTAssertEqual(status.lastSequence, 0)
         XCTAssertNil(status.warning)
+
+        let integration = try await client.fetchIntegration(endpoint)
+        XCTAssertEqual(
+            integration.providers.map(\.provider),
+            [.codex, .claude]
+        )
+        XCTAssertFalse(integration.hasObservedActivity)
 
         supervisor.stop()
         XCTAssertFalse(supervisor.isRunning)

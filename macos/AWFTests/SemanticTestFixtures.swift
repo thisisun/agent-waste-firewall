@@ -133,4 +133,52 @@ enum SemanticTestFixtures {
     ) throws -> DashboardStatus {
         try DashboardStatus(data: data(object))
     }
+
+    static func providerIntegration(
+        codexState: String = "installed_unverified",
+        codexActivity: String = "not_observed",
+        claudeState: String = "not_detected",
+        claudeActivity: String = "not_observed"
+    ) -> [String: Any] {
+        [
+            "v": 1,
+            "kind": "provider_integration_status",
+            "providers": [
+                provider(
+                    name: "codex",
+                    state: codexState,
+                    activity: codexActivity,
+                    version: ["major": 0, "minor": 146, "patch": 0]
+                ),
+                provider(
+                    name: "claude",
+                    state: claudeState,
+                    activity: claudeActivity,
+                    version: claudeState == "not_detected"
+                        ? nil
+                        : ["major": 2, "minor": 1, "patch": 207]
+                ),
+            ],
+        ]
+    }
+
+    static func decodedProviderIntegration(
+        _ object: [String: Any]
+    ) throws -> ProviderIntegrationStatus {
+        try ProviderIntegrationStatus(data: data(object))
+    }
+
+    private static func provider(
+        name: String,
+        state: String,
+        activity: String,
+        version: [String: Any]?
+    ) -> [String: Any] {
+        [
+            "provider": name,
+            "state": state,
+            "version": version ?? NSNull(),
+            "activity": activity,
+        ]
+    }
 }

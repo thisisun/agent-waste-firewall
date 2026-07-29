@@ -19,8 +19,9 @@ AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실�
 SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패널을 포함한 macOS
 개발자 미리보기도 소스에 들어 있습니다. 다만 아직 서명·공증·패키징된 앱이 아니며,
 설치된 Node.js 18 이상이 필요합니다.
-실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했지만, 각 프로그램에 설치한
-상태의 승인·업그레이드·제거 검증은 아직 남아 있습니다.
+실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, Codex 격리
+설치·직접 훅 실행도 통과했습니다. 다만 사용자 소유 Codex의 훅 신뢰·실시간 전달과
+Claude 설치, 업그레이드·제거 검증은 아직 남아 있습니다.
 대시보드는 별도 녹화 없이 상시 `LiveEventV1` 저장소를 기본으로 읽습니다. 완성된 신규
 의미 이벤트만 증분 검사하고, 30초마다 제한된 현재 세대 전체를 다시 검사합니다. 세대
 교체·재연결 때는 화면 상태를 원자적으로 초기화하며, 같은 작업공간의 여러 가명 세션도
@@ -48,7 +49,43 @@ Node.js 18 이상이 필요합니다.
 ```bash
 npm test
 node bin/agent-waste-firewall.mjs doctor
+node bin/agent-waste-firewall.mjs integration status
 ```
+
+`doctor`의 `engineReady`는 AWF 엔진·파일·Node.js·제한 저장소를 실행할 수 있다는 뜻입니다.
+실제 Codex 또는 Claude Code 훅이 활동 중이라는 뜻은 아닙니다. 그래서 엔진은 정상이어도
+`providerInstalled`와 `monitoringActive`는 별도로 표시됩니다. 일회성 CLI 검사는 보관된
+이벤트를 현재 활동으로 승격하지 않으므로 플러그인이 있어도 `monitoringActive`는
+`false`, `monitoring`은 `attention`일 수 있습니다. 자세한 provider 상태는 다음 닫힌
+원문 비저장 계약으로 확인합니다.
+
+```bash
+node bin/agent-waste-firewall.mjs integration status --json
+```
+
+대시보드의 Codex·Claude Code 카드도 설치 상태와 감사된 활동을 구분합니다. 현재 활동은
+대시보드 서버를 연 뒤 새로 도착한 의미 이벤트만 근거로 삼고 5분 뒤 만료됩니다. 시작 전에
+저장된 이벤트와 명시적으로 연 과거 trace는 현재 활성 상태로 계산하지 않습니다.
+읽기 전용 provider 하위 프로세스에는 실행 파일·로컬 설정 탐색에 필요한 닫힌 환경 목록만
+전달하며 API 키와 관련 없는 프로세스 secret은 전달하지 않습니다. 실제 CLI와 대시보드는
+Codex·Claude 검사를 동시에 실행합니다. 각 provider의 버전 확인과 플러그인 목록 확인은
+하나의 3초 검사 예산을 공유하고, 시간 초과 시 대시보드를 붙잡지 않고 닫힌 `unknown`
+상태로 정리합니다. 프로세스 시작과 그 밖의 CLI 작업 시간은 이 provider 검사 예산과
+별개입니다.
+
+Codex 플러그인 CLI가 있는 개발자는 격리 검증을 실행할 수 있습니다.
+
+```bash
+npm run acceptance:codex
+```
+
+이 검증은 임시 `HOME`과 `CODEX_HOME`에서 마켓플레이스 추가, 설치, 목록 확인,
+설치된 `UserPromptSubmit`·`PreToolUse`·`PostToolUse` 훅 직접 실행, 닫힌 Codex 의미
+이벤트, 원문 canary 비저장, 임시 파일 정리를 확인합니다. 프롬프트·세션·turn·작업공간·
+tool ID·입력·출력의 앞뒤에 필드별 고유 표식을 넣고, 원문 앞부분만 저장되는 회귀도
+검증 실패로 잡습니다. 검증된 시스템 임시 폴더 아래에 스스로 만든 새 하위 폴더만
+삭제합니다. 사용자의 전역 설정을 바꾸거나 Codex `/hooks` 신뢰 승인과 실제 세션 전달을
+증명하지는 않습니다.
 
 플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
 `LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 로컬
@@ -123,10 +160,11 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 원문 훅 JSON을 저장한 뒤 마스킹하지 않습니다. 훅을 받은 메모리 안에서 즉시 의미 이벤트로
 변환하고, 허용된 필드만 저장합니다.
 
-네이티브 미리보기도 원문 훅을 받지 않습니다. 제한된 `dashboard_ready`와
-`DashboardStatusV1` 계약만 Swift에서 검증하고, WebKit 데이터 저장소는 비영구 모드이며
-정확한 토큰 포함 `127.0.0.1` 주소 이외의 이동을 거부합니다. 외부 Node를 실행해야 하므로
-현재 미리보기는 App Sandbox를 사용하지 않으며, 공개 보안 강화 빌드로 간주하면 안 됩니다.
+네이티브 미리보기도 원문 훅을 받지 않습니다. 제한된 `dashboard_ready`,
+`DashboardStatusV1`, `ProviderIntegrationStatusV1` 계약만 Swift에서 검증하고, WebKit
+데이터 저장소는 비영구 모드이며 정확한 토큰 포함 `127.0.0.1` 주소 이외의 이동을
+거부합니다. 외부 Node를 실행해야 하므로 현재 미리보기는 App Sandbox를 사용하지 않으며,
+공개 보안 강화 빌드로 간주하면 안 됩니다.
 
 로컬 탐지 상태에도 작업공간 이름, 파일명·경로, provider 도구명은 남기지 않습니다.
 프롬프트·호출·결과·파일·작업공간은 세션 범위의 키 기반 별칭으로만 연결합니다.
@@ -172,13 +210,24 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
   불러올 수 있습니다.
 - Codex: 로컬 마켓플레이스에서 플러그인을 연결한 뒤 훅을 검토하고 신뢰해야 합니다.
 
-현재 버전은 전역 설정을 자동으로 수정하지 않습니다. Codex와 Claude의 훅 형식 차이는 별도
+플러그인 설치와 훅 검토·신뢰는 서로 다른 단계입니다. AWF는 provider의 신뢰 절차를
+우회하지 않으며, 현재 버전은 전역 설정을 자동으로 수정하지 않습니다. 전역 설치, 활성화,
+훅 검토와 신뢰는 사용자가 명시적으로 결정합니다. Codex와 Claude의 훅 형식 차이는 별도
 manifest로 처리하며 탐지 코어와 대시보드는 공유합니다.
+
+이 저장소를 검증한 Mac의 셸 `PATH` 기준 읽기 전용 상태는 Codex `0.146.0`
+`needs_install`, Claude Code `not_detected`입니다. 네이티브 supervisor의 닫힌 검색
+경로는 안전한 사용자 로컬 위치의 Claude Code `2.1.207`도 찾아 `needs_install`로
+표시합니다. 같은 Mac에서
+`npm run acceptance:codex`의 격리 설치·훅·프라이버시·정리 검증은 통과했습니다. 하지만
+사용자 소유 설정에서 훅을 검토·신뢰했거나 실제 provider 이벤트가 전달됐다는 뜻은 아닙니다.
 
 ## 한계
 
 - 에이전트의 숨은 사고 과정을 읽지 않습니다.
 - Codex의 hosted tool 등 일부 경로는 로컬 훅이 오지 않을 수 있습니다.
+- provider 감지는 읽기 전용 근거입니다. 설치·활성화만으로 훅 전달을 증명하지 않으며,
+  대시보드를 연 뒤 5분 안에 관찰한 새 provider 이벤트가 있어야 현재 활동으로 표시합니다.
 - 정확한 토큰·비용 수치는 후속 사용량 어댑터가 필요합니다.
 - 프롬프트 코치는 결정론적 휴리스틱이며 좋은 요청을 증명하지 않습니다.
 - 훅은 안전장치이지 자격 증명이나 운영 시스템을 보호하는 완전한 보안 경계가 아닙니다.

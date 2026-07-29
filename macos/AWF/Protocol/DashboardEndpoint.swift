@@ -64,6 +64,10 @@ struct DashboardEndpoint: Equatable, Sendable {
         url(path: "/api/status")
     }
 
+    var integrationURL: URL {
+        url(path: "/api/integrations")
+    }
+
     private func url(path: String) -> URL {
         var components = URLComponents()
         components.scheme = "http"

@@ -21,6 +21,8 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var endpoint: DashboardEndpoint?
     @Published private(set) var status: DashboardStatus?
+    @Published private(set) var providerIntegration:
+        ProviderIntegrationStatus?
     @Published private(set) var transport: MonitorTransportState = .starting
     @Published private(set) var failure: MonitorFailure?
     @Published var isSentinelVisible: Bool {
@@ -39,6 +41,7 @@ final class AppModel: ObservableObject {
     private var reducer = DashboardStatusReducer()
     private var launchTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
+    private var integrationTask: Task<Void, Never>?
     private var sentinelController: SentinelPanelController?
     private var openDashboardAction: (@MainActor () -> Void)?
     private var started = false
@@ -56,7 +59,11 @@ final class AppModel: ObservableObject {
     }
 
     var visualState: SentinelVisualState {
-        SentinelVisualState.project(transport: transport, status: status)
+        SentinelVisualState.project(
+            transport: transport,
+            status: status,
+            integration: providerIntegration
+        )
     }
 
     var currentModeTitle: String {
@@ -87,6 +94,7 @@ final class AppModel: ObservableObject {
 
     func retry() {
         monitorTask?.cancel()
+        integrationTask?.cancel()
         launchTask?.cancel()
         supervisor.stop()
         if endpoint != nil {
@@ -94,6 +102,9 @@ final class AppModel: ObservableObject {
         }
         if status != nil {
             status = nil
+        }
+        if providerIntegration != nil {
+            providerIntegration = nil
         }
         reducer = DashboardStatusReducer()
         if transport != .starting {
@@ -110,8 +121,10 @@ final class AppModel: ObservableObject {
         started = false
         launchTask?.cancel()
         monitorTask?.cancel()
+        integrationTask?.cancel()
         launchTask = nil
         monitorTask = nil
+        integrationTask = nil
         supervisor.stop()
         sentinelController?.close()
         sentinelController = nil
@@ -193,6 +206,7 @@ final class AppModel: ObservableObject {
 
     private func startMonitoring(_ endpoint: DashboardEndpoint) {
         monitorTask?.cancel()
+        integrationTask?.cancel()
         monitorTask = Task { [weak self] in
             guard let self else {
                 return
@@ -225,8 +239,53 @@ final class AppModel: ObservableObject {
                     if failure != .statusUnavailable {
                         failure = .statusUnavailable
                     }
+                    if providerIntegration != nil {
+                        providerIntegration = nil
+                    }
                 }
                 refreshSentinel()
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+        }
+        integrationTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            while !Task.isCancelled {
+                do {
+                    let integration = try await statusClient
+                        .fetchIntegration(endpoint)
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    guard
+                        self.endpoint == endpoint,
+                        transport == .online
+                    else {
+                        if providerIntegration != nil {
+                            providerIntegration = nil
+                            refreshSentinel()
+                        }
+                        try await Task.sleep(for: .seconds(1))
+                        continue
+                    }
+                    if providerIntegration != integration {
+                        providerIntegration = integration
+                        refreshSentinel()
+                    }
+                } catch {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    if providerIntegration != nil {
+                        providerIntegration = nil
+                        refreshSentinel()
+                    }
+                }
                 do {
                     try await Task.sleep(for: .seconds(1))
                 } catch {

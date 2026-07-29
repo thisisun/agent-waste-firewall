@@ -63,34 +63,43 @@ final class SentinelVisualStateTests: XCTestCase {
                 sourceState: "empty"
             )
         )
+        let unobserved = try integration()
+        let observed = try integration(
+            codexState: "active",
+            codexActivity: "observed"
+        )
 
         let cases: [
             (
                 transport: MonitorTransportState,
                 status: DashboardStatus?,
+                integration: ProviderIntegrationStatus?,
                 expected: SentinelVisualState
             )
         ] = [
-            (.starting, nil, .offline),
-            (.offline, clear, .offline),
-            (.online, disconnected, .offline),
-            (.online, empty, .review),
-            (.online, clear, .clear),
-            (.online, low, .review),
-            (.online, medium, .review),
-            (.online, highFirst, .danger),
-            (.online, highSecond, .danger),
-            (.online, highThird, .critical),
-            (.online, stale, .degraded),
-            (.online, degraded, .degraded),
-            (.online, incomplete, .degraded),
+            (.starting, nil, nil, .offline),
+            (.offline, clear, observed, .offline),
+            (.online, disconnected, observed, .offline),
+            (.online, empty, observed, .review),
+            (.online, clear, observed, .clear),
+            (.online, clear, unobserved, .review),
+            (.online, clear, nil, .review),
+            (.online, low, unobserved, .review),
+            (.online, medium, unobserved, .review),
+            (.online, highFirst, unobserved, .danger),
+            (.online, highSecond, unobserved, .danger),
+            (.online, highThird, unobserved, .critical),
+            (.online, stale, observed, .degraded),
+            (.online, degraded, observed, .degraded),
+            (.online, incomplete, observed, .degraded),
         ]
 
         for current in cases {
             XCTAssertEqual(
                 SentinelVisualState.project(
                     transport: current.transport,
-                    status: current.status
+                    status: current.status,
+                    integration: current.integration
                 ),
                 current.expected
             )
@@ -130,6 +139,18 @@ final class SentinelVisualStateTests: XCTestCase {
         _ object: [String: Any]
     ) throws -> DashboardStatus {
         try SemanticTestFixtures.decodedStatus(object)
+    }
+
+    private func integration(
+        codexState: String = "installed_unverified",
+        codexActivity: String = "not_observed"
+    ) throws -> ProviderIntegrationStatus {
+        try SemanticTestFixtures.decodedProviderIntegration(
+            SemanticTestFixtures.providerIntegration(
+                codexState: codexState,
+                codexActivity: codexActivity
+            )
+        )
     }
 
 }

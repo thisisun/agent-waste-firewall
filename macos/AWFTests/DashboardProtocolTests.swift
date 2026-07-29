@@ -17,6 +17,10 @@ final class DashboardProtocolTests: XCTestCase {
         XCTAssertEqual(endpoint.dashboardURL.host, "127.0.0.1")
         XCTAssertEqual(endpoint.dashboardURL.path, "/")
         XCTAssertEqual(endpoint.statusURL.path, "/api/status")
+        XCTAssertEqual(
+            endpoint.integrationURL.path,
+            "/api/integrations"
+        )
     }
 
     func testReadyAcceptsTraceAsProtocolValue() throws {
@@ -123,6 +127,50 @@ final class DashboardProtocolTests: XCTestCase {
         XCTAssertEqual(trace.source, .trace)
         XCTAssertEqual(trace.state, .stopped)
         XCTAssertEqual(trace.traceID, trace.traceAlias)
+    }
+
+    func testProviderIntegrationAcceptsExactClosedContract() throws {
+        let status = try SemanticTestFixtures.decodedProviderIntegration(
+            SemanticTestFixtures.providerIntegration(
+                codexState: "active",
+                codexActivity: "observed"
+            )
+        )
+        XCTAssertEqual(status.providers.count, 2)
+        XCTAssertEqual(status.providers[0].provider, .codex)
+        XCTAssertEqual(status.providers[0].state, .active)
+        XCTAssertEqual(status.providers[0].version?.minor, 146)
+        XCTAssertTrue(status.hasObservedActivity)
+    }
+
+    func testProviderIntegrationRejectsExtraReorderedAndInconsistentData()
+        throws
+    {
+        var extra = SemanticTestFixtures.providerIntegration()
+        extra["rawOutput"] = "must-not-pass"
+
+        var reordered = SemanticTestFixtures.providerIntegration()
+        reordered["providers"] = Array(
+            try XCTUnwrap(
+                reordered["providers"] as? [[String: Any]]
+            ).reversed()
+        )
+
+        var inconsistent = SemanticTestFixtures.providerIntegration(
+            codexState: "active",
+            codexActivity: "not_observed"
+        )
+        var providers = try XCTUnwrap(
+            inconsistent["providers"] as? [[String: Any]]
+        )
+        providers[1]["version"] = ["major": 2, "minor": 1, "patch": 207]
+        inconsistent["providers"] = providers
+
+        for invalid in [extra, reordered, inconsistent] {
+            XCTAssertThrowsError(
+                try SemanticTestFixtures.decodedProviderIntegration(invalid)
+            )
+        }
     }
 
     func testStatusRejectsTopLevelAndNestedExtraKeys() throws {

@@ -20,6 +20,27 @@
 - Add privacy audit, safe export, and repository-free semantic replay across all three modes.
 - Add a token-protected, loopback-only English-default live dashboard with Korean localization
   and a prompt-contract coach.
+- Add a closed, raw-free `ProviderIntegrationStatusV1` reality gate and
+  `integration status [--json]` CLI. `doctor` now separates `engineReady`, `providerInstalled`,
+  and `monitoringActive`, and the dashboard shows provider installation/activity cards without
+  treating an empty healthy spool as active monitoring.
+- Detect provider state without modifying global configuration. Installation, enablement, hook
+  review, and trust remain user-controlled. Current activity requires a new audited event after
+  dashboard startup and expires after five minutes; retained spool and trace events do not count.
+- Add an isolated `npm run acceptance:codex` gate for temporary marketplace add, plugin
+  install/list, direct installed prompt/pre-tool/post-tool hook execution, closed-event production,
+  prefix/suffix raw-canary scanning, and cleanup. It deliberately does not claim user-owned
+  `/hooks` trust or live provider delivery.
+- Restrict provider probe environments to a closed configuration-discovery allowlist and make the
+  acceptance runner delete only a fresh child it owns beneath the validated system temp tree.
+- Run the shipped CLI and dashboard provider probes concurrently, give each provider one shared
+  three-second version/list budget, hard-kill timed-out default subprocesses, thread only the
+  caller's allowlisted discovery environment, and keep timeout or probe errors inside closed
+  `unknown` states. Dashboard shutdown cancels and kills in-flight default probes.
+- Load and cache allowlisted dashboard images asynchronously on first request, return a bounded
+  raw-free `503` when storage cannot materialize one, and keep status/SSE responsive.
+- Package the repository-local `.agents` marketplace descriptor so a published npm artifact can
+  expose the Codex plugin without an external path.
 - Add a compact magnifying-glass sentinel with allowlisted green, yellow, red, and critical-red
   visual states mirrored in the browser title and favicon.
 - Add high-cost release verification classification and earlier repeat warnings.
@@ -55,5 +76,8 @@
   gates.
 - Add the transparent green guardian mark as the native app icon, remove a `MenuBarExtra`
   write-back loop that caused runaway CPU/memory, and launch the worker with a closed environment
-  allowlist. Node discovery now validates major version 18+ with a bounded direct probe. The local
-  native unit/integration target passes 33/33 tests with no skips.
+  allowlist. The native worker can discover the Codex executable bundled with the ChatGPT app
+  without widening its environment. Node discovery validates major version 18+ with a bounded
+  direct probe. The minimized native sentinel decodes the closed provider contract and requires
+  recent observed provider activity before it turns green. The local native unit/integration
+  target passes 36/36 tests with no skips.

@@ -16,7 +16,8 @@ enum SentinelVisualState: String, CaseIterable, Sendable {
 
     static func project(
         transport: MonitorTransportState,
-        status: DashboardStatus?
+        status: DashboardStatus?,
+        integration: ProviderIntegrationStatus?
     ) -> SentinelVisualState {
         guard transport == .online, let status, status.connected else {
             return .offline
@@ -27,18 +28,21 @@ enum SentinelVisualState: String, CaseIterable, Sendable {
         else {
             return .degraded
         }
-        if status.sourceState == .empty {
+        if let warning = status.warning {
+            switch warning.severity {
+            case .low, .medium:
+                return .review
+            case .high:
+                return warning.occurrences >= 3 ? .critical : .danger
+            }
+        }
+        guard
+            status.sourceState != .empty,
+            integration?.hasObservedActivity == true
+        else {
             return .review
         }
-        guard let warning = status.warning else {
-            return .clear
-        }
-        switch warning.severity {
-        case .low, .medium:
-            return .review
-        case .high:
-            return warning.occurrences >= 3 ? .critical : .danger
-        }
+        return .clear
     }
 
     var color: Color {

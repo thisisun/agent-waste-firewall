@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "kind": "provider_integration_status",
+  "providers": [
+    {
+      "provider": "codex",
+      "state": "active",
+      "version": {
+        "major": 0,
+        "minor": 146,
+        "patch": 0
+      },
+      "activity": "observed"
+    },
+    {
+      "provider": "claude",
+      "state": "not_detected",
+      "version": null,
+      "activity": "not_observed"
+    }
+  ]
+}

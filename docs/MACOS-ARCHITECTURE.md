@@ -165,9 +165,10 @@ Define separate data types for separate trust levels:
 `LiveEventV1` reuses the strict trace vocabulary and does not need an active export recording.
 The worker now writes it to a bounded, user-only local spool with hard ceilings of 4,096 events and
 8 MiB plus a 24-hour age trigger enforced on next access; configuration may only lower them. Each
-generation uses a fresh HMAC alias key. The future macOS app will consume only this audited stream.
-An explicit recording still creates a separate trace-scoped HMAC key and uses the stricter export
-lifecycle implemented in `TraceStore`.
+generation uses a fresh HMAC alias key. The macOS developer preview consumes only closed
+dashboard/provider projections derived from this audited stream through its loopback worker; it
+does not read detector state or raw spool records. An explicit recording still creates a separate
+trace-scoped HMAC key and uses the stricter export lifecycle implemented in `TraceStore`.
 
 Do not implement collection as “save the JSON and redact it later.” Construct each event from a
 closed allowlist and reject unknown fields before the first write.
@@ -222,8 +223,8 @@ Visual state is a pure projection of the semantic stream:
 
 | State | Trigger | Sentinel |
 | --- | --- | --- |
-| `clear` | Connected, no active warning | Transparent eye with green accent |
-| `review` | Medium warning or weak evidence | Transparent eye with yellow accent |
+| `clear` | Connected, no active warning, and fresh audited provider activity | Transparent eye with green accent |
+| `review` | Medium warning, empty/retained stream, expired activity, or weak provider evidence | Transparent eye with yellow accent |
 | `danger` | High-confidence or blockable incident | Transparent eye with red accent |
 | `critical` | Repeated high-severity incidents without progress | Red eye and red translucent panel background |
 | `offline` | No recent validated event or worker health failure | Neutral gray; never imply safety |
@@ -350,7 +351,8 @@ milestone.
 1. ~~Define and validate the documented `LiveEventV1` schema.~~ Completed.
 2. ~~Add a bounded semantic spool and tests while retaining the explicit trace path.~~ Completed.
 3. ~~Connect a generation-aware live-spool cursor to the shared dashboard projection.~~ Completed.
-4. Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.
+4. ~~Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.~~
+   Developer preview implemented; signed distribution and native UI acceptance remain pending.
 5. Add explicit install/repair/uninstall flows for each provider.
 6. Bundle and sign the worker runtime; add protocol compatibility checks.
 7. Add optional usage adapters only after the decision path is stable.

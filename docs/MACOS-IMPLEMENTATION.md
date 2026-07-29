@@ -68,7 +68,9 @@ An unsigned, source-buildable macOS 13+ shell now exists under `macos/`:
   window does not opt the app out of menu-bar operation.
 - A borderless, non-activating, transparent `NSPanel` stays independent of the main window. It
   projects clear, review, danger, critical, degraded, and offline states. Only critical state adds
-  the translucent red panel background.
+  the translucent red panel background. It decodes the closed provider integration response and
+  requires fresh `observed` activity before showing green; retained or expired activity stays
+  yellow unless a real warning takes precedence.
 - The app supervisor locates an installed Node.js 18+ executable with a bounded direct
   `--version` probe, launches the bundled `bin/agent-waste-firewall.mjs dashboard --port 0 --json`,
   accepts one bounded readiness line, and terminates only its presentation subprocess when the app
@@ -92,10 +94,10 @@ The native app does not receive a provider hook envelope, detector state, prompt
 input/output, transcript, source file, or raw identifier. Its native protocol surface is limited to:
 
 - one exact `DashboardReadyV1` object capped at 1,024 bytes;
-- one exact `DashboardStatusV1` object capped at 16 KiB; and
+- exact `DashboardStatusV1` and `ProviderIntegrationStatusV1` objects capped at 16 KiB each; and
 - the already-audited loopback document and SSE consumed inside the restricted `WKWebView`.
 
-Both public contracts have checked-in JSON Schemas, dependency-free Node validators, Swift closed
+All public contracts have checked-in JSON Schemas, dependency-free Node validators, Swift closed
 decoders, and synthetic conformance fixtures. Redirects, oversized responses, unknown keys,
 non-loopback hosts, changed ports/tokens, and status regressions within one stream are rejected.
 WebKit uses `WKWebsiteDataStore.nonPersistent()`.
@@ -107,18 +109,18 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The current portable rerun passed `npm run check` across 49 JavaScript and 25 JSON files and
-`npm test` with 154/154 tests. The same-machine performance rerun measured:
+The current portable rerun passed `npm run check` across 53 JavaScript and 32 JSON files and
+`npm test` with 203/203 tests. The same-machine performance rerun measured:
 
 | Path | Result |
 | --- | ---: |
-| Real hook subprocess | p95 71.916 ms; p99 76.311 ms |
-| Live dashboard full-generation cold audit | 206.220 ms |
-| Live dashboard warm status | p95 1.566 ms |
-| Concurrent live publication | p95 10.604 ms |
-| Full-generation rotation | 15.022 ms |
-| SSE reset visibility | 461.907 ms; 0 drops |
-| 15,000-event trace cursor | 55.716 ms cold startup; 1.569 ms status p95; 1.164 ms append visibility |
+| Real hook subprocess | p95 94.641 ms; p99 103.181 ms |
+| Live dashboard full-generation cold audit | 233.230 ms |
+| Live dashboard warm status | p95 2.204 ms |
+| Concurrent live publication | p95 18.927 ms |
+| Full-generation rotation | 15.779 ms |
+| SSE reset visibility | 451.285 ms; 0 drops |
+| 15,000-event trace cursor | 107.937 ms cold startup; 2.368 ms status p95; 1.639 ms append visibility |
 
 SSE visibility includes the bounded polling interval and is not hook decision latency.
 
@@ -141,13 +143,14 @@ xcodebuild \
 
 This command verifies source compilation, the guardian-mark app icon, Info.plist processing,
 localization, and folder-resource assembly. It does not create a signed release. The local
-`AWFTests` target passed 33/33 tests with no skips, including Node 18+ probe boundaries, a real
-bundled-worker launch, closed-status fetch, child cancellation and forced reap, exact protocol
-decoding, navigation rejection, and the sentinel state table. A direct temporary-data launch
+`AWFTests` target passed 36/36 tests with no skips, including Node 18+ probe boundaries, a real
+bundled-worker launch, closed status/provider fetches, child cancellation and forced reap, exact
+protocol decoding, navigation rejection, and the fresh-provider sentinel state table. A direct
+temporary-data launch
 remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
 and removed its Node child on normal quit.
 
-The GitHub unsigned build/unit job passes. The UI target compiles, but the local Xcode 26.6 UI
-runner did not materialize its worker or launch the target app during a 74-second attempt, so that
-run was interrupted and is not counted as a UI pass or product failure. No signed clean-machine
-launch matrix has run.
+The GitHub unsigned build/unit job passed on the prior PR head and is rechecked after current
+changes are pushed. The UI target compiles, but the local Xcode 26.6 UI runner did not materialize
+its worker or launch the target app during a 74-second attempt, so that run was interrupted and is
+not counted as a UI pass or product failure. No signed clean-machine launch matrix has run.

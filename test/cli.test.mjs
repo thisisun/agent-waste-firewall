@@ -6,6 +6,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import {
+  integrationStatus,
+  integrationStatusAsync,
+  summarizeProviderMonitoring,
+} from "../src/cli.mjs";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("prints the package version", () => {
@@ -38,6 +44,15 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
   assert.equal(report.ok, true);
+  assert.equal(report.engineReady, true);
+  assert.equal(typeof report.providerInstalled, "boolean");
+  assert.equal(typeof report.monitoringActive, "boolean");
+  assert.equal(report.monitoringActive, report.monitoring === "active");
+  assert.match(report.monitoring, /^(?:active|attention|inactive|unknown)$/u);
+  assert.deepEqual(
+    report.providerIntegration.providers.map((provider) => provider.provider),
+    ["codex", "claude"],
+  );
   assert.ok(
     report.checks.some(
       (check) =>
@@ -50,6 +65,118 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
         check.check === "bounded live spool is ready" && check.ok === true,
     ),
   );
+});
+
+test("provider monitoring summary separates installation from observed activity", () => {
+  const installed = summarizeProviderMonitoring({
+    providers: [
+      { state: "installed_unverified" },
+      { state: "not_detected" },
+    ],
+  });
+  assert.deepEqual(installed, {
+    providerInstalled: true,
+    monitoringActive: false,
+    monitoring: "attention",
+  });
+
+  const active = summarizeProviderMonitoring({
+    providers: [
+      { state: "active" },
+      { state: "not_detected" },
+    ],
+  });
+  assert.deepEqual(active, {
+    providerInstalled: true,
+    monitoringActive: true,
+    monitoring: "active",
+  });
+});
+
+test("integration status threads only the caller environment into provider probes", () => {
+  const metadataValues = [];
+  const status = integrationStatus(
+    {
+      PATH: "/isolated/bin",
+      HOME: "/isolated/home",
+      CODEX_HOME: "/isolated/codex",
+      UNRELATED_SECRET: "MUST_NOT_REACH_PROVIDER",
+    },
+    (_command, _args, metadata) => {
+      metadataValues.push(metadata);
+      return { outcome: "not_found" };
+    },
+  );
+
+  assert.deepEqual(
+    status.providers.map((provider) => provider.state),
+    ["not_detected", "not_detected"],
+  );
+  assert.equal(metadataValues.length, 2);
+  for (const metadata of metadataValues) {
+    assert.deepEqual(metadata.env, {
+      PATH: "/isolated/bin",
+      HOME: "/isolated/home",
+      CODEX_HOME: "/isolated/codex",
+    });
+  }
+});
+
+test("CLI integration status uses concurrent bounded provider probes", async () => {
+  let inFlight = 0;
+  let maximumInFlight = 0;
+  const startedAt = Date.now();
+  const status = await integrationStatusAsync(
+    { PATH: "/isolated/bin" },
+    async () => {
+      inFlight += 1;
+      maximumInFlight = Math.max(maximumInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
+      return new Promise(() => {});
+    },
+    { probeTimeoutMs: 30 },
+  );
+
+  assert.equal(maximumInFlight, 2);
+  assert.ok(Date.now() - startedAt < 250);
+  assert.deepEqual(
+    status.providers.map((provider) => provider.state),
+    ["unknown", "unknown"],
+  );
+});
+
+test("integration status emits only the closed provider contract", (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-integration-status-"),
+  );
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "integration",
+      "status",
+      "--json",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.deepEqual(Object.keys(report), ["v", "kind", "providers"]);
+  assert.equal(report.kind, "provider_integration_status");
+  assert.deepEqual(
+    report.providers.map((provider) => provider.provider),
+    ["codex", "claude"],
+  );
+  assert.equal(result.stdout.includes(os.homedir()), false);
+  assert.equal(result.stdout.includes(root), false);
 });
 
 test("dashboard emits one closed JSON readiness record", async (context) => {

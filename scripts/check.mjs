@@ -37,6 +37,7 @@ for (const file of files) {
 
 const jsonFiles = [
   "package.json",
+  ".agents/plugins/marketplace.json",
   ".codex-plugin/plugin.json",
   ".claude-plugin/plugin.json",
   "hooks/hooks.json",

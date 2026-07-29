@@ -286,13 +286,56 @@ final class DashboardSupervisor {
     nonisolated static func workerEnvironment(
         from environment: [String: String]
     ) -> [String: String] {
-        let exactKeys = ["HOME", "TMPDIR", "LANG", "LC_ALL", "TZ"]
+        let bundledCodexDirectory =
+            "/Applications/ChatGPT.app/Contents/Resources"
+        let exactKeys = [
+            "HOME",
+            "TMPDIR",
+            "LANG",
+            "LC_ALL",
+            "TZ",
+            "CODEX_HOME",
+            "CLAUDE_CONFIG_DIR",
+            "XDG_CONFIG_HOME",
+        ]
         var result = Dictionary(
             uniqueKeysWithValues: exactKeys.compactMap { key in
                 environment[key].map { (key, $0) }
             }
         )
-        result["PATH"] = "/usr/bin:/bin"
+        var providerDirectories = [
+            bundledCodexDirectory,
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ]
+        if let home = environment["HOME"],
+           home.hasPrefix("/"),
+           !home.contains(":") {
+            let homeURL = URL(
+                fileURLWithPath: home,
+                isDirectory: true
+            ).standardizedFileURL
+            providerDirectories.append(
+                homeURL.appendingPathComponent(
+                    ".local/bin",
+                    isDirectory: true
+                ).path
+            )
+            providerDirectories.append(
+                homeURL.appendingPathComponent(
+                    ".npm-global/bin",
+                    isDirectory: true
+                ).path
+            )
+            providerDirectories.append(
+                homeURL.appendingPathComponent(
+                    ".volta/bin",
+                    isDirectory: true
+                ).path
+            )
+        }
+        providerDirectories.append(contentsOf: ["/usr/bin", "/bin"])
+        result["PATH"] = providerDirectories.joined(separator: ":")
         for (key, value) in environment
         where key.hasPrefix("AGENT_WASTE_FIREWALL_") {
             result[key] = value

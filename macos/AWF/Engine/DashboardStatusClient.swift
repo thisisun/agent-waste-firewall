@@ -28,8 +28,8 @@ final class DashboardStatusClient: Sendable {
     init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 2
-        configuration.timeoutIntervalForResource = 3
+        configuration.timeoutIntervalForRequest = 4
+        configuration.timeoutIntervalForResource = 5
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
         configuration.connectionProxyDictionary = [:]
@@ -38,9 +38,31 @@ final class DashboardStatusClient: Sendable {
     }
 
     func fetch(_ endpoint: DashboardEndpoint) async throws -> DashboardStatus {
-        var request = URLRequest(url: endpoint.statusURL)
+        let data = try await fetchData(
+            endpoint.statusURL,
+            timeoutInterval: 2
+        )
+        return try DashboardStatus(data: data)
+    }
+
+    func fetchIntegration(
+        _ endpoint: DashboardEndpoint
+    ) async throws -> ProviderIntegrationStatus {
+        let data = try await fetchData(
+            endpoint.integrationURL,
+            timeoutInterval: 4
+        )
+        return try ProviderIntegrationStatus(data: data)
+    }
+
+    private func fetchData(
+        _ url: URL,
+        timeoutInterval: TimeInterval
+    ) async throws -> Data {
+        var request = URLRequest(url: url)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        request.timeoutInterval = timeoutInterval
         let (bytes, response) = try await session.bytes(
             for: request,
             delegate: redirectDelegate
@@ -48,7 +70,7 @@ final class DashboardStatusClient: Sendable {
         guard
             let response = response as? HTTPURLResponse,
             response.statusCode == 200,
-            response.url == endpoint.statusURL,
+            response.url == url,
             response.mimeType == "application/json",
             response.expectedContentLength <=
                 Int64(Self.maximumResponseBytes)
@@ -72,7 +94,7 @@ final class DashboardStatusClient: Sendable {
             }
             data.append(byte)
         }
-        return try DashboardStatus(data: data)
+        return data
     }
 
     deinit {

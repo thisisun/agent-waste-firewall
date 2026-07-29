@@ -15,6 +15,12 @@ The current Node.js product path works as a research alpha:
   spool without requiring an explicit trace.
 - The default loopback dashboard consumes that spool without `record start`; an explicit trace ID
   selects the historical audited-trace view.
+- A read-only provider reality gate now distinguishes AWF engine readiness, provider installation
+  state, and audited hook activity. Its closed result is available from
+  `integration status [--json]` and the dashboard provider cards.
+- The isolated `npm run acceptance:codex` gate passed marketplace add, plugin install/list, direct
+  execution of three installed hook phases, closed semantic events, prefix-fragment raw-canary
+  exclusion, and temporary-tree cleanup checks on this Mac.
 - Multi-session semantic recording, audit, export, and replay work independently of the live UI.
 - The hook hot path is below the proposed 100 ms p95 target on this machine.
 - Warm live-dashboard status remains below the proposed 100 ms p95 target with its complete
@@ -24,17 +30,18 @@ The current Node.js product path works as a research alpha:
 - A macOS 13+ SwiftUI/AppKit developer-preview target now builds from source without signing. It
   contains a menu bar, restricted local `WKWebView`, transparent floating `NSPanel`, app-owned
   dashboard supervisor, and closed Swift readiness/status decoders.
-- The native `AWFTests` target passes 33/33 with no skips, including an actual launch of the worker
+- The native `AWFTests` target passes 36/36 with no skips, including an actual launch of the worker
   copied into the built app and a validated loopback status fetch.
 
 It is not yet a distributable macOS application:
 
 - the source build has no Developer ID signature, notarization ticket, DMG, bundled Node runtime,
   update path, start-at-login service, or one-click integration manager;
-- the native GitHub build/unit job passes, but the UI target is excluded from that job and the
-  local UI runner did not materialize its worker;
+- the configured native GitHub build/unit job passed on the prior PR head, but the UI target is
+  excluded from that job and the local UI runner did not materialize its worker;
 - exact token usage is not measured;
-- actual Codex and Claude installations have not yet passed the provider acceptance matrix.
+- actual user-owned Codex `/hooks` trust/live delivery and Claude installation have not yet passed
+  the provider acceptance matrix.
 
 ## Environment
 
@@ -46,26 +53,69 @@ It is not yet a distributable macOS application:
 - npm 10.9.8
 - real hook entry point: `node scripts/hook.mjs`
 
-Codex CLI was present (`0.146.0-alpha.3.1`) but this plugin was not installed in its configured
-marketplaces. Claude Code was not installed. Provider integration results below therefore test the
-real AWF hook executable with synthetic official-shape events, not an installed-provider
-smoke test.
+Codex CLI was present (`0.146.0-alpha.3.1`). The new closed status probe normalizes its public
+version to `0.146.0` and reports `needs_install`. The shell-inherited CLI probe reports Claude Code
+as `not_detected` because that shell `PATH` excludes its user-local install directory. The native
+supervisor's closed search path finds Claude Code `2.1.207` and reports `needs_install`. Provider
+warning flows below use the real AWF hook executable with synthetic official-shape events. The
+separate isolated acceptance subsection records the installed-plugin/direct-hook smoke test. No
+global provider configuration or trust decision was changed during either check.
+
+The isolated Codex acceptance runner then used private temporary `HOME` and `CODEX_HOME`
+directories. It passed temporary marketplace add, plugin install/list, installed-hook discovery
+and direct execution, closed Codex `LiveEventV1` production, bounded scanning for raw
+prompt/session/turn/workspace canaries, and complete temporary-tree cleanup. Because it directly
+executes the installed hook and does not invoke user-owned `/hooks`, this is package/install-path
+evidence rather than provider trust or live-delivery evidence.
 
 ## Current portable verification
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 49 JavaScript files and 25 JSON files |
-| `npm test` | Pass: 154/154 |
-| Unsigned `xcodebuild ... build` | Pass locally: Debug app, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
-| Native `AWFTests` | Pass locally: 33/33, 0 failures, 0 skips |
+| `npm run check` | Pass: 53 JavaScript files and 32 JSON files |
+| `npm test` | Pass: 203/203 |
+| `npm run acceptance:codex` | Pass: isolated marketplace add/install/list, three installed hooks, closed event, prefix-fragment privacy scan, and cleanup |
+| Unsigned `xcodebuild ... build-for-testing` | Pass locally: Debug app and test bundles, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
+| Native `AWFTests` | Pass locally: 36/36, 0 failures, 0 skips |
 | Native UI runner | Inconclusive: worker did not materialize or launch AWF in 74 seconds; interrupted |
+
+The repository lives under an iCloud-managed `Documents` directory on this validation Mac. One
+unchanged image was present only as a `dataless` placeholder, so the first in-place Xcode resource
+copy waited for materialization. Repeating the build from a temporary local staging tree populated
+with the exact checked-in Git blob completed, and `test-without-building` then passed 36/36. This
+was treated as a local storage/materialization condition rather than a source-build failure.
 
 An earlier live-consumer snapshot recorded 95.24% line, 83.24% branch, and 94.82% function
 coverage, a clean dependency audit, and a passing package dry run. Those measurements were not
 rerun for this native-preview snapshot and are not presented as current native release gates.
 
 ## Functional end-to-end results
+
+### Isolated Codex acceptance
+
+`npm run acceptance:codex` staged only the reviewed Codex plugin subset into a private temporary
+tree and used an isolated Codex home. The real Codex plugin CLI added the temporary marketplace,
+installed the plugin, and listed that installation. The runner found the installed hook entry
+point and directly executed synthetic `UserPromptSubmit`, `PreToolUse`, and `PostToolUse` inputs.
+
+The installed hooks produced closed Codex `LiveEventV1` records including a `prompt_contract`
+incident. The bounded acceptance scan found none of the injected raw prompt, session, turn,
+workspace, tool-use ID, tool-input, or tool-output canaries, and the temporary tree was removed.
+Each raw value began and ended with a short per-field nonce marker. A regression persisted only the
+first 20 bytes of prompt/input/output and correctly failed the privacy gate, while a productive
+generic non-nonce counterexample passed. The runner did not call `/hooks`, change the user's Codex
+configuration, approve hook trust, or observe provider-driven delivery, so those claims remain
+pending.
+
+The runner validated that its parent was inside the system temp tree, created a fresh child itself,
+and removed only that owned child. Counterexample tests preserved a caller-owned temp parent and
+rejected the repository as a temp parent without changing it. Read-only provider probes also
+received a closed environment allowlist; synthetic API-key and unrelated-secret variables were
+absent from both synchronous and asynchronous probe runners. The shipped CLI/dashboard paths run
+providers concurrently, and each provider's version/list steps share one three-second result
+budget, including the case where a custom async runner never settles. Production default children
+are hard-killed on timeout or dashboard shutdown; custom runners cannot be forcibly cancelled by
+AWF.
 
 ### Prompt coach
 
@@ -110,6 +160,13 @@ The same eight-event synthetic fixture produced:
 The real dashboard CLI was started on a random loopback port and random access token.
 
 - authorized document, status, and SSE requests succeeded;
+- the provider endpoint and cards used a closed `ProviderIntegrationStatusV1` projection and
+  separated provider installation from audited event activity;
+- an engine-ready dashboard with no observed provider event remained in a waiting/attention state
+  instead of presenting false-green active monitoring;
+- only a new audited event arriving after dashboard startup could advance the corresponding
+  activity to `observed`; retained pre-start spool and historical trace events could not;
+- recent activity expired after five minutes without another new provider event;
 - the no-argument dashboard started with an empty-but-connected live spool and required no
   recording;
 - real hook publications appeared through status and SSE as prompt, tool, and incident events with
@@ -128,6 +185,11 @@ The real dashboard CLI was started on a random loopback port and random access t
 - signal state changed to `warn` and the tab title showed review state;
 - compact sentinel mode opened and expanded again;
 - light/dark mode and English/Korean switching worked;
+- at a 1,280 px viewport, the trend and signal panels stayed at 684×220 and 486×220 instead of
+  stretching down the page; automated language scans found no Korean UI copy in English mode and
+  no English UI copy in Korean mode;
+- an allowlisted image that never materialized returned the fixed `asset_unavailable` response
+  after its bounded wait while the status endpoint remained responsive;
 - browser output did not provide a truly transparent always-on desktop window. The new native
   source preview implements that presentation separately with an `NSPanel`.
 
@@ -143,25 +205,32 @@ unsigned Debug build:
 - linked the SwiftUI/AppKit menu bar and sentinel with the WebKit dashboard window; and
 - required no third-party Swift package.
 
-The native protocol boundary accepts a maximum 1,024-byte exact `DashboardReadyV1` line and a
-maximum 16 KiB exact `DashboardStatusV1` response. The status client refuses redirects and the
-non-persistent `WKWebView` refuses navigation away from the exact tokenized loopback URL. Swift
-does not receive raw prompts, hook objects, commands, outputs, transcripts, source content, or
-detector state.
+The native protocol boundary accepts a maximum 1,024-byte exact `DashboardReadyV1` line and
+maximum 16 KiB exact `DashboardStatusV1` and `ProviderIntegrationStatusV1` responses. The status
+client refuses redirects and the non-persistent `WKWebView` refuses navigation away from the exact
+tokenized loopback URL. Swift does not receive raw prompts, hook objects, commands, outputs,
+transcripts, source content, or detector state.
 
-The local `AWFTests` target passed all 33 tests without skips. The runtime tests also cover the
+The local `AWFTests` target passed all 36 tests without skips. The runtime tests also cover the
 minimum/newer Node boundary, old and malformed versions, override priority, and a bounded
 unresponsive probe. The end-to-end native test resolved the worker from the built app resources,
 launched it with a closed environment allowlist, parsed the bounded readiness line, fetched the
-exact empty status object, and stopped the child. A direct temporary-data launch also showed 0.0%
-CPU at a ten-second snapshot with about 96 MB RSS while its Node child used about 55 MB; normal
-application quit removed both processes.
+exact empty status and provider integration objects, and stopped the child. The minimized sentinel
+stays yellow for retained or expired activity and turns green only when the provider contract
+contains fresh `observed` evidence; high warnings still take precedence as red/critical. A direct
+temporary-data launch also showed 0.0% CPU at a ten-second snapshot with about 96 MB RSS while its
+Node child used about 55 MB; normal application quit removed both processes.
+
+The native worker environment forwards only audited locale/configuration keys and builds a closed
+executable search path for the ChatGPT-bundled Codex CLI, Homebrew, `/usr/local`, and safe
+user-local install directories. A `HOME` containing a path separator cannot inject another search
+entry.
 
 This is still not native release acceptance. The UI target compiled, but Xcode remained at
 “waiting for workers to materialize” for 74 seconds and never launched AWF, so the attempt was
-interrupted rather than reported as passed or failed. The GitHub build/unit job passed; interactive
-UI automation on a working host, signed launch, notarization, and clean-machine testing remain
-pending.
+interrupted rather than reported as passed or failed. The configured GitHub build/unit job passed
+on the prior PR head; current-head CI is rechecked after push. Interactive UI automation on a
+working host, signed launch, notarization, and clean-machine testing remain pending.
 
 ## Privacy checks
 
@@ -211,31 +280,32 @@ The active recording added about 1.2 ms at p95 in that controlled comparison. Tr
 materially slow the hook because append does not reread the complete event file.
 
 The CLI lazily imports the dashboard so every hook process does not parse the dashboard bundle or
-load its images. The latest M1 `npm run benchmark:hook` rerun measured the real subprocess with
-both the always-on spool and an active explicit semantic trace:
+load its images. Dashboard startup also no longer waits for image reads: each allowlisted image is
+loaded and cached only on its first HTTP request. The latest M1 `npm run benchmark:hook` rerun
+measured the real subprocess with both the always-on spool and an active explicit semantic trace:
 
 | Condition | p95 | p99 |
 | --- | ---: | ---: |
-| Always-on spool + active semantic recording | 71.916 ms | 76.311 ms |
+| Always-on spool + active semantic recording | 94.641 ms | 103.181 ms |
 
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
 
 | Condition | p50 | p95 | p99 | Max / rotation |
 | --- | ---: | ---: | ---: | ---: |
-| Semantic publish before rotation | 0.77 ms | 1.02 ms | 1.17 ms | 9.86 ms |
-| Replace a full generation | — | — | — | 8.99 ms |
+| Semantic publish before rotation | 1.479 ms | 3.006 ms | 7.853 ms | 25.569 ms |
+| Replace a full generation | — | — | — | 19.048 ms |
 
 The steady-state gate is 100 ms p95 and the full-generation rotation gate is 1,000 ms. Both passed
 on this machine.
 
 The latest isolated `npm run benchmark:live-dashboard` rerun saturated the full 4,096-event
 generation, started the real loopback server, read status repeatedly, forced rotation, observed the
-SSE reset, and published concurrently. The initial full-generation audit took 206.220 ms:
+SSE reset, and published concurrently. The initial full-generation audit took 233.230 ms:
 
 | Warm status p95 | Concurrent publish p95 | Rotation | SSE reset visible | Drops |
 | ---: | ---: | ---: | ---: | ---: |
-| 1.566 ms | 10.604 ms | 15.022 ms | 461.907 ms | 0 |
+| 2.204 ms | 18.927 ms | 15.779 ms | 451.285 ms | 0 |
 
 The SSE visibility number includes the dashboard's bounded polling interval; it is not hook-path
 latency. Warm status, concurrent publication, and rotation passed their checked-in limits.
@@ -308,7 +378,7 @@ reproduction. The latest same-machine 15,000-event rerun produced:
 
 | Events before append | Cold startup | Warm `/api/status` p95 | One-event append visible |
 | ---: | ---: | ---: | ---: |
-| 15,000 | 55.716 ms | 1.569 ms | 1.164 ms |
+| 15,000 | 107.937 ms | 2.368 ms | 1.639 ms |
 
 The cold audit intentionally remains proportional to trace size; steady-state polling no longer
 rereads or reparses the whole file. This table remains the historical explicit-trace baseline.
@@ -319,11 +389,16 @@ longer prevent shutdown, trace rotation resets existing streams, and an invalid 
 changes both the API and compact sentinel to an allowlisted red `degraded` state without exposing
 the rejected bytes.
 
-### P1 — No installed-provider acceptance test
+### P1 — No user-owned provider trust/live-delivery acceptance
 
-The local Codex plugin list did not contain this project, and Claude Code was unavailable. A public
-claim of Codex/Claude compatibility still requires install, trust, live warning, upgrade, and
-uninstall smoke tests in the actual provider applications.
+The read-only reality gate resolves the earlier false-green visibility gap, and the isolated Codex
+runner validates the package/install/direct-hook path. Neither result resolves user-owned provider
+acceptance. The shell-path snapshot remains Codex `needs_install` and Claude Code `not_detected`;
+the native closed search path reports both detected CLIs as `needs_install`. Installation also
+does not imply that a user has reviewed and trusted the hooks or that provider delivery works. A
+public claim of installed Codex/Claude compatibility still requires explicit user-owned `/hooks`
+review/trust, live warning, upgrade, repair, and uninstall smoke tests in the actual provider
+applications.
 
 ### Partially resolved P1 — No distributable native macOS product
 
@@ -383,13 +458,17 @@ audit, and a one-second retention-only maintenance loop. It never takes the publ
 3. ~~Implement `LiveEventV1`, a bounded always-on spool independent of explicit recording.~~
    Completed.
 4. ~~Connect the current dashboard projection to a generation-aware live-spool cursor.~~ Completed.
-5. Observe the updated Node and unsigned native build/unit jobs on GitHub CI.
-6. Add real Codex and Claude install/trust smoke tests.
-7. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
+5. ~~Add a closed provider reality gate that separates engine readiness, installation, and audited
+   activity.~~ Completed.
+6. ~~Add an isolated Codex marketplace/install/direct-hook/privacy acceptance runner.~~ Completed
+   and passed on this Mac.
+7. Observe the updated Node and unsigned native build/unit jobs on GitHub CI.
+8. Add user-owned Codex `/hooks` trust/live-delivery and Claude install/trust smoke tests.
+9. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
    implemented; native UI acceptance remains pending.
-8. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
-9. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
-10. Add optional actual-usage adapters and run the observe-only evaluation corpus.
+10. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
+11. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
+12. Add optional actual-usage adapters and run the observe-only evaluation corpus.
 
 Current release classification: **working Node research alpha plus unsigned native developer
 preview; no-go as an installable macOS beta**.

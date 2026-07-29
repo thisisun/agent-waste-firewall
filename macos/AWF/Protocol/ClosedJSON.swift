@@ -4,6 +4,7 @@ enum PresentationProtocolError: Error, Equatable {
     case responseTooLarge
     case invalidReady
     case invalidStatus
+    case invalidIntegration
 }
 
 enum ClosedJSON {

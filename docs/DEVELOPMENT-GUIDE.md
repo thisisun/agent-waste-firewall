@@ -38,10 +38,24 @@ npm run check
 npm test
 npm run test:coverage
 node bin/agent-waste-firewall.mjs doctor
+node bin/agent-waste-firewall.mjs integration status --json
 node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
 ```
 
 Do not introduce Swift or runtime packaging failures into the existing cross-platform Node checks.
+
+Treat engine readiness and provider activity as separate facts. `doctor` may return
+`engineReady: true` because the local files, runtime, and spool are healthy while
+`providerInstalled` and `monitoringActive` describe two narrower facts. The one-shot CLI does not
+promote retained events to current activity, so an installed plugin can coexist with
+`monitoringActive: false` and `monitoring: attention`. `integration status --json` returns the
+exact closed `ProviderIntegrationStatusV1` shape: two allowlisted provider records, optional
+numeric versions, and closed state/activity enums. It must never include executable paths,
+provider command output, configuration text, or probe errors. Synchronous and asynchronous probes
+receive only the explicit caller environment after allowlist projection. The shipped CLI and
+dashboard paths run Codex and Claude concurrently; each provider's version and plugin-list steps
+share one three-second result budget. Timeout and thrown-error detail collapse to the same closed
+`unknown` state. Dashboard shutdown aborts and kills in-flight default provider children.
 
 ## Milestone plan
 
@@ -85,9 +99,12 @@ Goal: make the current live monitor feel like a real Mac app without changing en
 
 Implementation status: an unsigned macOS 13+ developer preview is source-buildable. It implements
 the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboard subprocess, and
-transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The local
-`AWFTests` target passes 33/33 with no skips, including the real bundled worker, and the GitHub
-unsigned build/unit job passes. M1 acceptance is still incomplete because a successfully
+transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The native
+sentinel decodes `ProviderIntegrationStatusV1` and remains yellow until fresh audited provider
+activity is observed; retained or expired activity cannot make it green. The local `AWFTests`
+target passes 36/36 with no skips, including the real bundled worker. The configured GitHub
+unsigned build/unit job passed on the prior PR head and must be rechecked after current changes
+are pushed. M1 acceptance is still incomplete because a successfully
 materialized UI run, signed launch, and clean-machine tests remain pending.
 
 Deliverables:
@@ -112,6 +129,18 @@ Acceptance:
 
 Goal: make failures understandable and recoverable.
 
+Implementation status: the read-only provider reality gate is implemented. It probes Codex and
+Claude Code with bounded, non-shell subprocesses, projects the result into
+`ProviderIntegrationStatusV1`, and exposes the same closed meaning through `doctor`,
+`integration status [--json]`, and loopback dashboard provider cards. Dashboard activity is
+derived only from audited `LiveEventV1` records that arrive after the dashboard server starts.
+Evidence expires after five minutes. Retained pre-start spool events and historical trace events
+must not impersonate current activity. Provider installation without fresh observed delivery
+therefore remains `installed_unverified`, not `active`. Provider subprocesses inherit only a
+closed discovery environment. The shipped CLI/dashboard probes run providers concurrently and
+give each provider one shared three-second version/list budget. Restart policy, notifications,
+start-at-login, and a complete diagnostics bundle remain pending.
+
 Deliverables:
 
 - worker/protocol version handshake;
@@ -132,6 +161,35 @@ Acceptance:
 ### M3 — Integration manager
 
 Goal: make installation safe and reversible for non-technical users.
+
+Implementation status: read-only detection and an isolated Codex acceptance runner are available,
+but user-owned installation management and live-provider acceptance are not complete. On the
+current validation Mac, the shell-inherited CLI probe detects Codex `0.146.0` as `needs_install`
+and reports Claude Code as `not_detected` on that shell `PATH`. The native supervisor's closed
+search path also detects user-local Claude Code `2.1.207` as `needs_install`. On that same Mac,
+`npm run acceptance:codex` passed isolated marketplace add, plugin install/list, direct execution
+of installed prompt/pre-tool/post-tool hooks, closed-event production, prefix/suffix raw-canary
+exclusion, and temporary-tree cleanup. A productive non-nonce counterexample is allowed while a
+fixture persisting only the first 20 bytes of raw prompt/input/output fails the gate. The runner
+uses private temporary `HOME` and `CODEX_HOME` values and does not modify global provider
+configuration.
+
+The isolated gate deliberately does not invoke `/hooks` or approve provider trust. Installation,
+enablement, hook review, and trust are user-controlled actions, and a successful install must not
+be reported as active monitoring until fresh audited delivery is observed in the live dashboard.
+Provider probes receive a closed environment allowlist rather than the whole parent environment.
+The acceptance runner validates a system-temp parent, creates a fresh child itself, and recursively
+removes only that owned child.
+
+Run the acceptance gate on a Mac with the Codex plugin CLI:
+
+```bash
+npm run acceptance:codex
+```
+
+A pass establishes only that the isolated package/install/direct-hook path and privacy cleanup
+worked on that machine. Actual user-owned `/hooks` review/trust, provider-driven live delivery,
+upgrade, repair, rollback, and uninstall remain separate acceptance gates.
 
 Deliverables for each provider:
 
@@ -555,6 +613,9 @@ The beta is done when a non-technical user can:
 9. reproduce the published evaluation on anonymized semantic fixtures.
 
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
-dashboard projection, and fixture-driven publication tests are implemented. The next implementation
-work is the native read-only shell; it must consume this contract without reading detector state or
-inventing detector meaning.
+dashboard projection, fixture-driven publication tests, and closed provider reality gate are
+implemented. The isolated Codex package/install/direct-hook acceptance gate is also implemented
+and has passed on the validation Mac. The next integration work is a reversible
+install/repair/uninstall manager plus actual user-owned Codex and Claude Code `/hooks` trust and
+live-delivery acceptance. It must preserve the provider's explicit trust decision and must not
+infer successful monitoring from installation or retained historical events.

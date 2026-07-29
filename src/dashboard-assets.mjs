@@ -366,6 +366,30 @@ Stop when: report and stop after the same failure repeats twice</pre>
                   Record signals without intervening in the agent's work.
                 </p>
               </div>
+              <section class="provider-panel" aria-labelledby="provider-title">
+                <div class="provider-heading">
+                  <div>
+                    <span class="eyebrow" data-i18n="providerEyebrow">PROVIDER CONNECTIONS</span>
+                    <h2 id="provider-title" data-i18n="providerTitle">What AWF can currently observe</h2>
+                  </div>
+                  <span id="provider-count" class="provider-count">0 / 2</span>
+                </div>
+                <div class="provider-grid">
+                  <article class="provider-card" data-provider-card="codex" data-provider-state="unknown">
+                    <span data-i18n="providerCodex">Codex</span>
+                    <strong id="provider-codex-state">Checking</strong>
+                    <small id="provider-codex-version"></small>
+                  </article>
+                  <article class="provider-card" data-provider-card="claude" data-provider-state="unknown">
+                    <span data-i18n="providerClaude">Claude Code</span>
+                    <strong id="provider-claude-state">Checking</strong>
+                    <small id="provider-claude-version"></small>
+                  </article>
+                </div>
+                <p id="provider-note" class="provider-note" data-i18n="providerNote">
+                  Installation never implies hook trust. AWF marks activity only after an audited semantic event is observed.
+                </p>
+              </section>
               <section class="privacy-note" aria-labelledby="privacy-title">
                 <span class="privacy-kicker" data-i18n="privacyKicker">LOCAL / RAW-FREE</span>
                 <div>
@@ -3017,6 +3041,84 @@ button.overview-panel:focus-visible {
   margin-top: 18px;
 }
 
+.provider-panel {
+  margin-top: 18px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.provider-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.provider-heading h2 {
+  margin: 5px 0 0;
+  font: 800 17px/1.2 var(--font-mono);
+  letter-spacing: -0.04em;
+}
+
+.provider-count {
+  color: var(--lime-deep);
+  font: 900 19px/1 var(--font-mono);
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.provider-card {
+  display: grid;
+  gap: 7px;
+  min-height: 104px;
+  padding: 18px 20px;
+  border-right: 1px solid var(--line);
+}
+
+.provider-card:last-child {
+  border-right: 0;
+}
+
+.provider-card > span,
+.provider-card > small {
+  color: var(--muted);
+  font: 800 9px/1.25 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.provider-card > strong {
+  font: 800 14px/1.25 var(--font-mono);
+}
+
+.provider-card[data-provider-state="active"] {
+  box-shadow: inset 4px 0 0 var(--lime);
+}
+
+.provider-card[data-provider-state="needs_install"],
+.provider-card[data-provider-state="needs_enable"],
+.provider-card[data-provider-state="installed_unverified"] {
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
+.provider-card[data-provider-state="not_detected"],
+.provider-card[data-provider-state="unknown"] {
+  box-shadow: inset 4px 0 0 var(--line-strong);
+}
+
+.provider-note {
+  margin: 0;
+  padding: 14px 20px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+
 .detail-dialog .local-only {
   width: fit-content;
 }
@@ -3083,6 +3185,19 @@ footer {
   .metrics,
   .monitor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .provider-card:last-child {
+    border-bottom: 0;
   }
 
   .metric-card,
@@ -3306,6 +3421,11 @@ export const DASHBOARD_JS = String.raw`(() => {
         openCoachDetail: "OPEN PROMPT GUIDE",
         systemEyebrow: "LOCAL MONITOR",
         openSystemDetail: "OPEN SYSTEM DETAIL",
+        providerEyebrow: "PROVIDER CONNECTIONS",
+        providerTitle: "What AWF can currently observe",
+        providerCodex: "Codex",
+        providerClaude: "Claude Code",
+        providerNote: "Installation never implies hook trust. AWF marks activity only after an audited semantic event is observed.",
         detailEyebrow: "EVIDENCE, NOT BLAME",
         closeDetail: "Close detail",
         closeLabel: "CLOSE",
@@ -3407,6 +3527,14 @@ export const DASHBOARD_JS = String.raw`(() => {
           label: "Block",
           description: "Stop high-confidence no-progress repeats before execution."
         })
+      }),
+      providerStates: Object.freeze({
+        active: "Activity observed",
+        installed_unverified: "Installed · awaiting activity",
+        needs_enable: "Installed · enable AWF",
+        needs_install: "Install the AWF plugin",
+        not_detected: "CLI not detected",
+        unknown: "Status unavailable"
       }),
       connections: Object.freeze({
         connecting: "Connecting",
@@ -3554,6 +3682,9 @@ export const DASHBOARD_JS = String.raw`(() => {
         healthDegraded: "Degraded",
         rawFreeSummary: "raw content excluded",
         localLabel: "LOCAL",
+        providerChecking: "Checking",
+        providerObservedSuffix: " / 2 providers observed",
+        providerVersionPrefix: "Version ",
         copy: "Copy",
         copied: "Copied",
         copySuccess: "Request structure copied.",
@@ -3595,6 +3726,11 @@ export const DASHBOARD_JS = String.raw`(() => {
         openCoachDetail: "요청 가이드 열기",
         systemEyebrow: "로컬 모니터",
         openSystemDetail: "시스템 세부 열기",
+        providerEyebrow: "에이전트 연결",
+        providerTitle: "현재 AWF가 관찰할 수 있는 대상",
+        providerCodex: "Codex",
+        providerClaude: "Claude Code",
+        providerNote: "설치만으로 훅 신뢰를 가정하지 않습니다. 검증된 의미 이벤트가 들어온 뒤에만 활동 관찰로 표시합니다.",
         detailEyebrow: "비난이 아닌 근거",
         closeDetail: "세부 화면 닫기",
         closeLabel: "닫기",
@@ -3696,6 +3832,14 @@ export const DASHBOARD_JS = String.raw`(() => {
           label: "차단",
           description: "확신도 높은 무진행 반복은 실행 전에 안전하게 멈춥니다."
         })
+      }),
+      providerStates: Object.freeze({
+        active: "활동 관찰됨",
+        installed_unverified: "설치됨 · 활동 대기",
+        needs_enable: "설치됨 · AWF 활성화 필요",
+        needs_install: "AWF 플러그인 설치 필요",
+        not_detected: "CLI를 찾지 못함",
+        unknown: "상태 확인 불가"
       }),
       connections: Object.freeze({
         connecting: "연결 중",
@@ -3843,6 +3987,9 @@ export const DASHBOARD_JS = String.raw`(() => {
         healthDegraded: "검증 오류",
         rawFreeSummary: "원문 제외",
         localLabel: "로컬",
+        providerChecking: "확인 중",
+        providerObservedSuffix: " / 2개 연결 관찰",
+        providerVersionPrefix: "버전 ",
         copy: "복사",
         copied: "복사됨",
         copySuccess: "요청 틀을 복사했습니다.",
@@ -3873,6 +4020,26 @@ export const DASHBOARD_JS = String.raw`(() => {
     low: true,
     medium: true,
     high: true
+  });
+
+  const PROVIDERS = Object.freeze({
+    codex: true,
+    claude: true
+  });
+
+  const PROVIDER_STATES = Object.freeze({
+    not_detected: true,
+    needs_install: true,
+    needs_enable: true,
+    installed_unverified: true,
+    active: true,
+    unknown: true
+  });
+
+  const PROVIDER_ACTIVITY = Object.freeze({
+    not_observed: true,
+    observed: true,
+    unknown: true
   });
 
   const SIGNALS = Object.freeze({
@@ -4005,6 +4172,7 @@ export const DASHBOARD_JS = String.raw`(() => {
       elapsedMs: 0
     },
     issueIds: [],
+    providerIntegration: null,
     warning: null,
     timelineEntries: [],
     seenEventIds: new Set(),
@@ -4308,20 +4476,39 @@ export const DASHBOARD_JS = String.raw`(() => {
           ? "healthDegraded"
           : "healthHealthy";
     const systemLabel = byId("system-summary-label");
-    if (systemLabel) systemLabel.textContent = copy.dynamic.localLabel;
+    const observedProviders = state.providerIntegration
+      ? state.providerIntegration.providers.filter(
+          (provider) => provider.activity === "observed"
+        ).length
+      : null;
+    if (systemLabel) {
+      systemLabel.textContent =
+        observedProviders === null
+          ? copy.dynamic.localLabel
+          : observedProviders + " / 2";
+    }
     const systemTitle = byId("system-summary-title");
     if (systemTitle) {
       systemTitle.textContent =
-        copy.modes[state.mode].label + " · " + copy.dynamic[healthKey];
+        observedProviders === null
+          ? copy.modes[state.mode].label + " · " + copy.dynamic[healthKey]
+          : observedProviders + copy.dynamic.providerObservedSuffix;
     }
     const systemCopy = byId("system-summary-copy");
     if (systemCopy) {
-      systemCopy.textContent =
-        copy.dynamic[sourceKey] +
-        " · " +
-        copy.dynamic[coverageKey] +
-        " · " +
-        copy.dynamic.rawFreeSummary;
+      systemCopy.textContent = state.providerIntegration
+        ? state.providerIntegration.providers
+            .map((provider) =>
+              (provider.provider === "codex" ? "Codex" : "Claude Code") +
+              " · " +
+              copy.providerStates[provider.state]
+            )
+            .join(" · ")
+        : copy.dynamic[sourceKey] +
+          " · " +
+          copy.dynamic[coverageKey] +
+          " · " +
+          copy.dynamic.rawFreeSummary;
     }
 
     const detailTitle = byId("detail-title");
@@ -4403,6 +4590,9 @@ export const DASHBOARD_JS = String.raw`(() => {
   function chromeState() {
     if (state.connection === "degraded") return "degraded";
     if (state.connection === "offline") return "offline";
+    if (state.signal === "danger" || state.signal === "critical") {
+      return state.signal;
+    }
     if (
       state.connection === "connecting" ||
       state.connection === "reconnecting"
@@ -4412,6 +4602,15 @@ export const DASHBOARD_JS = String.raw`(() => {
     if (
       state.connection === "connected" &&
       state.sourceState === "empty"
+    ) {
+      return "connecting";
+    }
+    if (
+      state.connection === "connected" &&
+      (!state.providerIntegration ||
+        !state.providerIntegration.providers.some(
+          (provider) => provider.activity === "observed"
+        ))
     ) {
       return "connecting";
     }
@@ -4565,6 +4764,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     renderWarning(state.warning);
     updateCoach(state.issueIds);
     renderTimeline();
+    renderProviderCards();
     renderOverview();
   }
 
@@ -4813,6 +5013,129 @@ export const DASHBOARD_JS = String.raw`(() => {
       warning,
       issueIds: safeIssueIds(promptCoach.issueIds ?? promptCoach.issue_ids)
     };
+  }
+
+  function exactObjectKeys(value, expected) {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value)
+    ) {
+      return false;
+    }
+    const keys = Object.keys(value);
+    return (
+      keys.length === expected.length &&
+      keys.every((key) => expected.includes(key)) &&
+      expected.every((key) => own(value, key))
+    );
+  }
+
+  function normalizeProviderVersion(value) {
+    if (value === null) return null;
+    if (!exactObjectKeys(value, ["major", "minor", "patch"])) return undefined;
+    const components = ["major", "minor", "patch"].map((key) =>
+      boundedInteger(value[key], 999999)
+    );
+    if (components.some((component) => component === null)) return undefined;
+    return {
+      major: components[0],
+      minor: components[1],
+      patch: components[2]
+    };
+  }
+
+  function normalizeProviderIntegration(payload) {
+    if (
+      !exactObjectKeys(payload, ["v", "kind", "providers"]) ||
+      payload.v !== 1 ||
+      payload.kind !== "provider_integration_status" ||
+      !Array.isArray(payload.providers) ||
+      payload.providers.length !== 2
+    ) {
+      return null;
+    }
+    const expected = ["codex", "claude"];
+    const providers = [];
+    for (let index = 0; index < expected.length; index += 1) {
+      const source = payload.providers[index];
+      if (
+        !exactObjectKeys(source, ["provider", "state", "version", "activity"]) ||
+        source.provider !== expected[index]
+      ) {
+        return null;
+      }
+      const provider = enumValue(source.provider, PROVIDERS);
+      const providerState = enumValue(source.state, PROVIDER_STATES);
+      const activity = enumValue(source.activity, PROVIDER_ACTIVITY);
+      const version = normalizeProviderVersion(source.version);
+      if (!provider || !providerState || !activity || version === undefined) {
+        return null;
+      }
+      const detected =
+        providerState !== "not_detected" && providerState !== "unknown";
+      if (
+        (providerState === "not_detected" && version !== null) ||
+        (detected && version === null) ||
+        (providerState === "active" && activity !== "observed") ||
+        (activity === "observed" &&
+          providerState !== "active" &&
+          providerState !== "unknown")
+      ) {
+        return null;
+      }
+      providers.push({
+        provider,
+        state: providerState,
+        version,
+        activity
+      });
+    }
+    return { providers };
+  }
+
+  function renderProviderCards() {
+    const copy = currentCopy();
+    const providers = state.providerIntegration?.providers ?? [
+      { provider: "codex", state: "unknown", version: null, activity: "unknown" },
+      { provider: "claude", state: "unknown", version: null, activity: "unknown" }
+    ];
+    const observed = providers.filter(
+      (provider) => provider.activity === "observed"
+    ).length;
+    const count = byId("provider-count");
+    if (count) count.textContent = observed + " / 2";
+    for (const provider of providers) {
+      const card = document.querySelector(
+        '[data-provider-card="' + provider.provider + '"]'
+      );
+      if (card) card.dataset.providerState = provider.state;
+      const status = byId("provider-" + provider.provider + "-state");
+      if (status) {
+        status.textContent = state.providerIntegration
+          ? copy.providerStates[provider.state]
+          : copy.dynamic.providerChecking;
+      }
+      const version = byId("provider-" + provider.provider + "-version");
+      if (version) {
+        version.textContent = provider.version
+          ? copy.dynamic.providerVersionPrefix +
+            provider.version.major + "." +
+            provider.version.minor + "." +
+            provider.version.patch
+          : "";
+      }
+    }
+    renderSentinel();
+    renderOverview();
+  }
+
+  function renderProviderIntegration(payload) {
+    const integration = normalizeProviderIntegration(payload);
+    if (!integration) return false;
+    state.providerIntegration = integration;
+    renderProviderCards();
+    return true;
   }
 
   function resetProjection() {
@@ -5213,6 +5536,27 @@ export const DASHBOARD_JS = String.raw`(() => {
     }
   }
 
+  function refreshIntegrations() {
+    if (integrationRefresh) return integrationRefresh;
+    integrationRefresh = (async () => {
+      try {
+        const response = await fetch(localEndpoint("/api/integrations"), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          credentials: "same-origin"
+        });
+        if (!response.ok) throw new Error("integration status unavailable");
+        renderProviderIntegration(await response.json());
+      } catch {
+        // Keep the last closed provider status; transport health is shown separately.
+      }
+    })().finally(() => {
+      integrationRefresh = null;
+    });
+    return integrationRefresh;
+  }
+
   function consumeMessage(message) {
     let payload;
     try {
@@ -5260,6 +5604,14 @@ export const DASHBOARD_JS = String.raw`(() => {
         ? message.lastEventId
         : null;
     renderEvent(payload, sequence, eventId);
+    if (
+      state.providerIntegration &&
+      !state.providerIntegration.providers.some(
+        (provider) => provider.activity === "observed"
+      )
+    ) {
+      refreshIntegrations();
+    }
   }
 
   function connectEvents() {
@@ -5367,9 +5719,14 @@ export const DASHBOARD_JS = String.raw`(() => {
   setLanguage("en");
   let stream = null;
   let statusTimer = null;
+  let integrationRefresh = null;
+  refreshIntegrations();
   refreshStatus().finally(() => {
     stream = connectEvents();
-    statusTimer = window.setInterval(refreshStatus, 15000);
+    statusTimer = window.setInterval(() => {
+      refreshStatus();
+      refreshIntegrations();
+    }, 15000);
   });
 
   window.addEventListener("beforeunload", () => {

@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "kind": "provider_integration_status",
+  "providers": [
+    {
+      "provider": "claude",
+      "state": "not_detected",
+      "version": null,
+      "activity": "not_observed"
+    },
+    {
+      "provider": "codex",
+      "state": "not_detected",
+      "version": null,
+      "activity": "not_observed"
+    }
+  ]
+}

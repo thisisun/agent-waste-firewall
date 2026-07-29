@@ -38,6 +38,9 @@ test("dashboard exports a complete English-first, local-only document", () => {
   assert.match(DASHBOARD_HTML, /id="timeline-list"/u);
   assert.match(DASHBOARD_HTML, /id="warning-card"/u);
   assert.match(DASHBOARD_HTML, /id="prompt-template"/u);
+  assert.match(DASHBOARD_HTML, /id="provider-count"/u);
+  assert.match(DASHBOARD_HTML, /data-provider-card="codex"/u);
+  assert.match(DASHBOARD_HTML, /data-provider-card="claude"/u);
   assert.match(DASHBOARD_HTML, /On this device, without raw content/u);
   assert.match(DASHBOARD_HTML, /LIVE SESSION/u);
   assert.match(DASHBOARD_HTML, /Live session · local and raw-free/u);
@@ -95,6 +98,10 @@ test("dashboard script uses same-origin status and event endpoints safely", () =
   assert.match(
     DASHBOARD_JS,
     /fetch\(localEndpoint\("\/api\/status"\)/u,
+  );
+  assert.match(
+    DASHBOARD_JS,
+    /fetch\(localEndpoint\("\/api\/integrations"\)/u,
   );
   assert.match(DASHBOARD_JS, /credentials:\s*"same-origin"/u);
   assert.doesNotMatch(
@@ -250,7 +257,7 @@ class FakeEventSource {
   close() {}
 }
 
-function dashboardHarness() {
+function dashboardHarness(options = {}) {
   FakeEventSource.instances = [];
   const ids = new Map();
   const modeElements = ["observe", "warn", "block"].map((mode) => {
@@ -291,12 +298,23 @@ function dashboardHarness() {
     element.dataset.i18n = theme === "light" ? "themeLight" : "themeDark";
     return element;
   });
+  const providerCards = ["codex", "claude"].map((provider) => {
+    const element = new FakeElement("article");
+    element.dataset.providerCard = provider;
+    element.dataset.providerState = "unknown";
+    return element;
+  });
   const staticElements = [
     "brandSubtitle",
     "overviewEyebrow",
     "overviewTitle",
     "overviewSub",
     "privacyTitle",
+    "providerEyebrow",
+    "providerTitle",
+    "providerCodex",
+    "providerClaude",
+    "providerNote",
     "footerBrand",
   ].map((key) => {
     const element = new FakeElement("span");
@@ -348,6 +366,11 @@ function dashboardHarness() {
     "system-summary-label",
     "system-summary-title",
     "system-summary-copy",
+    "provider-count",
+    "provider-codex-state",
+    "provider-codex-version",
+    "provider-claude-state",
+    "provider-claude-version",
     "activity-chart",
     "activity-chart-readout",
     "mix-chart",
@@ -370,7 +393,13 @@ function dashboardHarness() {
       return ids.get(id) ?? null;
     },
     querySelector(selector) {
-      return selector === "[data-connection]" ? connection : null;
+      if (selector === "[data-connection]") return connection;
+      const provider = /^\[data-provider-card="(codex|claude)"\]$/u.exec(
+        selector,
+      )?.[1];
+      return provider
+        ? providerCards.find((element) => element.dataset.providerCard === provider)
+        : null;
     },
     querySelectorAll(selector) {
       if (selector === "[data-mode]") return modeElements;
@@ -402,13 +431,31 @@ function dashboardHarness() {
     addEventListener() {},
   };
 
-  const context = vm.createContext({
-    document,
-    window,
-    EventSource: FakeEventSource,
-    fetch: async () => ({
+  const fetchImpl =
+    options.fetch ??
+    (async (url) => ({
       ok: true,
       async json() {
+        if (String(url).startsWith("/api/integrations")) {
+          return options.integration ?? {
+            v: 1,
+            kind: "provider_integration_status",
+            providers: [
+              {
+                provider: "codex",
+                state: "active",
+                version: { major: 0, minor: 146, patch: 0 },
+                activity: "observed",
+              },
+              {
+                provider: "claude",
+                state: "not_detected",
+                version: null,
+                activity: "not_observed",
+              },
+            ],
+          };
+        }
         return {
           connected: true,
           mode: "observe",
@@ -420,7 +467,13 @@ function dashboardHarness() {
           },
         };
       },
-    }),
+    }));
+
+  const context = vm.createContext({
+    document,
+    window,
+    EventSource: FakeEventSource,
+    fetch: fetchImpl,
     navigator: {
       clipboard: {
         async writeText() {},
@@ -446,6 +499,7 @@ function dashboardHarness() {
     modeElements,
     languageButtons,
     themeButtons,
+    providerCards,
     staticElements,
     ariaElements,
     detailPanels,
@@ -454,6 +508,105 @@ function dashboardHarness() {
     compactSentinel: ids.get("compact-sentinel"),
   };
 }
+
+test("live stream starts immediately but stays visibly waiting for a slow provider probe", async () => {
+  const neverSettles = new Promise(() => {});
+  const harness = dashboardHarness({
+    fetch: async (url) => {
+      if (String(url).startsWith("/api/integrations")) {
+        return neverSettles;
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            connected: true,
+            mode: "observe",
+            metrics: {
+              events: 0,
+              incidents: 0,
+              avoidableCalls: 0,
+              elapsedMs: 0,
+            },
+          };
+        },
+      };
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(FakeEventSource.instances.length, 1);
+  assert.equal(FakeEventSource.instances[0].url, "/events");
+  FakeEventSource.instances[0].onopen();
+  assert.equal(harness.document.documentElement.dataset.signal, "warn");
+  assert.equal(harness.ids.get("sentinel-status").textContent, "CONNECTING");
+});
+
+test("the first semantic event refreshes unobserved provider evidence", async () => {
+  let integrationCalls = 0;
+  const harness = dashboardHarness({
+    fetch: async (url) => ({
+      ok: true,
+      async json() {
+        if (String(url).startsWith("/api/integrations")) {
+          integrationCalls += 1;
+          const observed = integrationCalls > 1;
+          return {
+            v: 1,
+            kind: "provider_integration_status",
+            providers: [
+              {
+                provider: "codex",
+                state: observed ? "active" : "installed_unverified",
+                version: { major: 0, minor: 146, patch: 0 },
+                activity: observed ? "observed" : "not_observed",
+              },
+              {
+                provider: "claude",
+                state: "not_detected",
+                version: null,
+                activity: "not_observed",
+              },
+            ],
+          };
+        }
+        return {
+          connected: true,
+          mode: "observe",
+          metrics: {
+            events: 0,
+            incidents: 0,
+            avoidableCalls: 0,
+            elapsedMs: 0,
+          },
+        };
+      },
+    }),
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(integrationCalls, 1);
+
+  FakeEventSource.instances[0].emit({
+    kind: "tool",
+    family: "shell",
+    operation: "test",
+    outcome: "succeeded",
+    ruleId: null,
+    severity: "none",
+    attribution: null,
+    alias: `call_${"1".repeat(32)}`,
+    elapsedMs: 1_000,
+    issueIds: [],
+    occurrences: 1,
+    incidentCountDelta: 0,
+    avoidableCallsDelta: 0,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(integrationCalls, 2);
+  assert.equal(
+    harness.ids.get("provider-codex-state").textContent,
+    "Activity observed",
+  );
+});
 
 test("semantic stream drops raw fields and renders only mapped values", async () => {
   const harness = dashboardHarness();
@@ -687,7 +840,7 @@ test("one-screen summaries open localized raw-free detail panels", async () => {
   assert.equal(harness.ids.get("coach-summary-count").textContent, "3 / 5");
   assert.equal(
     harness.ids.get("system-summary-title").textContent,
-    "Warn · Healthy",
+    "1 / 2 providers observed",
   );
 
   const signalTrigger = harness.detailTriggers.find(
@@ -752,6 +905,10 @@ test("language modes keep overview and live-event copy in one language", async (
   assert.equal(staticText("footerBrand"), "AWF — Agent Waste Firewall");
   assert.match(harness.ids.get("timeline-list").textContent, /SY/u);
   assert.match(harness.ids.get("timeline-list").textContent, /LIVE/u);
+  assert.equal(
+    harness.ids.get("provider-codex-state").textContent,
+    "Activity observed",
+  );
 
   harness.languageButtons[1].click();
 
@@ -762,6 +919,10 @@ test("language modes keep overview and live-event copy in one language", async (
   assert.match(harness.ids.get("timeline-list").textContent, /계통/u);
   assert.match(harness.ids.get("timeline-list").textContent, /실시간/u);
   assert.doesNotMatch(harness.ids.get("timeline-list").textContent, /\bLIVE\b|\bSY\b/u);
+  assert.equal(
+    harness.ids.get("provider-codex-state").textContent,
+    "활동 관찰됨",
+  );
   assert.equal(harness.document.title, "[정상] AWF — 에이전트 낭비 방화벽");
 
   harness.languageButtons[0].click();
@@ -769,6 +930,144 @@ test("language modes keep overview and live-event copy in one language", async (
   assert.equal(staticText("overviewSub"), "Live session · local and raw-free");
   assert.match(harness.ids.get("timeline-list").textContent, /SY/u);
   assert.match(harness.ids.get("timeline-list").textContent, /LIVE/u);
+});
+
+test("provider status stays closed, truthful, and localized", async () => {
+  const secret = "RAW_PROVIDER_PATH_OR_OUTPUT_MUST_NOT_RENDER";
+  const harness = dashboardHarness({
+    integration: {
+      v: 1,
+      kind: "provider_integration_status",
+      providers: [
+        {
+          provider: "codex",
+          state: "needs_install",
+          version: { major: 0, minor: 146, patch: 0 },
+          activity: "not_observed",
+        },
+        {
+          provider: "claude",
+          state: "not_detected",
+          version: null,
+          activity: "not_observed",
+        },
+      ],
+      path: secret,
+      output: secret,
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.ids.get("provider-count").textContent, "0 / 2");
+  assert.equal(
+    harness.ids.get("provider-codex-state").textContent,
+    "Checking",
+    "an invalid integration payload must not replace the closed initial state",
+  );
+  assert.doesNotMatch(
+    Array.from(harness.ids.values())
+      .map((element) => element.textContent)
+      .join("\\n"),
+    new RegExp(secret, "u"),
+  );
+
+  const valid = dashboardHarness({
+    integration: {
+      v: 1,
+      kind: "provider_integration_status",
+      providers: [
+        {
+          provider: "codex",
+          state: "needs_install",
+          version: { major: 0, minor: 146, patch: 0 },
+          activity: "not_observed",
+        },
+        {
+          provider: "claude",
+          state: "not_detected",
+          version: null,
+          activity: "not_observed",
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(valid.ids.get("provider-count").textContent, "0 / 2");
+  assert.equal(
+    valid.ids.get("provider-codex-state").textContent,
+    "Install the AWF plugin",
+  );
+  assert.equal(
+    valid.ids.get("provider-claude-state").textContent,
+    "CLI not detected",
+  );
+  assert.equal(
+    valid.ids.get("provider-codex-version").textContent,
+    "Version 0.146.0",
+  );
+  assert.equal(
+    valid.ids.get("system-summary-title").textContent,
+    "0 / 2 providers observed",
+  );
+  assert.equal(valid.document.documentElement.dataset.signal, "warn");
+
+  valid.languageButtons[1].click();
+  assert.equal(
+    valid.ids.get("provider-codex-state").textContent,
+    "AWF 플러그인 설치 필요",
+  );
+  assert.equal(
+    valid.ids.get("provider-claude-state").textContent,
+    "CLI를 찾지 못함",
+  );
+  assert.equal(
+    valid.ids.get("provider-codex-version").textContent,
+    "버전 0.146.0",
+  );
+  assert.equal(
+    valid.ids.get("system-summary-title").textContent,
+    "0 / 2개 연결 관찰",
+  );
+});
+
+test("a real high warning overrides unobserved provider readiness", async () => {
+  const harness = dashboardHarness({
+    integration: {
+      v: 1,
+      kind: "provider_integration_status",
+      providers: [
+        {
+          provider: "codex",
+          state: "needs_install",
+          version: { major: 0, minor: 146, patch: 0 },
+          activity: "not_observed",
+        },
+        {
+          provider: "claude",
+          state: "not_detected",
+          version: null,
+          activity: "not_observed",
+        },
+      ],
+    },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const stream = FakeEventSource.instances[0];
+  stream.emit(
+    {
+      kind: "status",
+      connected: true,
+      currentWarning: {
+        ruleId: "exact_tool_repeat",
+        severity: "high",
+        attribution: "agent",
+        occurrences: 3,
+      },
+    },
+    "status",
+  );
+  assert.equal(harness.document.documentElement.dataset.signal, "critical");
+  assert.equal(harness.ids.get("sentinel-status").textContent, "CRITICAL");
 });
 
 test("compact sentinel is localized and expands from the status artwork", async () => {
