@@ -65,8 +65,8 @@ An unsigned, source-buildable macOS 13+ shell now exists under `macos/`:
 This native source is available in the GitHub checkout. The published npm artifact is the portable
 plugin/CLI package and intentionally excludes `macos/`.
 
-- `AWF.xcodeproj` contains the `AWF`, `AWFTests`, and `AWFUITests` targets and one shared `AWF`
-  scheme. It uses SwiftUI, AppKit, WebKit, Foundation, and XCTest without external packages.
+- `AWF.xcodeproj` contains the `AWF`, `awf-hook`, `AWFTests`, and `AWFUITests` targets and a shared
+  `AWF` scheme. It uses SwiftUI, AppKit, WebKit, Foundation, and XCTest without external packages.
 - The SwiftUI lifecycle owns a normal dashboard window and a `MenuBarExtra`; closing the main
   window does not opt the app out of menu-bar operation.
 - A borderless, non-activating, transparent `NSPanel` stays independent of the main window. It
@@ -80,29 +80,32 @@ plugin/CLI package and intentionally excludes `macos/`.
   `bin/agent-waste-firewall.mjs dashboard --port 0 --json`, accepts one bounded readiness line, and
   terminates only its presentation subprocess when the app exits.
 - The app bundle copies the reviewed `assets/`, `bin/`, and `src/` directories as folder
-  resources. This packages the AWF JavaScript source but not a Node runtime.
+  resources and embeds the hardened Swift `awf-hook` executable under `Contents/Helpers`. This
+  packages the AWF JavaScript source and native launcher, but not a Node runtime.
 - The main window embeds the existing loopback dashboard in a non-persistent `WKWebView`.
   Navigation is restricted to the exact tokenized `127.0.0.1` origin.
 - English and Korean `Localizable.strings` cover native status, action, rule, and failure labels.
   The sentinel includes VoiceOver labels and respects Reduce Motion, Reduce Transparency, and
   Differentiate Without Color.
 
-The source build has no Developer ID signature, notarization ticket, DMG, installer, update
-mechanism, or bundled/pinned Node runtime. It is a developer preview, not a downloadable beta.
-Provider install/repair/uninstall, start at login, signed helper lifecycle, and release packaging
-remain pending.
+The source build has no Developer ID signature, notarization ticket, DMG, activation installer,
+update mechanism, or bundled/pinned Node runtime. It is a developer preview, not a downloadable
+beta. Provider install/repair/uninstall, start at login, signed helper/runtime lifecycle, and
+release packaging remain pending.
 
-Provider manifests now use a plugin-root inner launcher on macOS/POSIX. It streams stdin without
-reading or persisting it. After `/bin/sh -p` has started and the launcher has control, it does not
-search inherited `PATH`; it removes Node and dynamic-loader variables before starting the Node
-worker, rejects symlink and group/world-writable worker/runtime files on macOS, and uses only
-explicit or bounded external Node candidates. This does not sanitize provider or initial
-interpreter/loader startup. Claude's exec-form hook adds no command-evaluation shell, but its
-provider-to-`/bin/sh` startup remains a trusted boundary. Codex additionally evaluates its command
-through inherited `$SHELL -lc`, which is outside AWF's boundary and direct tests. The launcher
-emits one fixed, raw-free stderr warning for each event that it cannot check; this pre-runtime
-warning is not rate-limited. Windows provider-hook execution is unsupported. This is an alpha
-transition layer; no Node runtime or native hook launcher is bundled or installed yet.
+Provider manifests keep using a plugin-root inner launcher on macOS/POSIX. After `/bin/sh -p`
+starts, the shim removes Node/dynamic-loader variables, validates the plugin worker, and identifies
+one provider from an exact provider-root environment match. On macOS it prefers a safe fixed
+per-user `integration-v1/awf-hook`; an absent or unsafe helper, or ambiguous provider match,
+preserves the explicit/bounded external Node alpha path. The helper validates canonical
+activation, the versioned runtime, plugin directories/files, and a closed environment. Raw stdin
+remains on inherited standard input. Its child owns a separate process group, a 2.25-second
+deadline, signal forwarding, bounded termination, forced cleanup, and reaping. After native
+handoff the event is never retried and no second JSON is appended. This does not sanitize provider
+or initial interpreter/loader startup. Claude's provider-to-`/bin/sh` startup remains trusted;
+Codex also evaluates the command through inherited `$SHELL -lc`. Windows provider-hook execution
+is unsupported. The helper is bundled in source builds, but no Node payload or installer activates
+it for users yet.
 
 ## Native privacy boundary
 
@@ -125,12 +128,13 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The current portable rerun passed `npm run check` across 58 JavaScript and 46 JSON files and
-`npm test` with 266/266 tests. The same-machine performance rerun measured:
+The current portable rerun passed `npm run check` across 59 JavaScript and 46 JSON files and
+`npm test` with 270/270 tests. The same-machine performance rerun measured:
 
 | Path | Result |
 | --- | ---: |
-| Direct inner launcher plus real hook subprocess | p95 54.614 ms; p99 57.059 ms |
+| External-Node inner launcher plus real hook subprocess | p95 59.754 ms; p99 78.814 ms |
+| Unsigned Release native helper plus cloned Node and real hook subprocess | p95 64.431 ms; p99 66.094 ms |
 | Live dashboard full-generation cold audit | 143.181 ms |
 | Live dashboard warm status | p95 0.980 ms |
 | Concurrent live publication | p95 7.946 ms |
@@ -157,12 +161,14 @@ xcodebuild \
   build
 ```
 
-This command verifies source compilation, the guardian-mark app icon, Info.plist processing,
-localization, and folder-resource assembly. It does not create a signed release. The local
-`AWFTests` target passed 39/39 tests with no skips, including Node 18+ probe boundaries,
-inherited-`PATH` rejection, bounded Finder-style NVM discovery, a real bundled-worker launch,
-closed status/provider fetches, child cancellation and forced reap, exact protocol decoding,
-navigation rejection, and the fresh-provider sentinel state table. A direct
+This command verifies source compilation, the embedded executable
+`Contents/Helpers/awf-hook`, guardian-mark app icon, Info.plist processing, localization, and
+folder-resource assembly. It does not create a signed release. The local `AWFTests` target passed
+52/52 tests with no skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
+bounded Finder-style NVM discovery, a real bundled-worker launch, exact native provider and
+activation contracts, raw stdin streaming, filesystem identity revalidation, timeout/signal
+process-group cleanup, closed status/provider fetches, exact protocol decoding, navigation
+rejection, and the fresh-provider sentinel state table. A direct
 temporary-data launch
 remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
 and removed its Node child on normal quit.

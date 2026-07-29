@@ -83,6 +83,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM= \
             build
+          test -x \
+            "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook"
       # UI automation remains a separate interactive/nightly release gate.
       - name: Run native unit target
         run: |
@@ -97,3 +99,10 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM= \
             test
+      - name: Benchmark native hook path
+        run: |
+          npm run benchmark:native-hook -- \
+            --helper "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+            --samples 50 \
+            --warmups 5 \
+            --p95-ms 200

@@ -34,6 +34,11 @@
 		E00000000000000000000019 /* SentinelVisualStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001C /* SentinelVisualStateTests.swift */; };
 		E0000000000000000000001A /* AWFUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001D /* AWFUITests.swift */; };
 		E0000000000000000000001B /* AWF.icns in Resources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001E /* AWF.icns */; };
+		E0000000000000000000001C /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000001D /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000001E /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000020 /* main.swift */; };
+		E0000000000000000000001F /* NativeHookLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000021 /* NativeHookLauncherTests.swift */; };
+		E00000000000000000000020 /* awf-hook in Embed Helpers */ = {isa = PBXBuildFile; fileRef = C00000000000000000000004 /* awf-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,12 +56,34 @@
 			remoteGlobalIDString = B00000000000000000000001;
 			remoteInfo = AWF;
 		};
+		L00000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B00000000000000000000004;
+			remoteInfo = "awf-hook";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F0000000000000000000000A /* Embed Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				E00000000000000000000020 /* awf-hook in Embed Helpers */,
+			);
+			name = "Embed Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		C00000000000000000000001 /* AWF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AWF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000002 /* AWFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000003 /* AWFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000004 /* awf-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "awf-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D00000000000000000000001 /* AWFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWFApp.swift; sourceTree = "<group>"; };
 		D00000000000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		D00000000000000000000003 /* DashboardContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardContainerView.swift; sourceTree = "<group>"; };
@@ -86,6 +113,9 @@
 		D0000000000000000000001C /* SentinelVisualStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentinelVisualStateTests.swift; sourceTree = "<group>"; };
 		D0000000000000000000001D /* AWFUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWFUITests.swift; sourceTree = "<group>"; };
 		D0000000000000000000001E /* AWF.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AWF.icns; sourceTree = "<group>"; };
+		D0000000000000000000001F /* NativeHookLauncherCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHookLauncherCore.swift; sourceTree = "<group>"; };
+		D00000000000000000000020 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		D00000000000000000000021 /* NativeHookLauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHookLauncherTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +140,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F0000000000000000000000C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -117,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000004 /* AWF */,
+				A00000000000000000000010 /* AWFHookLauncher */,
 				A0000000000000000000000C /* AWFTests */,
 				A0000000000000000000000D /* AWFUITests */,
 				A0000000000000000000000E /* Bundled Worker */,
@@ -128,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				C00000000000000000000001 /* AWF.app */,
+				C00000000000000000000004 /* awf-hook */,
 				C00000000000000000000002 /* AWFTests.xctest */,
 				C00000000000000000000003 /* AWFUITests.xctest */,
 			);
@@ -143,6 +182,7 @@
 				A00000000000000000000008 /* MenuBar */,
 				A00000000000000000000009 /* Protocol */,
 				A0000000000000000000000A /* Sentinel */,
+				A0000000000000000000000F /* Integration */,
 				A0000000000000000000000B /* Resources */,
 			);
 			path = AWF;
@@ -215,6 +255,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		A0000000000000000000000F /* Integration */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000001F /* NativeHookLauncherCore.swift */,
+			);
+			path = Integration;
+			sourceTree = "<group>";
+		};
 		A0000000000000000000000C /* AWFTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -224,6 +272,7 @@
 				D0000000000000000000001A /* RuntimeLocatorTests.swift */,
 				D0000000000000000000001B /* SemanticTestFixtures.swift */,
 				D0000000000000000000001C /* SentinelVisualStateTests.swift */,
+				D00000000000000000000021 /* NativeHookLauncherTests.swift */,
 			);
 			path = AWFTests;
 			sourceTree = "<group>";
@@ -246,6 +295,14 @@
 			name = "Bundled Worker";
 			sourceTree = "<group>";
 		};
+		A00000000000000000000010 /* AWFHookLauncher */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000020 /* main.swift */,
+			);
+			path = AWFHookLauncher;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -256,10 +313,12 @@
 				F00000000000000000000001 /* Sources */,
 				F00000000000000000000002 /* Frameworks */,
 				F00000000000000000000003 /* Resources */,
+				F0000000000000000000000A /* Embed Helpers */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				M00000000000000000000003 /* PBXTargetDependency */,
 			);
 			name = AWF;
 			productName = AWF;
@@ -302,6 +361,22 @@
 			productReference = C00000000000000000000003 /* AWFUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		B00000000000000000000004 /* awf-hook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000005 /* Build configuration list for PBXNativeTarget "awf-hook" */;
+			buildPhases = (
+				F0000000000000000000000B /* Sources */,
+				F0000000000000000000000C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "awf-hook";
+			productName = "awf-hook";
+			productReference = C00000000000000000000004 /* awf-hook */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -323,6 +398,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = B00000000000000000000001;
 					};
+					B00000000000000000000004 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = K00000000000000000000001 /* Build configuration list for PBXProject "AWF" */;
@@ -340,6 +418,7 @@
 			projectRoot = "";
 			targets = (
 				B00000000000000000000001 /* AWF */,
+				B00000000000000000000004 /* awf-hook */,
 				B00000000000000000000002 /* AWFTests */,
 				B00000000000000000000003 /* AWFUITests */,
 			);
@@ -395,6 +474,7 @@
 				E0000000000000000000000D /* SentinelPanelController.swift in Sources */,
 				E0000000000000000000000E /* SentinelView.swift in Sources */,
 				E0000000000000000000000F /* SentinelVisualState.swift in Sources */,
+				E0000000000000000000001C /* NativeHookLauncherCore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +488,7 @@
 				E00000000000000000000017 /* RuntimeLocatorTests.swift in Sources */,
 				E00000000000000000000018 /* SemanticTestFixtures.swift in Sources */,
 				E00000000000000000000019 /* SentinelVisualStateTests.swift in Sources */,
+				E0000000000000000000001F /* NativeHookLauncherTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -416,6 +497,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				E0000000000000000000001A /* AWFUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0000000000000000000001D /* NativeHookLauncherCore.swift in Sources */,
+				E0000000000000000000001E /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -431,6 +521,11 @@
 			isa = PBXTargetDependency;
 			target = B00000000000000000000001 /* AWF */;
 			targetProxy = L00000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		M00000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B00000000000000000000004 /* awf-hook */;
+			targetProxy = L00000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -685,6 +780,38 @@
 			};
 			name = Release;
 		};
+		N00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.hook";
+				PRODUCT_NAME = "awf-hook";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		N00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.hook";
+				PRODUCT_NAME = "awf-hook";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -720,6 +847,15 @@
 			buildConfigurations = (
 				J00000000000000000000001 /* Debug */,
 				J00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000005 /* Build configuration list for PBXNativeTarget "awf-hook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				N00000000000000000000001 /* Debug */,
+				N00000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -67,9 +67,77 @@ secure_regular_file() {
   return 0
 }
 
+secure_directory() {
+  directory_to_check=$1
+  if [ ! -d "$directory_to_check" ] ||
+    [ -L "$directory_to_check" ]
+  then
+    return 1
+  fi
+  if [ "$awf_darwin" = true ]; then
+    if [ ! -O "$directory_to_check" ]; then
+      return 1
+    fi
+    file_mode=$(/usr/bin/stat -f '%Lp' "$directory_to_check" 2>/dev/null) ||
+      return 1
+    case "$file_mode" in
+      *[2367][0-7]|*[0-7][2367]) return 1 ;;
+    esac
+  fi
+  return 0
+}
+
 worker="$plugin_root/scripts/hook.mjs"
 if ! secure_regular_file "$worker" false; then
   fail_open
+fi
+
+run_native_with() {
+  native_candidate=$1
+  native_provider=$2
+  if ! secure_regular_file "$native_candidate" true; then
+    return 1
+  fi
+
+  "$native_candidate" \
+    hook \
+    --protocol 1 \
+    --provider "$native_provider" \
+    --plugin-root "$plugin_root"
+  native_status=$?
+  if [ "$native_status" -ne 0 ]; then
+    # The helper may already have written a response. Never append another
+    # JSON object or retry the event through the portable runtime.
+    warn_unchecked
+  fi
+  exit 0
+}
+
+# A signed app release installs its fixed, versioned integration beneath the
+# current user's Application Support directory. An absent or unsafe install
+# keeps the checkout-compatible portable path available.
+if [ "$awf_darwin" = true ]; then
+  native_provider=
+  if [ "${PLUGIN_ROOT-}" = "$plugin_root" ] &&
+    [ "${CLAUDE_PLUGIN_ROOT-}" != "$plugin_root" ]
+  then
+    native_provider=codex
+  elif [ "${CLAUDE_PLUGIN_ROOT-}" = "$plugin_root" ] &&
+    [ "${PLUGIN_ROOT-}" != "$plugin_root" ]
+  then
+    native_provider=claude
+  fi
+  case "${HOME-}" in
+    /*)
+      native_integration_root="$HOME/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1"
+      native_launcher="$native_integration_root/awf-hook"
+      if secure_directory "$native_integration_root" &&
+        [ -n "$native_provider" ]
+      then
+        run_native_with "$native_launcher" "$native_provider"
+      fi
+      ;;
+  esac
 fi
 
 run_with() {

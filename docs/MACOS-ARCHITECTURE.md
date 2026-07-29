@@ -103,6 +103,14 @@ Provider rules:
 - Keep `Stop` observation-only. A monitor that automatically resumes a stopped agent can create the
   loop it is meant to prevent.
 
+The checked-in provider manifests continue to invoke the plugin-root `/bin/sh -p` shim; they do
+not contain an app-bundle path or a generated per-user command. On macOS, that shim may prefer the
+fixed per-user native helper only when the matching provider-root environment identifies exactly
+one of Codex or Claude. A missing or unsafe helper, or an ambiguous provider match, leaves the
+portable external-Node alpha path available. Once the shim invokes the native helper, that helper
+validates activation and stdin has crossed the handoff boundary: activation failure must fail open
+without retrying the event through Node or appending a second JSON value.
+
 The implementation should make the provider boundary explicit:
 
 ```text
@@ -273,7 +281,9 @@ AWF.app/
   Contents/
     MacOS/AWF
     Frameworks/
-    Helpers/awf-worker
+    Helpers/
+      awf-hook                 # implemented hardened Swift helper
+      awf-node                 # future pinned runtime payload
     Resources/
       dashboard/
       plugins/
@@ -309,24 +319,64 @@ shell `PATH`, version manager, or Homebrew installation. The bundled runtime and
 helper must be signed as part of the app. Keep the portable source and CLI runnable with system
 Node for contributors.
 
-The current alpha now routes macOS/POSIX hooks through a plugin-root inner launcher and removes
+The current alpha routes macOS/POSIX hooks through a plugin-root inner launcher and removes
 inherited `PATH` lookup from both that launcher and the native dashboard locator after they start.
 After `/bin/sh -p` has started and the launcher has control, it removes Node and dynamic-loader
-variables before starting the Node worker, rejects symlink or group/world-writable hook/runtime
-files on macOS, and falls back only to explicit, bounded external Node locations. This does not
-sanitize provider or initial interpreter/loader startup. Claude's exec-form hook adds no
-command-evaluation shell, but its provider-to-`/bin/sh` startup remains trusted. Codex additionally
-evaluates the command through inherited `$SHELL -lc`, which is outside AWF's boundary and direct
-launcher tests. See the
-[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
-This closes an inner-launcher reliability gap; it does not satisfy the bundled-runtime release
-gate or harden provider/interpreter startup.
+variables, validates the plugin-root worker, and on macOS derives the provider only from an exact,
+unambiguous `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` match. It then checks the fixed per-user native
+helper at
+`~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
+A safe native helper is preferred. If the helper or its integration directory is missing or
+unsafe, or provider attribution is ambiguous, the shim falls back to the existing explicit,
+bounded external Node locations. After native invocation, success or failure terminates the shim;
+the raw stdin is never replayed and a second JSON response is never appended.
 
-The public hook manifest should call a small stable launcher in an app-owned per-user integration
-directory, not an absolute path inside `/Applications/AWF.app`. The app can be moved, and
-provider trust should not change for every runtime upgrade. Install versions side by side, validate
-the new worker with `doctor`, then atomically replace a closed regular-file activation manifest.
-Keep an installation ledger so repair, rollback, and uninstall touch only files created by AWF.
+This does not sanitize provider or initial interpreter/loader startup. Claude's exec-form hook
+adds no command-evaluation shell, but its provider-to-`/bin/sh` startup remains trusted. Codex
+additionally evaluates the command through inherited `$SHELL -lc`, which is outside AWF's boundary
+and direct launcher tests. See the
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
+This native-first dispatch closes a runtime-selection foundation gap; it does not satisfy the
+bundled-runtime release gate or harden provider/interpreter startup.
+
+The Xcode app now builds a hardened-runtime Swift `awf-hook` target and embeds it with
+`CodeSignOnCopy` at `Contents/Helpers/awf-hook`. Those settings make the nested helper ready for a
+future release-signing pipeline; the current source artifact has no Developer ID signature or
+notarization. It also contains no `awf-node` payload and has no installer or activation UI, so the
+embedded helper alone is not an installed public-beta runtime.
+
+The fixed per-user integration has this exact activation record, including its trailing newline:
+
+```json
+{"v":1,"releaseId":"rel_0123456789abcdef0123456789abcdef","workerProtocol":1}
+```
+
+`releaseId` is exactly `rel_` followed by 32 lowercase hexadecimal characters. The manifest stores
+no path; the helper reconstructs and validates only this layout:
+
+```text
+~/Library/Application Support/io.github.thisisun.agent-waste-firewall/
+  integration-v1/
+    awf-hook
+    activation.json
+    versions/
+      rel_<32 lowercase hex>/
+        awf-node
+```
+
+The native helper also validates the absolute plugin root and its `scripts/hook.mjs`. It receives
+`hook --protocol 1 --provider <codex|claude> --plugin-root <absolute path>`, inherits the provider's
+standard handles without reading or copying raw stdin, and launches the worker with a closed
+environment plus `PATH=/usr/bin:/bin`. The worker child owns a separate process group and a
+2.25-second deadline. Deadline cleanup terminates, then forcibly kills if necessary, and reaps the
+owned group. Before child handoff, launch failures return the fixed raw-free fail-open response.
+After handoff, the helper may warn but cannot append another JSON value.
+
+The app must eventually install this per-user tree rather than ask provider manifests to call an
+absolute path inside `/Applications/AWF.app`. The app can be moved, and provider trust should not
+change for every runtime upgrade. Install versions side by side, validate the new worker, then
+atomically replace the canonical regular-file activation manifest. Keep an installation ledger so
+repair, rollback, and uninstall touch only files created by AWF.
 
 Do not choose the Mac App Store first. Provider plugin installation and execution of a bundled
 helper need to be proven under sandbox constraints. Start with hardened-runtime, Developer
@@ -340,6 +390,7 @@ milestone.
 | macOS app is not running | Hook still detects, warns, and can deny |
 | Semantic spool is unavailable | Skip presentation event, rate-limit stderr warning, do not block agent |
 | Hook worker crashes or exceeds its budget | Fail open; provider continues |
+| Native hook child exceeds 2.25 seconds | Terminate and reap its owned process group; do not retry stdin or append a second response |
 | Session state is corrupt | Quarantine/replace only that state; do not persist raw recovery input |
 | Provider adds fields | Ignore unknown input fields; contract tests detect breaking removals |
 | Multiple sessions run concurrently | Lock per session; aggregate only audited aliases in the app |
@@ -368,8 +419,10 @@ milestone.
 3. ~~Connect a generation-aware live-spool cursor to the shared dashboard projection.~~ Completed.
 4. ~~Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.~~
    Developer preview implemented; signed distribution and native UI acceptance remain pending.
-5. Add explicit install/repair/uninstall flows for each provider.
-6. Bundle and sign the worker runtime; add protocol compatibility checks.
+5. Add explicit install/repair/uninstall flows for each provider, including atomic activation of
+   the embedded native helper.
+6. Add the pinned Node payload, then Developer ID-sign and notarize the helper/runtime/app chain;
+   retain protocol compatibility checks.
 7. Add optional usage adapters only after the decision path is stable.
 8. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
 9. Consider `block` for public use only after the evaluation gates are met.
@@ -378,9 +431,9 @@ Current migration debt to address explicitly:
 
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
 - the browser dashboard is a large combined asset module;
-- macOS/POSIX manifests use a transitional plugin-root launcher with an external Node allowlist;
-  Windows provider-hook execution is unsupported, and no signed native launcher/runtime is
-  installed yet;
+- macOS/POSIX manifests still use a transitional plugin-root shell shim. The macOS shim can prefer
+  a safe fixed per-user helper, but no Node payload or installer creates and activates that
+  integration yet; Windows provider-hook execution remains unsupported;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those
   internal state JSON files.
 

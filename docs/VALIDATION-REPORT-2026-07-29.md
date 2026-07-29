@@ -25,33 +25,37 @@ The current Node.js product path works as a research alpha:
   execution across four and five hook phases respectively, closed semantic events, raw-canary
   exclusion, and temporary-tree cleanup checks on this Mac. Claude explicitly reports provider
   delivery as `not_tested`.
-- macOS/POSIX hooks now use an inner fail-open launcher. After `/bin/sh -p` has started and the
-  launcher has control, it does not search inherited `PATH`; it removes Node and dynamic-loader
-  variables before starting the Node worker, rejects symlink or group/world-writable worker/runtime
-  files on macOS, and uses only explicit or bounded external Node candidates. This does not
-  sanitize provider or initial interpreter/loader startup. Claude adds no command-evaluation
-  shell, but provider-to-`/bin/sh` startup remains trusted. Codex additionally evaluates its
-  command through inherited `$SHELL -lc`, which is outside AWF's boundary and direct tests. The
-  launcher emits one fixed, raw-free stderr warning for each event it cannot check; this
-  pre-runtime warning is not rate-limited. Windows provider-hook execution is unsupported.
+- macOS/POSIX hooks use a plugin-root fail-open shim. On macOS it identifies exactly one provider
+  from the matching provider-root environment and prefers a safe helper at the fixed per-user
+  `integration-v1/awf-hook` location. Missing or unsafe helper state, or ambiguous provider
+  attribution, preserves the explicit/bounded external Node alpha path. The native helper
+  validates a canonical activation, versioned runtime, plugin worker, and closed environment;
+  streams stdin without reading or copying it; and owns a 2.25-second process-group deadline with
+  signal forwarding and TERM-to-KILL cleanup. After native handoff no layer retries stdin or
+  appends a second JSON value. This does not sanitize provider or initial interpreter/loader
+  startup. Claude adds no command-evaluation shell, but provider-to-`/bin/sh` startup remains
+  trusted. Codex additionally evaluates its command through inherited `$SHELL -lc`, which is
+  outside AWF's boundary and direct tests. Windows provider-hook execution is unsupported.
 - Multi-session semantic recording, audit, export, and replay work independently of the live UI.
-- The directly tested inner-launcher hook path is below the proposed 100 ms p95 target on this
-  machine; provider dispatch and Codex's outer login shell are not included.
+- Both the external-Node and native-helper inner-launcher paths are below the proposed 100 ms p95
+  target on this machine; provider dispatch and Codex's outer login shell are not included.
 - Warm live-dashboard status remains below the proposed 100 ms p95 target with its complete
   4,096-event bounded generation, and the historical trace cursor remains below the target at
   15,000 events on this machine.
 - Exported trace scans found none of the synthetic prompt, command, session, or workspace markers.
 - A macOS 13+ SwiftUI/AppKit developer-preview target now builds from source without signing. It
   contains a menu bar, restricted local `WKWebView`, transparent floating `NSPanel`, app-owned
-  dashboard supervisor, and closed Swift readiness/status decoders.
-- The native `AWFTests` target passes 39/39 with no skips, including inherited-`PATH` rejection,
-  bounded Finder-style NVM discovery, an actual launch of the worker copied into the built app,
-  and a validated loopback status fetch.
+  dashboard supervisor, closed Swift readiness/status decoders, and an embedded hardened-runtime
+  `awf-hook` target under `Contents/Helpers`.
+- The native `AWFTests` target passes 52/52 with no skips. Native-hook coverage includes exact
+  Codex/Claude attribution, canonical activation and unsafe counterexamples, closed environment,
+  direct stdin streaming, device/inode revalidation, timeout orphan removal, signal forwarding,
+  and no second response after child handoff.
 
 It is not yet a distributable macOS application:
 
-- the source build has no Developer ID signature, notarization ticket, DMG, bundled Node runtime,
-  update path, start-at-login service, or one-click integration manager;
+- the source build has no Developer ID signature, notarization ticket, DMG, pinned Node payload,
+  activation installer, update path, start-at-login service, or one-click integration manager;
 - the current PR head passes the configured GitHub Node matrix, dashboard benchmark jobs, and
   native build/unit job, but the UI target is excluded and the local UI runner did not materialize
   its worker;
@@ -67,8 +71,11 @@ It is not yet a distributable macOS application:
 - Swift 6.3.3
 - Node.js 22.22.3
 - npm 10.9.8
-- directly tested inner macOS/POSIX launcher:
+- directly tested portable launcher:
   `/bin/sh -p scripts/hook-launcher.sh <plugin-root>` with an explicit Node runtime
+- directly tested native launcher:
+  the same shell shim, a temporary fixed per-user activation, the embedded `awf-hook`, a cloned
+  Node runtime, and the real plugin worker
 
 Claude's exec-form hook adds no command-evaluation shell. Provider and initial
 interpreter/loader startup remain outside the launcher's post-start scrubbing boundary. Codex
@@ -95,20 +102,21 @@ evidence rather than provider trust or live-delivery evidence.
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 58 JavaScript files and 46 JSON files |
-| `npm test` | Pass: 266/266 |
+| `npm run check` | Pass: 59 JavaScript files and 46 JSON files |
+| `npm test` | Pass: 270/270 |
 | `npm run acceptance:codex` | Pass in 405 ms: isolated marketplace add/install/list, four installed-launcher events, closed event, privacy scan, and cleanup |
 | `npm run acceptance:claude` | Pass in 2.973 s: isolated local add/install/list/details, five installed-launcher events, closed event, privacy scan, and cleanup; provider delivery `not_tested` |
 | `claude plugin validate . --strict` | Pass: root marketplace, plugin metadata, and five registered Claude hook phases |
-| `npm pack --dry-run --json` | Pass: 111 files; portable plugin/CLI, both manifests, hook launcher, Claude marketplace, provider acceptance runners, delivery fixtures, and docs included; the GitHub-only `macos/` source is intentionally excluded |
-| Unsigned `xcodebuild ... build-for-testing` | Pass locally: Debug app and test bundles, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
-| Native `AWFTests` | Pass locally: 39/39, 0 failures, 0 skips |
+| `npm pack --dry-run --json` | Pass: 112 files; portable plugin/CLI, both manifests, hook launcher, native benchmark, Claude marketplace, provider acceptance runners, delivery fixtures, and docs included; the GitHub-only `macos/` source is intentionally excluded |
+| Unsigned `xcodebuild ... build-for-testing` | Pass locally: Debug app and test bundles, embedded executable `Contents/Helpers/awf-hook`, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
+| Native `AWFTests` | Pass locally: 52/52, 0 failures, 0 skips |
+| Native hook benchmark | Pass: unsigned Release helper, 100 measured calls, 10 warmups, 64.431 ms p95 against the 100 ms product target |
 | Native UI runner | Inconclusive: worker did not materialize or launch AWF in 74 seconds; interrupted |
 
 The repository lives under an iCloud-managed `Documents` directory on this validation Mac. One
 unchanged image was present only as a `dataless` placeholder, so the first in-place Xcode resource
 copy waited for materialization. Repeating the build from a temporary local staging tree populated
-with the exact checked-in Git blob completed, and the latest native unit run passed 39/39. This
+with the exact checked-in Git blob completed, and the latest native unit run passed 52/52. This
 was treated as a local storage/materialization condition rather than a source-build failure.
 
 An earlier live-consumer snapshot recorded 95.24% line, 83.24% branch, and 94.82% function
@@ -265,7 +273,7 @@ client refuses redirects and the non-persistent `WKWebView` refuses navigation a
 tokenized loopback URL. Swift does not receive raw prompts, hook objects, commands, outputs,
 transcripts, source content, or detector state.
 
-The local `AWFTests` target passed all 39 tests without skips. The runtime tests also cover the
+The local `AWFTests` target passed all 52 tests without skips. The runtime tests also cover the
 minimum/newer Node boundary, old and malformed versions, inherited-`PATH` rejection, strict
 bounded NVM discovery, and a bounded unresponsive probe. The
 end-to-end native test resolved the worker from the built app resources,
@@ -275,6 +283,13 @@ stays yellow for retained or expired activity and turns green only when the prov
 contains fresh `observed` evidence; high warnings still take precedence as red/critical. A direct
 temporary-data launch also showed 0.0% CPU at a ten-second snapshot with about 96 MB RSS while its
 Node child used about 55 MB; normal application quit removed both processes.
+
+The app build also embeds the separate Swift `awf-hook` executable. Its black-box tests copied the
+actual built helper into private temporary integration trees and exercised both provider values,
+raw-canary streaming, canonical and malformed activation, unsafe and symlinked files/directories,
+runtime and worker identity replacement, child failure, a real 2.25-second timeout with a
+descendant process, and external SIGTERM forwarding. The timeout and signal cases reaped the
+direct child and removed the owned process group without adding a second stdout response.
 
 The native worker environment forwards only audited locale/configuration keys and builds a closed
 executable search path for the ChatGPT-bundled Codex CLI, Homebrew, `/usr/local`, and safe
@@ -347,7 +362,21 @@ explicit semantic trace:
 
 | Samples | Warmups | p50 | p95 | p99 | Max |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 100 | 10 | 50.225 ms | 54.614 ms | 57.059 ms | 57.800 ms |
+| 100 | 10 | 51.832 ms | 59.754 ms | 78.814 ms | 144.298 ms |
+
+The new `npm run benchmark:native-hook` gate used the same plugin-root shell shim, the embedded
+Swift helper, a canonical temporary per-user activation, a filesystem clone of Node.js 22.22.3,
+and the real AWF worker. It deliberately supplied the wrong inherited platform and verified that
+all 110 live events retained the validated `codex` provider:
+
+| Helper build | Samples | Warmups | p50 | p95 | p99 | Max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Unsigned Debug | 100 | 10 | 67.031 ms | 76.988 ms | 92.387 ms | 100.443 ms |
+| Unsigned Release | 100 | 10 | 62.795 ms | 64.431 ms | 66.094 ms | 66.130 ms |
+
+The 100 ms product p95 gate passed. This measurement includes the inner provider shell shim,
+native helper process, real Node process, detector/state work, semantic trace, and live spool. It
+does not include Codex/Claude dispatch or Codex's outer login-shell evaluation.
 
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
@@ -465,10 +494,10 @@ smoke tests in the actual provider applications.
 ### Partially resolved P1 — No distributable native macOS product
 
 The source preview now implements the SwiftUI lifecycle, menu-bar status, restricted `WKWebView`,
-app-owned dashboard launch, and true transparent sentinel. It remains a no-go for public
-distribution because it still needs an installed Node.js runtime and has no start-at-login service,
-signed nested runtime, Developer ID artifact, notarization, DMG, integration manager, update path,
-or completed native acceptance matrix.
+app-owned dashboard launch, true transparent sentinel, and a hardened native-hook target. It
+remains a no-go for public distribution because no pinned Node payload or activation installer
+ships, and it has no start-at-login service, Developer ID artifact, notarization, DMG, integration
+manager, update path, or completed native acceptance matrix.
 
 ### P1 — No exact token accounting
 
@@ -532,7 +561,8 @@ audit, and a one-second retention-only maintenance loop. It never takes the publ
    smoke tests.
 10. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
    implemented; native UI acceptance remains pending.
-11. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
+11. Add a pinned Node payload and atomic install/repair/rollback/uninstall ownership tracking for
+    the embedded helper and versioned activation.
 12. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
 13. Add optional actual-usage adapters and run the observe-only evaluation corpus.
 

@@ -8,14 +8,16 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
-- Route macOS/POSIX provider hooks through a fail-open launcher that never searches inherited
-  `PATH` after it starts, rejects symlink or group/world-writable worker/runtime files on macOS,
-  and uses a bounded external Node allowlist for the alpha. After the interpreter starts, the
-  launcher removes Node and loader-related variables before spawning the worker. Provider and
-  initial interpreter/loader startup remain trusted; Codex has the additional inherited
-  `$SHELL -lc` boundary. The launcher emits one fixed, raw-free stderr warning for every event it
-  cannot check; this pre-runtime warning is not rate-limited. Windows provider-hook execution
-  remains unsupported.
+- Keep the Codex and Claude manifests on their plugin-root shell shims. On macOS the shim now
+  identifies exactly one provider from its matching provider-root environment and prefers a safe
+  fixed per-user `integration-v1/awf-hook`; a missing or unsafe helper, or an ambiguous provider
+  match, preserves the bounded external Node alpha fallback. Once invoked, the helper validates
+  activation and any failure fails open without retrying the same stdin through Node or appending
+  a second JSON response. After startup, both paths exclude
+  inherited `PATH` and Node/loader injection variables from the worker. Provider and initial
+  interpreter/loader startup remain trusted; Codex has the additional inherited `$SHELL -lc`
+  boundary. The launcher emits one fixed, raw-free stderr warning for an unchecked event.
+  Windows provider-hook execution remains unsupported.
 - Add best-effort `LiveEventV1` publication for every supported hook, independent of explicit
   recording.
 - Add a private, concurrent-writer-safe live spool with hard 4,096-event/8 MiB ceilings and a
@@ -90,9 +92,14 @@
 - Add an unsigned macOS 13+ developer-preview Xcode project with SwiftUI/AppKit menu-bar lifecycle,
   a non-persistent restricted `WKWebView`, app-owned loopback dashboard supervision, English/Korean
   localization, and a transparent floating `NSPanel` sentinel.
+- Add a separate hardened-runtime Swift `awf-hook` target and embed it with `CodeSignOnCopy` under
+  `Contents/Helpers`. The helper validates a canonical, path-free activation record, a versioned
+  per-user runtime, the plugin-root worker, and a closed child environment. It streams raw stdin
+  directly, applies a 2.25-second child deadline with process-group cleanup, and preserves the
+  no-retry/no-second-JSON boundary after handoff.
 - Bundle the reviewed `assets`, `bin`, and `src` trees into the developer-preview app while retaining
-  an explicit installed-Node.js requirement; no signed or notarized distribution artifact is
-  claimed.
+  an explicit installed-Node.js requirement. No Node payload, installation/activation UI,
+  Developer ID signature, notarization, or public-beta runtime is claimed.
 - Add native unit and UI test targets and an unsigned macOS pull-request build/unit job. UI
   automation, Developer ID signing, notarization, and clean-machine acceptance remain release
   gates.
@@ -104,4 +111,4 @@
   recent observed provider activity before it turns green.
 - Remove inherited `PATH` lookup from the native Node locator. Prefer an explicit override, then
   Volta, a strict 64-entry NVM scan, and fixed standard paths, while retaining the bounded Node 18+
-  version probe. The local native unit/integration target passes 39/39 tests with no skips.
+  version probe.

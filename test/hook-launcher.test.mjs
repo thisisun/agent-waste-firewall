@@ -33,6 +33,17 @@ function makeExecutable(file, source) {
   fs.writeFileSync(file, source, { mode: 0o700 });
 }
 
+function nativeLauncherPath(home) {
+  return path.join(
+    home,
+    "Library",
+    "Application Support",
+    "io.github.thisisun.agent-waste-firewall",
+    "integration-v1",
+    "awf-hook",
+  );
+}
+
 function invoke(pluginRoot, { input = "", env = {} } = {}) {
   return spawnSync("/bin/sh", ["-p", launcher, pluginRoot], {
     encoding: "utf8",
@@ -134,6 +145,175 @@ test("streams stdin with a spaced plugin root and explicit runtime", (context) =
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, input);
   assert.equal(fs.existsSync(inheritedMarker), false);
+});
+
+test("prefers the fixed native helper and streams stdin unchanged", (context) => {
+  if (process.platform !== "darwin") return;
+  const pluginRoot = makeTemporaryPlugin(context);
+  const home = path.join(pluginRoot, "native-home");
+  const nativeLauncher = nativeLauncherPath(home);
+  const portableNode = path.join(pluginRoot, "portable-node");
+  const portableMarker = path.join(pluginRoot, "portable-used");
+  makeExecutable(
+    nativeLauncher,
+    [
+      "#!/bin/sh",
+      'test "$#" -eq 7 || exit 70',
+      'test "$1" = hook || exit 71',
+      'test "$2" = --protocol || exit 72',
+      'test "$3" = 1 || exit 73',
+      'test "$4" = --provider || exit 74',
+      'test "$5" = "$AWF_EXPECTED_PROVIDER" || exit 75',
+      'test "$6" = --plugin-root || exit 76',
+      'test "$7" = "$AWF_EXPECTED_PLUGIN_ROOT" || exit 77',
+      "exec /bin/cat",
+      "",
+    ].join("\n"),
+  );
+  makeExecutable(
+    portableNode,
+    `#!/bin/sh\n/usr/bin/touch "${portableMarker}"\nexit 76\n`,
+  );
+  const input = '{"event":"native-stream"}\n';
+
+  for (const provider of ["codex", "claude"]) {
+    const providerRoot = provider === "codex"
+      ? { PLUGIN_ROOT: pluginRoot }
+      : { CLAUDE_PLUGIN_ROOT: pluginRoot };
+    const result = invoke(pluginRoot, {
+      input,
+      env: {
+        HOME: home,
+        AWF_EXPECTED_PLUGIN_ROOT: pluginRoot,
+        AWF_EXPECTED_PROVIDER: provider,
+        AWF_NODE_PATH: portableNode,
+        PATH: path.join(pluginRoot, "untrusted"),
+        ...providerRoot,
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, input);
+    assert.equal(result.stderr, "");
+  }
+  assert.equal(fs.existsSync(portableMarker), false);
+});
+
+test("unsafe native helper preserves the portable fallback", (context) => {
+  if (process.platform !== "darwin") return;
+  const pluginRoot = makeTemporaryPlugin(context);
+  const home = path.join(pluginRoot, "native-home");
+  const nativeLauncher = nativeLauncherPath(home);
+  const nativeMarker = path.join(pluginRoot, "native-used");
+  const portableNode = path.join(pluginRoot, "portable-node");
+  makeExecutable(
+    nativeLauncher,
+    `#!/bin/sh\n/usr/bin/touch "${nativeMarker}"\nexit 70\n`,
+  );
+  fs.chmodSync(nativeLauncher, 0o720);
+  makeExecutable(portableNode, "#!/bin/sh\nexec /bin/cat\n");
+  const input = '{"event":"unsafe-native-counterexample"}\n';
+
+  const result = invoke(pluginRoot, {
+    input,
+    env: {
+      HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+      AWF_NODE_PATH: portableNode,
+      PATH: path.join(pluginRoot, "untrusted"),
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, input);
+  assert.equal(fs.existsSync(nativeMarker), false);
+
+  fs.chmodSync(nativeLauncher, 0o700);
+  fs.chmodSync(path.dirname(nativeLauncher), 0o720);
+  const unsafeDirectoryResult = invoke(pluginRoot, {
+    input,
+    env: {
+      HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+      AWF_NODE_PATH: portableNode,
+      PATH: path.join(pluginRoot, "untrusted"),
+    },
+  });
+  assert.equal(
+    unsafeDirectoryResult.status,
+    0,
+    unsafeDirectoryResult.stderr,
+  );
+  assert.equal(unsafeDirectoryResult.stdout, input);
+  assert.equal(fs.existsSync(nativeMarker), false);
+});
+
+test("never retries through Node after native handoff", (context) => {
+  if (process.platform !== "darwin") return;
+  const pluginRoot = makeTemporaryPlugin(context);
+  const home = path.join(pluginRoot, "native-home");
+  const nativeLauncher = nativeLauncherPath(home);
+  const portableNode = path.join(pluginRoot, "portable-node");
+  const portableMarker = path.join(pluginRoot, "portable-used");
+  makeExecutable(
+    nativeLauncher,
+    [
+      "#!/bin/sh",
+      "/usr/bin/printf '%s\\n' '{\"native\":\"fixed\"}'",
+      "exit 73",
+      "",
+    ].join("\n"),
+  );
+  makeExecutable(
+    portableNode,
+    `#!/bin/sh\n/usr/bin/touch "${portableMarker}"\nexit 74\n`,
+  );
+
+  const result = invoke(pluginRoot, {
+    input: '{"secret":"native-handoff"}\n',
+    env: {
+      HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+      AWF_NODE_PATH: portableNode,
+      PATH: path.join(pluginRoot, "untrusted"),
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.deepEqual(JSON.parse(result.stdout), { native: "fixed" });
+  assert.equal(result.stdout.trim().split("\n").length, 1);
+  assert.match(result.stderr, /failed open/u);
+  assert.equal(result.stderr.includes("native-handoff"), false);
+  assert.equal(fs.existsSync(portableMarker), false);
+});
+
+test("ignores the fixed native helper outside macOS", (context) => {
+  if (process.platform === "darwin") return;
+  const pluginRoot = makeTemporaryPlugin(context);
+  const home = path.join(pluginRoot, "native-home");
+  const nativeLauncher = nativeLauncherPath(home);
+  const nativeMarker = path.join(pluginRoot, "native-used");
+  const portableNode = path.join(pluginRoot, "portable-node");
+  makeExecutable(
+    nativeLauncher,
+    `#!/bin/sh\n/usr/bin/touch "${nativeMarker}"\nexit 70\n`,
+  );
+  makeExecutable(portableNode, "#!/bin/sh\nexec /bin/cat\n");
+  const input = '{"event":"portable-off-macos"}\n';
+
+  const result = invoke(pluginRoot, {
+    input,
+    env: {
+      HOME: home,
+      PLUGIN_ROOT: pluginRoot,
+      AWF_NODE_PATH: portableNode,
+      PATH: path.join(pluginRoot, "untrusted"),
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, input);
+  assert.equal(fs.existsSync(nativeMarker), false);
 });
 
 test("scrubs worker injection environment after launcher startup", (context) => {
@@ -549,6 +729,8 @@ test("runs the real hook worker through an absolute runtime override", (context)
     }),
     env: {
       ...process.env,
+      HOME: path.join(dataDir, "isolated-home"),
+      PLUGIN_ROOT: root,
       AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
       AGENT_WASTE_FIREWALL_PLATFORM: "codex",
       AWF_NODE_PATH: process.execPath,
@@ -609,9 +791,16 @@ test("launcher source scrubs before fail-open and avoids PATH/input reads", () =
   const source = fs.readFileSync(launcher, "utf8");
   const loaderScrub = source.indexOf("unset DYLD_INSERT_LIBRARIES");
   const pluginRootValidation = source.indexOf("plugin_root=${1-}");
+  const nativeDispatch = source.indexOf(
+    'native_launcher="$native_integration_root/awf-hook"',
+  );
+  const portableFallback = source.indexOf('case "${AWF_NODE_PATH-}"');
   assert.notEqual(loaderScrub, -1);
   assert.notEqual(pluginRootValidation, -1);
+  assert.notEqual(nativeDispatch, -1);
+  assert.notEqual(portableFallback, -1);
   assert.equal(loaderScrub < pluginRootValidation, true);
+  assert.equal(nativeDispatch < portableFallback, true);
   assert.equal(source.includes("$PATH"), false);
   assert.equal(source.includes("${PATH"), false);
   assert.doesNotMatch(source, /\bcommand\s+-v\b/u);

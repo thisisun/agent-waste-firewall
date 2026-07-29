@@ -8,12 +8,12 @@ Claude Code.
 > Status: `0.1.0` research alpha with an unsigned native macOS developer preview. The live hook
 > path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, raw-free pseudonymous
 > recorder, and replay are implemented and tested. The source tree now also contains a
-> SwiftUI/AppKit menu-bar shell,
-> local `WKWebView`, and transparent floating sentinel. It is not a signed, notarized, or packaged
-> release and still needs an installed Node.js 18+ runtime. Exact token accounting, one-command
-> installation, user-owned provider trust/live delivery, and a bundled signed runtime remain
-> pending. Isolated Codex and Claude marketplace/install/launcher/privacy acceptance gates now
-> pass.
+> SwiftUI/AppKit menu-bar shell, local `WKWebView`, transparent floating sentinel, and a
+> hardened-runtime Swift hook helper embedded at `Contents/Helpers/awf-hook`. The helper is
+> structured for later signing, but the current app is not a Developer ID-signed, notarized, or
+> packaged release. It still needs an installed Node.js 18+ runtime because no Node payload or
+> activation installer ships yet. Exact token accounting, one-command installation, user-owned
+> provider trust/live delivery, and a bundled signed runtime remain pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -31,16 +31,23 @@ AWF is not another token dashboard. It answers three earlier questions:
   result, or a new test/build result. Re-running the same passing test does not reset the counter.
 - Uses separate Codex and Claude Code hook registrations so Claude's `PostToolUseFailure` is
   observed without sending an unsupported event to Codex.
-- Routes macOS hooks through a small inner fail-open launcher. After `/bin/sh -p` has started and
-  the launcher has control, it never searches inherited `PATH`; it removes Node and dynamic-loader
-  variables before starting the Node worker, rejects symlink or group/world-writable hook/runtime
-  files, and supports bounded NVM discovery. This does not sanitize provider or initial
-  interpreter/loader startup. Claude's exec-form hook adds no command-evaluation shell, but its
-  provider-to-`/bin/sh` startup remains a trusted boundary. Codex additionally passes through the
-  provider's inherited `$SHELL -lc`, which is also outside AWF's boundary. See the
+- Keeps the public Codex and Claude manifests on the same plugin-root `/bin/sh -p` shim. On macOS,
+  after that shim starts and identifies exactly one provider from the matching provider-root
+  environment, it first checks the fixed per-user
+  `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
+  A safe installed helper is preferred; an absent or unsafe helper, or ambiguous provider match,
+  preserves the bounded external-Node alpha fallback. Once invoked, the helper validates its
+  activation; an invalid activation fails open without retrying through Node or appending a second
+  JSON response. Neither path searches inherited `PATH`
+  after the shim has control, and both exclude Node and dynamic-loader injection variables from the
+  worker. This does not sanitize provider or initial interpreter/loader startup. Claude's
+  exec-form hook adds no command-evaluation shell, but its provider-to-`/bin/sh` startup remains a
+  trusted boundary. Codex additionally passes through the provider's inherited `$SHELL -lc`,
+  which is also outside AWF's boundary. See the
   [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
-  This is an external-runtime alpha bridge, not the signed runtime design for public distribution.
-  Windows provider-hook execution is currently unsupported.
+  The native handoff is a native-runtime foundation, not a public-beta runtime: the Node payload,
+  activation installer/UI, Developer ID signature, and notarization remain pending. Windows
+  provider-hook execution is currently unsupported.
 - Ignores user-interrupted tool calls and distinguishes identical failures from changing failures.
 - Stores hashes and detector evidence locally. Raw prompts, tool inputs, and tool outputs are not
   persisted.
@@ -68,8 +75,9 @@ AWF is not another token dashboard. It answers three earlier questions:
   and favicon move from green to yellow to red; repeated high-severity signals also turn the
   compact background deep red.
 - Provides an unsigned macOS 13+ source preview with a `MenuBarExtra`, app-owned loopback dashboard
-  process, non-persistent `WKWebView`, and transparent floating `NSPanel`. The native sentinel maps
-  only validated status enums and counters to clear, review, danger, critical, degraded, or offline
+  process, non-persistent `WKWebView`, transparent floating `NSPanel`, and a separate hardened
+  Swift `awf-hook` target embedded under `Contents/Helpers`. The native sentinel maps only
+  validated status enums and counters to clear, review, danger, critical, degraded, or offline
   presentation.
 - Validates the dashboard readiness line and status response against exact closed Swift contracts,
   refuses redirects and non-exact loopback navigation, and keeps the Node detector independent of
@@ -85,9 +93,10 @@ AWF is not another token dashboard. It answers three earlier questions:
 
 Requirements: Node.js 18 or newer.
 
-The external-runtime alpha intentionally rejects symlink runtime candidates. A Homebrew or Volta
-symlink by itself therefore fails open; launch the provider with `AWF_NODE_PATH` set to the
-underlying absolute regular Node executable, or use a regular NVM version binary.
+When the fixed native helper is not selected, the external-runtime alpha intentionally rejects
+symlink runtime candidates. A Homebrew or Volta symlink by itself therefore fails open; launch the
+provider with `AWF_NODE_PATH` set to the underlying absolute regular Node executable, or use a
+regular NVM version binary.
 
 ```bash
 npm test
@@ -190,8 +199,10 @@ web alpha also mirrors the state in the tab title and favicon.
 The GitHub checkout includes an Xcode project for macOS 13 or newer. The published npm artifact is
 the portable plugin/CLI package and intentionally excludes `macos/`; clone the GitHub repository
 before running the native commands below. The Xcode project bundles the reviewed `bin/`, `src/`,
-and `assets/` directories into the app resources, but intentionally uses an installed Node.js 18+
-executable during this developer-preview phase. Build the source without signing:
+and `assets/` directories into the app resources and embeds the hardened Swift `awf-hook`
+executable under `Contents/Helpers`. It does not bundle `awf-node`, so the dashboard still uses an
+installed Node.js 18+ executable during this developer-preview phase. Build the source without
+signing:
 
 ```bash
 AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
@@ -207,11 +218,41 @@ xcodebuild \
   build
 ```
 
-This is a compile/package check, not a distributable artifact. It has no Developer ID signature,
-notarization ticket, DMG, installer, or bundled Node runtime. For interactive development, open
-`macos/AWF.xcodeproj` in Xcode and use local signing. The app does not search inherited `PATH`.
-It checks an absolute `AWF_NODE_PATH`, bounded Volta/NVM locations, and fixed standard Node
-locations with a bounded Node 18+ probe.
+This is a compile/package check, not a distributable artifact. Hardened-runtime build settings and
+`CodeSignOnCopy` make the helper ready for the later release-signing pipeline; they do not give
+this source build a Developer ID signature. There is no notarization ticket, DMG, installer,
+activation UI, or bundled Node runtime. For interactive development, open
+`macos/AWF.xcodeproj` in Xcode and use local signing. The dashboard process does not search
+inherited `PATH`. It checks an absolute `AWF_NODE_PATH`, bounded Volta/NVM locations, and fixed
+standard Node locations with a bounded Node 18+ probe.
+
+The dormant native hook path is activated only by an app-owned installation at the fixed per-user
+location. `activation.json` is a canonical UTF-8 record with exactly this shape and a trailing
+newline:
+
+```json
+{"v":1,"releaseId":"rel_0123456789abcdef0123456789abcdef","workerProtocol":1}
+```
+
+The `releaseId` is `rel_` plus 32 lowercase hexadecimal characters. It selects only this
+side-by-side layout; the manifest never stores an executable path:
+
+```text
+integration-v1/
+  awf-hook
+  activation.json
+  versions/
+    rel_<32 lowercase hex>/
+      awf-node
+```
+
+The helper validates the activation, version directory, runtime, and plugin-root worker before
+launch. It streams the provider's raw stdin directly to the worker without reading or persisting
+it, supplies only a closed worker environment, and gives the child process group a 2.25-second
+deadline with bounded termination, forced cleanup, and reaping. A failure before child handoff
+returns the fixed raw-free fail-open response. After handoff, no launcher retries the event or
+adds another JSON value because the child may already have consumed stdin or emitted a response.
+The repository does not yet install this layout for users.
 
 An explicit research trace is still opt-in and is the only source that can be audited, exported,
 or replayed. To capture one workspace:
@@ -446,13 +487,15 @@ See [core architecture](docs/ARCHITECTURE.md),
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
-- The native app is currently an unsigned source build. It depends on an installed Node.js 18+
-  executable and has not completed UI acceptance, Developer ID signing, notarization, clean-machine
-  installation, upgrade, or uninstall testing.
-- The inner macOS launcher no longer searches inherited `PATH` after it starts, but it still uses
-  an external Node runtime. Provider-spawned initial interpreter/loader startup, plus Codex's outer
-  login shell, remain trusted boundaries. The signed native launcher, versioned bundled runtime,
-  atomic repair/rollback, and clean-machine gate remain public-beta blockers.
+- The native app is currently an unsigned source build. It embeds a hardened Swift hook helper but
+  no Node payload, activation installer, or integration-management UI. The dashboard therefore
+  still depends on an installed Node.js 18+ executable, and Developer ID signing, notarization,
+  clean-machine installation, upgrade, and uninstall testing remain incomplete.
+- The plugin-root macOS shim no longer searches inherited `PATH` after it starts. It can hand off
+  to a safe fixed per-user helper, which then validates activation; otherwise it retains the
+  external Node alpha fallback. Provider-spawned initial interpreter/loader startup, plus Codex's
+  outer login shell, remain trusted boundaries. A pinned runtime payload, atomic
+  activation/repair/rollback, and the clean-machine gate remain public-beta blockers.
 - Windows provider-hook execution is currently unsupported; the shipped hook launch path is
   macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
