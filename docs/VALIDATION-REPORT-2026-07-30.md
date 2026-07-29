@@ -42,7 +42,7 @@ tool output, transcript, source-file content, or provider hook JSON was persiste
 | Native `AWFTests` | Pass: 90/90; 0 failures, skips, or expected failures |
 | `git diff --check` | Pass |
 | Plist/localization lint | Pass: runtime entitlement, Info.plist, English, and Korean resources |
-| `npm pack --dry-run --json` | Pass: 118 entries; 2,852,415-byte package; 3,581,492 bytes unpacked |
+| `npm pack --dry-run --json` | Pass: 118 entries; exact native-source/runtime exclusion checks passed |
 
 The npm package contains only the runtime manifest and entitlement from `runtime/`. It does not
 contain `macos/`, `awf-node`, a prepared payload, or generated app artifacts.
@@ -163,5 +163,7 @@ tests passed, but interactive UI automation remains a separate release gate.
 | True `SIGKILL`/power-loss crash harness | Open |
 | Start at login, updater, and distribution container | Open |
 
-GitHub Actions must be evaluated again on the pushed candidate. Local results must not be described
-as passing CI before the corresponding commit completes its remote checks.
+The pushed candidate completed all seven configured GitHub Actions jobs: Node 18/22 tests on
+macOS and Linux, dashboard benchmarks on macOS and Linux, and the native macOS job. This configured
+set does not replace the open release gates above, and every later head must complete its own
+remote checks before being described as passing CI.
