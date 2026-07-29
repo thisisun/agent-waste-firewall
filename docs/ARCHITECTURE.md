@@ -82,6 +82,13 @@ from overwriting each other. State is bounded:
 - incidents are capped;
 - each file keeps only recent content hashes.
 
+Expired session-state cleanup is best-effort maintenance, not part of the detector decision.
+Normal hook activity schedules at most one full retention sweep per hour through a private,
+canonical maintenance marker and a non-blocking cross-process lock. A corrupt marker, busy lock,
+clock skew, or cleanup failure cannot prevent the current state mutation. The scheduled sweep is
+still `O(session files)` when due, so moving it to an independent bounded janitor remains a
+performance follow-up. `agent-waste-firewall purge` remains the explicit immediate cleanup path.
+
 The transcript format is not a dependency because coding-agent transcript files are not stable
 public interfaces.
 

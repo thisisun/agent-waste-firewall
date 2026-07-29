@@ -61,6 +61,11 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
   );
   assert.ok(
     report.checks.some(
+      (check) => check.check === "src/hook-stdio.mjs" && check.ok === true,
+    ),
+  );
+  assert.ok(
+    report.checks.some(
       (check) =>
         check.check === "bounded live spool is ready" && check.ok === true,
     ),
@@ -429,7 +434,7 @@ test("integration verify emits a closed JSON cancellation result", async (contex
   assert.equal(fs.existsSync(dataDir), false);
 });
 
-test("dashboard emits one closed JSON readiness record", async (context) => {
+test("dashboard without a parent lifeline survives closed stdin", async (context) => {
   const dataDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "awf-dashboard-ready-"),
   );
@@ -523,6 +528,94 @@ test("dashboard emits one closed JSON readiness record", async (context) => {
   await new Promise((resolve) => child.once("close", resolve));
   assert.equal(stdout.trim(), firstLine);
   assert.equal(stderr, "");
+});
+
+test("dashboard parent lifeline closes the loopback server on stdin EOF", async (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-lifeline-"),
+  );
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const child = spawn(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "dashboard",
+      "--port",
+      "0",
+      "--json",
+    ],
+    {
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+        AGENT_WASTE_FIREWALL_PARENT_LIFELINE: "1",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (!child.killed) child.kill("SIGKILL");
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const firstLine = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Dashboard readiness timed out.")),
+      5000,
+    );
+    const inspect = () => {
+      const newline = stdout.indexOf("\n");
+      if (newline < 0) return;
+      clearTimeout(timeout);
+      resolve(stdout.slice(0, newline));
+    };
+    child.stdout.on("data", inspect);
+    inspect();
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (!stdout.includes("\n")) {
+        clearTimeout(timeout);
+        reject(
+          new Error(
+            `Dashboard exited before readiness (${code}): ${stderr}`,
+          ),
+        );
+      }
+    });
+  });
+  const ready = JSON.parse(firstLine);
+  const endpoint =
+    `http://127.0.0.1:${ready.port}/api/status?token=${ready.token}`;
+  const response = await fetch(endpoint);
+  assert.equal(response.status, 200);
+
+  child.stdin.end();
+  const exitCode = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error("Dashboard ignored parent lifeline EOF."));
+    }, 5000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+
+  assert.equal(exitCode, 0, stderr);
+  assert.equal(stdout.trim(), firstLine);
+  assert.equal(stderr, "");
+  await assert.rejects(fetch(endpoint));
 });
 
 test("replays a JSONL incident fixture", () => {

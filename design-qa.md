@@ -8,10 +8,10 @@ The supplied frames define the visual language rather than the dashboard layout:
 fluorescent green, white paper/grid and near-black green surfaces, editorial
 monospace typography, square rules, and a green statue as the observing motif.
 
-- `/Users/un/Downloads/IMG_3131.PNG`
-- `/Users/un/Downloads/IMG_3132.PNG`
-- `/Users/un/Downloads/IMG_3133.PNG`
-- `/Users/un/Downloads/IMG_3135.PNG`
+- `IMG_3131.PNG` (user-supplied external reference)
+- `IMG_3132.PNG` (user-supplied external reference)
+- `IMG_3133.PNG` (user-supplied external reference)
+- `IMG_3135.PNG` (user-supplied external reference)
 - `assets/guardian-mark.webp`
 - `assets/sentinel-eye-clear.webp`
 - `assets/sentinel-eye-warn.webp`
@@ -29,14 +29,12 @@ The external references are not checked into the repository.
   `docs/design-evidence/awf-summary-dashboard-dark.png`
 - Korean secondary, dark:
   `docs/design-evidence/awf-summary-dashboard-dark-ko.png`
-- Light source/implementation comparison:
-  `/tmp/awf-summary-light-comparison-final.png`
-- Dark source/implementation comparison:
-  `/tmp/awf-summary-dark-comparison-final.png`
-- Narrow graph before/after comparison:
-  `/tmp/awf-graph-before-after.png`
+- Ephemeral light comparison: `awf-summary-light-comparison-final.png`
+- Ephemeral dark comparison: `awf-summary-dark-comparison-final.png`
+- Ephemeral narrow graph comparison: `awf-graph-before-after.png`
 
-The accepted desktop captures use a 1180 × 760 CSS viewport and a 1180 × 760
+The ephemeral comparison boards are not distributed. The accepted desktop captures use a
+1180 × 760 CSS viewport and a 1180 × 760
 normalized raster. The narrow side-panel check uses a 509 × 987 CSS viewport.
 Comparison boards place an 1180 × 760 contained reference beside the matching
 1180 × 760 implementation in a 2360 × 760 raster.

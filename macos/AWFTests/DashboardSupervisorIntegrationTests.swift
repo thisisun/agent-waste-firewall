@@ -131,6 +131,41 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
         XCTAssertFalse(processExists(childPID))
     }
 
+    func testStoppingSilentReadinessCancelsThePendingReader() async throws {
+        let fixture = try makeSupervisorFixture(
+            launcherBody: "exec /bin/sleep 30"
+        )
+        let supervisor = DashboardSupervisor()
+        defer {
+            supervisor.stop()
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let launchTask = Task { @MainActor in
+            try await supervisor.start(
+                configuration: fixture.configuration
+            )
+        }
+        let reachedReadinessWait = await waitUntilRunning(supervisor)
+        XCTAssertTrue(reachedReadinessWait)
+        let childPID = try XCTUnwrap(supervisor.processIdentifier)
+        let stoppedAt = Date()
+
+        supervisor.stop()
+        do {
+            _ = try await launchTask.value
+            XCTFail("A stopped dashboard launch must not return an endpoint.")
+        } catch is CancellationError {
+            // Expected: stop resolves the pending reader without its timeout.
+        } catch {
+            XCTFail("Expected CancellationError, received \(error).")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(stoppedAt), 1)
+        XCTAssertFalse(supervisor.isRunning)
+        XCTAssertFalse(processExists(childPID))
+    }
+
     func testStopEscalatesWhenChildIgnoresTermination() async throws {
         let markerName = "termination-ignored"
         let fixture = try makeSupervisorFixture(
@@ -173,6 +208,54 @@ final class DashboardSupervisorIntegrationTests: XCTestCase {
 
         XCTAssertFalse(supervisor.isRunning)
         XCTAssertFalse(processExists(childPID))
+    }
+
+    func testParentLifelineClosesAReadyChildBeforeSendingSignals() async throws {
+        let markerName = "lifeline-closed"
+        let signalMarkerName = "termination-received"
+        let fixture = try makeSupervisorFixture(
+            launcherBody: """
+            test "${AGENT_WASTE_FIREWALL_PARENT_LIFELINE-}" = "1" ||
+                exit 70
+            trap ': > "$AGENT_WASTE_FIREWALL_SIGNAL_MARKER"; exit 71' TERM
+            /usr/bin/printf '%s\\n' \
+                '{"v":1,"kind":"dashboard_ready","host":"127.0.0.1","port":4319,"token":"000000000000000000000000000000000000000000000000","source":"live"}'
+            /bin/cat >/dev/null
+            : > "$AGENT_WASTE_FIREWALL_TEST_MARKER"
+            """,
+            environment: [
+                "AGENT_WASTE_FIREWALL_TEST_MARKER": markerName,
+                "AGENT_WASTE_FIREWALL_SIGNAL_MARKER": signalMarkerName,
+            ]
+        )
+        let supervisor = DashboardSupervisor()
+        defer {
+            supervisor.stop()
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+
+        let endpoint = try await supervisor.start(
+            configuration: fixture.configuration
+        )
+        XCTAssertEqual(endpoint.source, .live)
+        let childPID = try XCTUnwrap(supervisor.processIdentifier)
+        let marker = fixture.directory.appendingPathComponent(markerName)
+        let signalMarker = fixture.directory.appendingPathComponent(
+            signalMarkerName
+        )
+
+        supervisor.stop()
+
+        XCTAssertFalse(supervisor.isRunning)
+        XCTAssertFalse(processExists(childPID))
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: marker.path),
+            "The child must observe parent EOF before signal escalation."
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: signalMarker.path),
+            "A responsive lifeline child must exit before SIGTERM."
+        )
     }
 
     func testStartsActualNodeDashboardAndReadsClosedEmptyStatus() async throws {

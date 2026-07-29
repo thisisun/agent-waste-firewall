@@ -102,6 +102,10 @@ private final class ReadyLineReader: @unchecked Sendable {
         deliver(completion)
     }
 
+    func cancel() {
+        resolve(.failure(CancellationError()))
+    }
+
     private func finishLocked(
         _ result: Result<Data, any Error>
     ) -> Completion? {
@@ -138,7 +142,9 @@ final class DashboardSupervisor {
     nonisolated private static let stopPollInterval: TimeInterval = 0.005
 
     private var process: Process?
+    private var inputPipe: Pipe?
     private var outputPipe: Pipe?
+    private var readinessReader: ReadyLineReader?
 
     var isRunning: Bool {
         process?.isRunning == true
@@ -160,6 +166,7 @@ final class DashboardSupervisor {
         }
 
         let process = Process()
+        let inputPipe = Pipe()
         let outputPipe = Pipe()
         process.executableURL = configuration.nodeURL
         process.arguments = [
@@ -170,7 +177,7 @@ final class DashboardSupervisor {
             "--json",
         ]
         process.currentDirectoryURL = configuration.workingDirectory
-        process.standardInput = FileHandle.nullDevice
+        process.standardInput = inputPipe
         process.standardOutput = outputPipe
         process.standardError = FileHandle.nullDevice
         var workerEnvironment = Self.workerEnvironment(
@@ -180,21 +187,35 @@ final class DashboardSupervisor {
         where key.hasPrefix("AGENT_WASTE_FIREWALL_") {
             workerEnvironment[key] = value
         }
+        workerEnvironment[
+            "AGENT_WASTE_FIREWALL_PARENT_LIFELINE"
+        ] = "1"
         process.environment = workerEnvironment
 
         do {
             try process.run()
         } catch {
+            try? inputPipe.fileHandleForReading.close()
+            try? inputPipe.fileHandleForWriting.close()
             try? outputPipe.fileHandleForReading.close()
             try? outputPipe.fileHandleForWriting.close()
             throw DashboardLaunchFailure.launchFailed
         }
+        try? inputPipe.fileHandleForReading.close()
         try? outputPipe.fileHandleForWriting.close()
         self.process = process
+        self.inputPipe = inputPipe
         self.outputPipe = outputPipe
+        let readinessReader = ReadyLineReader()
+        self.readinessReader = readinessReader
+        defer {
+            if self.readinessReader === readinessReader {
+                self.readinessReader = nil
+            }
+        }
 
         do {
-            let data = try await Self.readReadyLine(
+            let data = try await readinessReader.read(
                 from: outputPipe.fileHandleForReading
             )
             guard !Task.isCancelled, self.process === process else {
@@ -229,10 +250,22 @@ final class DashboardSupervisor {
             return
         }
         let processToStop = process
+        let readerToCancel = readinessReader
+        let inputPipeToClose = inputPipe
         let pipeToClose = outputPipe
+        readinessReader = nil
+        inputPipe = nil
         outputPipe = nil
 
+        readerToCancel?.cancel()
         pipeToClose?.fileHandleForReading.readabilityHandler = nil
+        try? inputPipeToClose?.fileHandleForWriting.close()
+        if processToStop?.isRunning == true {
+            Self.waitForExit(
+                processToStop,
+                timeout: Self.gracefulStopTimeout
+            )
+        }
         if processToStop?.isRunning == true {
             processToStop?.terminate()
             Self.waitForExit(
@@ -247,6 +280,7 @@ final class DashboardSupervisor {
                 timeout: Self.forcedStopTimeout
             )
         }
+        try? inputPipeToClose?.fileHandleForReading.close()
         try? pipeToClose?.fileHandleForReading.close()
         try? pipeToClose?.fileHandleForWriting.close()
         if process === processToStop, processToStop?.isRunning != true {
@@ -265,12 +299,6 @@ final class DashboardSupervisor {
         while process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: stopPollInterval)
         }
-    }
-
-    private nonisolated static func readReadyLine(
-        from handle: FileHandle
-    ) async throws -> Data {
-        try await ReadyLineReader().read(from: handle)
     }
 
     private nonisolated static func discardFutureOutput(

@@ -5,6 +5,10 @@ import { hash, sleepSync } from "./utils.mjs";
 
 const SCHEMA_VERSION = 4;
 const STALE_LOCK_MS = 10_000;
+const MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+const MAINTENANCE_CLOCK_SKEW_MS = 60 * 1000;
+const MAINTENANCE_LOCK_STALE_MS = 10 * 60 * 1000;
+const MAINTENANCE_MARKER_MAX_BYTES = 128;
 const PLATFORMS = new Set(["unknown", "codex", "claude"]);
 const LOCALES = new Set(["en", "ko"]);
 const PROMPT_SEVERITIES = new Set(["none", "low", "medium", "high"]);
@@ -374,10 +378,23 @@ function emptyPurgeResult() {
 }
 
 export class StateStore {
-  constructor({ root, clock = () => new Date() }) {
+  constructor({
+    root,
+    clock = () => new Date(),
+    maintenanceClock = () => Date.now(),
+  }) {
     this.root = path.resolve(root);
     this.clock = clock;
+    this.maintenanceClock = maintenanceClock;
     this.sessionsDir = path.join(this.root, "sessions");
+    this.maintenanceMarkerPath = path.join(
+      this.root,
+      "state-maintenance-v1.json",
+    );
+    this.maintenanceLockPath = path.join(
+      this.root,
+      "state-maintenance-v1.lock",
+    );
   }
 
   now() {
@@ -526,13 +543,120 @@ export class StateStore {
     return this.purge({ retentionDays, excludedKey, now });
   }
 
+  retentionMaintenanceDue(now) {
+    try {
+      const stat = fs.lstatSync(this.maintenanceMarkerPath);
+      const uid = typeof process.getuid === "function" ? process.getuid() : null;
+      if (
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        stat.size > MAINTENANCE_MARKER_MAX_BYTES ||
+        (uid !== null && stat.uid !== uid) ||
+        (stat.mode & 0o077) !== 0
+      ) {
+        return true;
+      }
+      const source = fs.readFileSync(this.maintenanceMarkerPath, "utf8");
+      const marker = JSON.parse(source);
+      const canonical =
+        `{"v":1,"nextSweepAt":${marker?.nextSweepAt}}\n`;
+      return !(
+        source === canonical &&
+        Number.isSafeInteger(marker.nextSweepAt) &&
+        marker.nextSweepAt > now &&
+        marker.nextSweepAt <=
+          now + MAINTENANCE_INTERVAL_MS + MAINTENANCE_CLOCK_SKEW_MS
+      );
+    } catch {
+      return true;
+    }
+  }
+
+  acquireMaintenanceLock(now) {
+    fs.mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    try {
+      fs.mkdirSync(this.maintenanceLockPath, { mode: 0o700 });
+      return true;
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        return false;
+      }
+      try {
+        const age = now - fs.statSync(this.maintenanceLockPath).mtimeMs;
+        if (age > MAINTENANCE_LOCK_STALE_MS) {
+          fs.rmdirSync(this.maintenanceLockPath);
+          fs.mkdirSync(this.maintenanceLockPath, { mode: 0o700 });
+          return true;
+        }
+      } catch {
+        // A racing janitor may have released or replaced the lock.
+      }
+      return false;
+    }
+  }
+
+  writeMaintenanceMarker(nextSweepAt) {
+    const temporary =
+      `${this.maintenanceMarkerPath}.${process.pid}.` +
+      `${Math.random().toString(16).slice(2)}.tmp`;
+    try {
+      fs.writeFileSync(
+        temporary,
+        `{"v":1,"nextSweepAt":${nextSweepAt}}\n`,
+        {
+          mode: 0o600,
+          flag: "wx",
+        },
+      );
+      fs.renameSync(temporary, this.maintenanceMarkerPath);
+      fs.chmodSync(this.maintenanceMarkerPath, 0o600);
+    } catch (error) {
+      try {
+        fs.unlinkSync(temporary);
+      } catch {
+        // The failed write may not have created its private temporary file.
+      }
+      throw error;
+    }
+  }
+
+  maintainRetention(retentionDays, excludedKey) {
+    const now = Math.trunc(Number(this.maintenanceClock()));
+    if (!Number.isSafeInteger(now) || now < 0) {
+      return;
+    }
+    if (!this.retentionMaintenanceDue(now)) {
+      return;
+    }
+    if (!this.acquireMaintenanceLock(now)) {
+      return;
+    }
+    try {
+      if (!this.retentionMaintenanceDue(now)) {
+        return;
+      }
+      this.purgeExpired(retentionDays, excludedKey, now);
+      this.writeMaintenanceMarker(now + MAINTENANCE_INTERVAL_MS);
+    } finally {
+      try {
+        fs.rmdirSync(this.maintenanceLockPath);
+      } catch {
+        // A stale-lock cleanup in another process is harmless.
+      }
+    }
+  }
+
   purgeAll(now = Date.now()) {
     return this.purge({ all: true, now });
   }
 
   mutate(payload, config, mutator) {
     const key = this.keyFor(payload);
-    this.purgeExpired(config.retentionDays, key);
+    try {
+      this.maintainRetention(config.retentionDays, key);
+    } catch {
+      // Optional retention cleanup must never disable the guard decision.
+    }
     const lockPath = this.acquireLock(key);
     try {
       const stateFile = this.statePath(key);

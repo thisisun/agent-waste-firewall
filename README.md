@@ -421,9 +421,11 @@ guarantee of anonymity: a distinctive event sequence can still reveal facts abou
 Hashes are pseudonymous detector identifiers, not encryption. Protect the local data directory as
 you would other developer-tool metadata.
 
-Session state older than 30 days is deleted during normal hook activity. Change this with
+Session state older than 30 days is deleted by best-effort maintenance during normal hook activity,
+with at most one full retention sweep per hour. Cleanup failure or a busy maintenance lock never
+blocks the current detector decision. Change the period with
 `AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
-`agent-waste-firewall purge`, or all inactive session state with
+`agent-waste-firewall purge`, or remove all inactive session state with
 `agent-waste-firewall purge --all`. The same command removes expired or inactive semantic traces
 and orphan trace keys; `purge --all` also removes the live spool. Active hook state and an active
 trace are skipped and reported; run the command again after the coding-agent session stops. Live

@@ -133,6 +133,52 @@ test("matches an active recording from a workspace subdirectory", () => {
   assert.equal(active.workspaceRoot, context.workspace);
 });
 
+test("reuses one active trace context without crossing a stop or switch", () => {
+  const context = fixture();
+  const first = context.traceStore.start({
+    workspace: context.workspace,
+    label: "first-context",
+  });
+  const active = context.traceStore.activeFor(context.workspace);
+  const payload = {
+    session_id: "private-context-session",
+    cwd: context.workspace,
+    hook_event_name: "UserPromptSubmit",
+    prompt: "Fix src/example.ts and verify with npm test.",
+  };
+  const result = handleHook(payload, {
+    env: context.env,
+    config: context.config,
+    store: context.stateStore,
+  });
+
+  const event = context.traceStore.appendHook(
+    payload,
+    result,
+    context.config,
+    active,
+  );
+  assert.equal(event.seq, 1);
+  assert.equal(context.traceStore.status(first.traceId).eventCount, 1);
+
+  context.traceStore.stop();
+  const second = context.traceStore.start({
+    workspace: context.workspace,
+    label: "second-context",
+  });
+  assert.equal(
+    context.traceStore.appendHook(
+      payload,
+      result,
+      context.config,
+      active,
+    ),
+    null,
+  );
+  assert.equal(context.traceStore.status(first.traceId).eventCount, 1);
+  assert.equal(context.traceStore.status(second.traceId).eventCount, 0);
+});
+
 test("uses unlinkable aliases for separate traces", () => {
   const context = fixture();
   const rawPrompt = "Fix src/example.ts and verify with pnpm test.";

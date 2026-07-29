@@ -87,11 +87,6 @@ secure_directory() {
   return 0
 }
 
-worker="$plugin_root/scripts/hook.mjs"
-if ! secure_regular_file "$worker" false; then
-  fail_open
-fi
-
 run_native_with() {
   native_candidate=$1
   native_provider=$2
@@ -138,6 +133,11 @@ if [ "$awf_darwin" = true ]; then
       fi
       ;;
   esac
+fi
+
+worker="$plugin_root/scripts/hook.mjs"
+if ! secure_regular_file "$worker" false; then
+  fail_open
 fi
 
 run_with() {

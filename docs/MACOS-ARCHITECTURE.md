@@ -149,12 +149,18 @@ The worker must:
 - make no network request;
 - make no model call;
 - have no install-time npm dependencies;
+- reject an input envelope larger than 1 MiB in memory and fail open without persisting it;
 - emit only provider JSON on standard output;
 - keep diagnostics on standard error and rate-limit in-worker warnings; the pre-runtime launcher
   instead emits one fixed, raw-free warning for each event it cannot check;
 - fail open on crashes, timeouts, corrupt optional telemetry, or an unavailable UI;
 - use per-session locking so concurrent agents do not overwrite each other;
 - finish under 100 ms at p95 on supported Macs, measured from fixture-driven integration tests.
+
+The dedicated stdio entry imports trace persistence only when an active trace marker exists. It
+reuses the single validated active-trace lookup for the append, while the append lock rechecks that
+the recording was not stopped or switched before publication. Optional telemetry and retention
+maintenance never control whether the detector response is produced.
 
 Blocking belongs only in `PreToolUse` or a deliberately configured prompt preflight, and only when
 evidence is high confidence. Post-tool warnings cannot undo a side effect.
@@ -228,6 +234,14 @@ The application owns presentation and lifecycle, not detection:
 Use `WKWebsiteDataStore.nonPersistent()` for the embedded dashboard so its random loopback token is
 not retained in normal WebKit history, cookies, or website data. Navigation must remain on the
 expected loopback origin and must not open arbitrary URLs inside the app.
+
+For an app-owned dashboard, the supervisor gives the child a private stdin lifeline and sets a
+fixed opt-in environment flag. EOF means the owning app has exited, so the loopback server closes
+without relying on a stale PID check. An ordinary stop closes that lifeline first, cancels any
+pending readiness read, waits briefly for graceful exit, then escalates through `SIGTERM` and
+`SIGKILL` with bounded waits. The flag is absent for standalone CLI dashboards, which must not
+exit merely because stdin is closed. A true owner-`SIGKILL`/power-loss harness and process-group
+handling for an unresponsive descendant tree remain release work.
 
 Visual state is a pure projection of the semantic stream:
 

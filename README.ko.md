@@ -246,6 +246,10 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 
 로컬 탐지 상태에도 작업공간 이름, 파일명·경로, provider 도구명은 남기지 않습니다.
 프롬프트·호출·결과·파일·작업공간은 세션 범위의 키 기반 별칭으로만 연결합니다.
+30일이 지난 세션 상태는 정상 훅 활동 중 최대 한 시간에 한 번 실행되는 best-effort
+유지보수로 정리합니다. 정리 오류나 사용 중인 유지보수 lock은 현재 탐지 결정을 막지
+않습니다. 즉시 정리하려면 `agent-waste-firewall purge`를 사용하고, 보존 기간은
+`AGENT_WASTE_FIREWALL_RETENTION_DAYS`로 바꿀 수 있습니다.
 
 상시 `LiveEventV1` 저장소에는 허용된 열거형, 제한된 숫자·시간값, 규칙·문제 ID와
 `session_<HMAC>` 별칭만 들어갑니다. 원문, 경로, 파일명, 벽시계 시각, provider 원본 ID는
