@@ -147,7 +147,7 @@ decoding, navigation rejection, and the sentinel state table. A direct temporary
 remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
 and removed its Node child on normal quit.
 
-The UI target compiles, but the local Xcode 26.6 UI runner did not materialize its worker or launch
-the target app during a 74-second attempt, so that run was interrupted and is not counted as a UI
-pass or product failure. The new GitHub unit-test job has not yet reported on this branch, and no
-signed clean-machine launch matrix has run.
+The GitHub unsigned build/unit job passes. The UI target compiles, but the local Xcode 26.6 UI
+runner did not materialize its worker or launch the target app during a 74-second attempt, so that
+run was interrupted and is not counted as a UI pass or product failure. No signed clean-machine
+launch matrix has run.

@@ -31,8 +31,8 @@ It is not yet a distributable macOS application:
 
 - the source build has no Developer ID signature, notarization ticket, DMG, bundled Node runtime,
   update path, start-at-login service, or one-click integration manager;
-- the native GitHub unit job has not reported on this branch, the UI target is excluded from that
-  job, and the local UI runner did not materialize its worker;
+- the native GitHub build/unit job passes, but the UI target is excluded from that job and the
+  local UI runner did not materialize its worker;
 - exact token usage is not measured;
 - actual Codex and Claude installations have not yet passed the provider acceptance matrix.
 
@@ -159,8 +159,8 @@ application quit removed both processes.
 
 This is still not native release acceptance. The UI target compiled, but Xcode remained at
 “waiting for workers to materialize” for 74 seconds and never launched AWF, so the attempt was
-interrupted rather than reported as passed or failed. The first GitHub result, interactive UI
-automation on a working host, signed launch, notarization, and clean-machine testing remain
+interrupted rather than reported as passed or failed. The GitHub build/unit job passed; interactive
+UI automation on a working host, signed launch, notarization, and clean-machine testing remain
 pending.
 
 ## Privacy checks

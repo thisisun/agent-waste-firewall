@@ -86,9 +86,9 @@ Goal: make the current live monitor feel like a real Mac app without changing en
 Implementation status: an unsigned macOS 13+ developer preview is source-buildable. It implements
 the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboard subprocess, and
 transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The local
-`AWFTests` target passes 33/33 with no skips, including the real bundled worker. M1 acceptance is
-still incomplete because GitHub unit results, a successfully materialized UI run, signed launch,
-and clean-machine tests remain pending.
+`AWFTests` target passes 33/33 with no skips, including the real bundled worker, and the GitHub
+unsigned build/unit job passes. M1 acceptance is still incomplete because a successfully
+materialized UI run, signed launch, and clean-machine tests remain pending.
 
 Deliverables:
 
