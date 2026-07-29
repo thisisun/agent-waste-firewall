@@ -25,14 +25,15 @@ The current Node.js product path works as a research alpha:
   execution across four and five hook phases respectively, closed semantic events, raw-canary
   exclusion, and temporary-tree cleanup checks on this Mac. Claude explicitly reports provider
   delivery as `not_tested`.
-- macOS/POSIX hooks now use an inner fail-open launcher. Once it starts under `/bin/sh -p`, it does
-  not search inherited `PATH`; it scrubs Node/dynamic-loader injection variables, rejects symlink
-  or group/world-writable worker/runtime files on macOS, and uses only explicit or bounded external
-  Node candidates. Claude reaches it through exec-form arguments. Codex first evaluates its command
-  string through inherited `$SHELL -lc`, so user/provider login-shell startup remains a trusted
-  boundary outside AWF's scrubbing and direct tests. The launcher emits one fixed, raw-free stderr
-  warning for each event it cannot check; this pre-runtime warning is not rate-limited. Windows
-  provider-hook execution is unsupported.
+- macOS/POSIX hooks now use an inner fail-open launcher. After `/bin/sh -p` has started and the
+  launcher has control, it does not search inherited `PATH`; it removes Node and dynamic-loader
+  variables before starting the Node worker, rejects symlink or group/world-writable worker/runtime
+  files on macOS, and uses only explicit or bounded external Node candidates. This does not
+  sanitize provider or initial interpreter/loader startup. Claude adds no command-evaluation
+  shell, but provider-to-`/bin/sh` startup remains trusted. Codex additionally evaluates its
+  command through inherited `$SHELL -lc`, which is outside AWF's boundary and direct tests. The
+  launcher emits one fixed, raw-free stderr warning for each event it cannot check; this
+  pre-runtime warning is not rate-limited. Windows provider-hook execution is unsupported.
 - Multi-session semantic recording, audit, export, and replay work independently of the live UI.
 - The directly tested inner-launcher hook path is below the proposed 100 ms p95 target on this
   machine; provider dispatch and Codex's outer login shell are not included.
@@ -69,10 +70,12 @@ It is not yet a distributable macOS application:
 - directly tested inner macOS/POSIX launcher:
   `/bin/sh -p scripts/hook-launcher.sh <plugin-root>` with an explicit Node runtime
 
-Claude's exec-form hook invokes that inner command directly. Codex command hooks first pass through
-inherited `$SHELL -lc`, as shown in the
+Claude's exec-form hook adds no command-evaluation shell. Provider and initial
+interpreter/loader startup remain outside the launcher's post-start scrubbing boundary. Codex
+command hooks additionally pass through inherited `$SHELL -lc`, as shown in the
 [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
-No provider-driven hostile login-shell startup was tested.
+No hostile provider-to-interpreter startup was tested for either provider; no hostile Codex
+login-shell startup was tested.
 
 Codex CLI was present (`0.146.0-alpha.3.1`). The new closed status probe normalizes its public
 version to `0.146.0` and reports `needs_install`. The shell-inherited CLI probe reports Claude Code
@@ -321,8 +324,9 @@ matrix required before beta.
 Each current sample directly launched the inner `/bin/sh -p` launcher and a fresh real Node hook
 process. It therefore includes the inner shell, launcher validation/environment scrubbing, both
 process creations, stdin JSON parsing, detector/state work, atomic local writes, stdout JSON, and
-process exit. It excludes provider dispatch and Codex's outer inherited `$SHELL -lc`. Warmups were
-excluded.
+process exit. It includes clean initial shell startup and post-start scrubbing before Node. It does
+not test hostile loader variables during initial interpreter startup, provider dispatch, or Codex's
+outer `$SHELL -lc`. Warmups were excluded.
 
 The earlier three-condition snapshot was:
 

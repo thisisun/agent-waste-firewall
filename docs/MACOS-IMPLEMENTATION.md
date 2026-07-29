@@ -93,15 +93,16 @@ Provider install/repair/uninstall, start at login, signed helper lifecycle, and 
 remain pending.
 
 Provider manifests now use a plugin-root inner launcher on macOS/POSIX. It streams stdin without
-reading or persisting it. Once it starts under `/bin/sh -p`, it does not search inherited `PATH`;
-it strips Node and dynamic-loader injection variables, rejects symlink and group/world-writable
-worker/runtime files on macOS, and uses only explicit or bounded external Node candidates. Claude
-reaches this launcher through exec-form arguments. Codex first evaluates its command string through
-inherited `$SHELL -lc`, so user/provider login-shell startup remains a trusted boundary outside
-AWF's scrubbing and direct tests. The launcher emits one fixed, raw-free stderr warning for each
-event that it cannot check; this pre-runtime warning is not rate-limited. Windows provider-hook
-execution is unsupported. This is an alpha transition layer; no Node runtime or native hook
-launcher is bundled or installed yet.
+reading or persisting it. After `/bin/sh -p` has started and the launcher has control, it does not
+search inherited `PATH`; it removes Node and dynamic-loader variables before starting the Node
+worker, rejects symlink and group/world-writable worker/runtime files on macOS, and uses only
+explicit or bounded external Node candidates. This does not sanitize provider or initial
+interpreter/loader startup. Claude's exec-form hook adds no command-evaluation shell, but its
+provider-to-`/bin/sh` startup remains a trusted boundary. Codex additionally evaluates its command
+through inherited `$SHELL -lc`, which is outside AWF's boundary and direct tests. The launcher
+emits one fixed, raw-free stderr warning for each event that it cannot check; this pre-runtime
+warning is not rate-limited. Windows provider-hook execution is unsupported. This is an alpha
+transition layer; no Node runtime or native hook launcher is bundled or installed yet.
 
 ## Native privacy boundary
 

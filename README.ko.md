@@ -23,12 +23,13 @@ SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
 사용자 소유 provider의 훅 신뢰·실시간 전달과 업그레이드·제거 검증은 아직 남아 있습니다.
-macOS 훅은 작은 내부 fail-open launcher를 사용합니다. 이 launcher가 시작된 뒤에는
-상속된 `PATH`를 검색하지 않고 `/bin/sh -p`로 실행되며, Node·동적 loader 주입 환경과
-symlink·그룹/전체 사용자 쓰기가 가능한 worker/runtime을 거부합니다. Claude의 exec 형식은
-내부 launcher를 직접 실행하지만, Codex command 훅은 먼저 provider가 상속한
-`$SHELL -lc`를 거칩니다. 따라서 사용자/provider의 login shell 시작 과정은 정리됐다고
-주장하지 않는 신뢰 경계입니다. 자세한 근거는
+macOS 훅은 작은 내부 fail-open launcher를 사용합니다. `/bin/sh -p`가 시작되어 launcher가
+제어권을 얻은 뒤에는 상속된 `PATH`를 검색하지 않고 worker/runtime을 검증하며, Node
+worker 실행 전에 Node·동적 loader 관련 환경 변수를 제거합니다. 이 처리는 provider나
+최초 interpreter/loader 시작 단계를 정리하지 못합니다. Claude의 exec 형식은 별도의
+명령 평가 shell을 추가하지 않지만 provider가 `/bin/sh`를 시작하는 경로는 신뢰
+경계입니다. Codex는 여기에 provider가 상속한 `$SHELL -lc` 평가 단계가 추가되며, 이
+경로도 AWF 경계 밖입니다. 자세한 근거는
 [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164)를
 참고하세요. 검사하지 못한 이벤트마다 원문 없는 고정 경고를 stderr에 출력하며, 이 사전
 runtime 경고는 rate-limit하지 않습니다. 이것은 외부 Node를 사용하는 알파 전환층이며,
@@ -130,9 +131,9 @@ Codex는 prompt/pre-tool/post-tool과 관찰 전용 `Stop`을, Claude는 여기�
 
 이 검사는 사용자 전역 설정을 바꾸거나 Codex `/hooks` 신뢰를 승인하지 않으며, Claude의
 `disableAllHooks`나 조직 정책을 우회하지 않습니다. 실제 provider가 훅을 전달했다는
-주장도 하지 않습니다. 내부 launcher를 직접 실행하므로 Codex의 바깥 login shell 시작
-과정도 검증하지 않습니다. 사용자 소유 실제 세션 전달은 별도의 읽기 전용
-`integration verify`로 확인합니다.
+주장도 하지 않습니다. 내부 launcher를 직접 실행하므로 provider 전달, 적대적인 최초
+interpreter/loader 시작, Codex의 바깥 login shell도 검증하지 않습니다. 사용자 소유
+실제 세션 전달은 별도의 읽기 전용 `integration verify`로 확인합니다.
 
 플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
 `LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 로컬
@@ -307,8 +308,9 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
   네이티브 UI 승인, Developer ID 서명, 공증, 깨끗한 Mac 설치·업그레이드·제거 검증은
   아직 완료되지 않았습니다.
 - 내부 macOS launcher는 시작된 뒤 상속 `PATH`를 검색하지 않지만 아직 외부 Node를
-  사용하고, Codex의 바깥 login shell 시작 과정은 신뢰 경계로 남습니다. 서명된 native
-  launcher, 버전별 내장 runtime, 원자적 복구·rollback은 public beta 차단 조건입니다.
+  사용합니다. provider가 시작하는 최초 interpreter/loader와 Codex의 바깥 login
+  shell은 신뢰 경계로 남습니다. 서명된 native launcher, 버전별 내장 runtime, 원자적
+  복구·rollback은 public beta 차단 조건입니다.
   Windows provider 훅 실행은 현재 지원하지 않으며 배포된 훅 경로는 macOS/POSIX
   우선입니다.
 

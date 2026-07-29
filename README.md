@@ -31,12 +31,13 @@ AWF is not another token dashboard. It answers three earlier questions:
   result, or a new test/build result. Re-running the same passing test does not reset the counter.
 - Uses separate Codex and Claude Code hook registrations so Claude's `PostToolUseFailure` is
   observed without sending an unsupported event to Codex.
-- Routes macOS hooks through a small inner fail-open launcher. Once that launcher starts, it never
-  searches inherited `PATH`; it uses `/bin/sh -p`, strips Node and dynamic-loader injection
-  variables, rejects symlink or group/world-writable hook/runtime files, and supports bounded NVM
-  discovery. Claude's exec-form hook reaches the inner launcher directly. Codex command hooks
-  first pass through the provider's inherited `$SHELL -lc`, so AWF treats user/provider login-shell
-  startup as a trusted boundary rather than claiming to sanitize it. See the
+- Routes macOS hooks through a small inner fail-open launcher. After `/bin/sh -p` has started and
+  the launcher has control, it never searches inherited `PATH`; it removes Node and dynamic-loader
+  variables before starting the Node worker, rejects symlink or group/world-writable hook/runtime
+  files, and supports bounded NVM discovery. This does not sanitize provider or initial
+  interpreter/loader startup. Claude's exec-form hook adds no command-evaluation shell, but its
+  provider-to-`/bin/sh` startup remains a trusted boundary. Codex additionally passes through the
+  provider's inherited `$SHELL -lc`, which is also outside AWF's boundary. See the
   [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
   This is an external-runtime alpha bridge, not the signed runtime design for public distribution.
   Windows provider-hook execution is currently unsupported.
@@ -176,8 +177,9 @@ they created. The Claude report fixes `providerDelivery` to `not_tested`.
 
 These gates do not invoke Codex `/hooks`, start a real Claude session, change user configuration,
 approve trust, bypass `disableAllHooks` or managed policy, or prove provider-driven delivery.
-They directly invoke the inner launcher and therefore do not exercise Codex's outer login-shell
-startup. `integration verify` remains the separate read-only witness for a user-owned live session.
+They directly invoke the inner launcher and therefore do not exercise provider dispatch, hostile
+initial interpreter/loader startup, or Codex's outer login shell. `integration verify` remains the
+separate read-only witness for a user-owned live session.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
@@ -448,9 +450,9 @@ See [core architecture](docs/ARCHITECTURE.md),
   executable and has not completed UI acceptance, Developer ID signing, notarization, clean-machine
   installation, upgrade, or uninstall testing.
 - The inner macOS launcher no longer searches inherited `PATH` after it starts, but it still uses
-  an external Node runtime, and Codex's outer login-shell startup remains a trusted boundary. The
-  signed native launcher, versioned bundled runtime, atomic repair/rollback, and clean-machine gate
-  remain public-beta blockers.
+  an external Node runtime. Provider-spawned initial interpreter/loader startup, plus Codex's outer
+  login shell, remain trusted boundaries. The signed native launcher, versioned bundled runtime,
+  atomic repair/rollback, and clean-machine gate remain public-beta blockers.
 - Windows provider-hook execution is currently unsupported; the shipped hook launch path is
   macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.

@@ -67,9 +67,10 @@ flowchart LR
     T --> A["Audit, export, and offline replay"]
 ```
 
-The raw hook payload crosses exactly one trust boundary: agent process to hook worker over standard
-input. It is normalized in memory and is never sent to the macOS app, live event spool, dashboard,
-trace, analytics service, crash reporter, or log.
+The raw hook payload is passed on standard input through the provider-launched command path to the
+hook worker. AWF's launcher does not consume or persist it; the worker normalizes it in memory.
+Provider and shell startup are part of the trusted delivery path, while the macOS app, live event
+spool, dashboard, trace, analytics service, crash reporter, and logs never receive the raw payload.
 
 ## Runtime components
 
@@ -310,14 +311,16 @@ Node for contributors.
 
 The current alpha now routes macOS/POSIX hooks through a plugin-root inner launcher and removes
 inherited `PATH` lookup from both that launcher and the native dashboard locator after they start.
-The inner launcher uses `/bin/sh -p`, scrubs known Node/dynamic-loader injection variables, rejects
-symlink or group/world-writable hook/runtime files on macOS, and falls back only to explicit,
-bounded external Node locations. Claude's exec-form hook reaches it directly. Codex command hooks
-first evaluate the command through inherited `$SHELL -lc`; user/provider login-shell startup is a
-trusted boundary outside AWF's scrubbing, and the direct launcher tests do not cover it. See the
+After `/bin/sh -p` has started and the launcher has control, it removes Node and dynamic-loader
+variables before starting the Node worker, rejects symlink or group/world-writable hook/runtime
+files on macOS, and falls back only to explicit, bounded external Node locations. This does not
+sanitize provider or initial interpreter/loader startup. Claude's exec-form hook adds no
+command-evaluation shell, but its provider-to-`/bin/sh` startup remains trusted. Codex additionally
+evaluates the command through inherited `$SHELL -lc`, which is outside AWF's boundary and direct
+launcher tests. See the
 [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
 This closes an inner-launcher reliability gap; it does not satisfy the bundled-runtime release
-gate or harden the outer Codex shell.
+gate or harden provider/interpreter startup.
 
 The public hook manifest should call a small stable launcher in an app-owned per-user integration
 directory, not an absolute path inside `/Applications/AWF.app`. The app can be moved, and

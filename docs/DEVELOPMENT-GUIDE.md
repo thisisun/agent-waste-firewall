@@ -64,11 +64,12 @@ dashboard paths run Codex and Claude concurrently; each provider's version and p
 share one three-second result budget. Timeout and thrown-error detail collapse to the same closed
 `unknown` state. Dashboard shutdown aborts and kills in-flight default provider children.
 
-Provider hook launch boundaries differ. Claude's exec-form manifest invokes the protected inner
-`/bin/sh -p` launcher directly. Codex first evaluates its command string through inherited
-`$SHELL -lc`; user/provider login-shell startup is therefore a trusted boundary outside AWF's
-environment scrubbing. Direct launcher acceptance and latency benchmarks do not exercise that
-outer Codex shell. See the
+Provider hook launch boundaries differ. Claude execs `/bin/sh -p` without an additional
+command-evaluation shell. Provider and initial interpreter/loader startup remain outside the
+launcher's post-start scrubbing boundary. Codex additionally evaluates its command string through
+inherited `$SHELL -lc`, which is also outside AWF's boundary. Direct launcher acceptance and
+latency benchmarks do not exercise provider dispatch, hostile initial loader state, or that outer
+Codex shell. See the
 [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
 
 ## Milestone plan

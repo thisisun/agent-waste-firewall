@@ -41,6 +41,50 @@ function invoke(pluginRoot, { input = "", env = {} } = {}) {
   });
 }
 
+function invokeWithLoaderEnvironmentAfterShellStartup(
+  pluginRoot,
+  { input = "", env = {} } = {},
+) {
+  const untrustedLibrary = path.join(pluginRoot, "untrusted-library");
+  const command = [
+    "launcher_path=$1",
+    "plugin_root=$2",
+    'export DYLD_INSERT_LIBRARIES="$3"',
+    'export DYLD_LIBRARY_PATH="$4"',
+    'export DYLD_FRAMEWORK_PATH="$5"',
+    'export DYLD_FALLBACK_LIBRARY_PATH="$6"',
+    'export DYLD_FALLBACK_FRAMEWORK_PATH="$7"',
+    'export LD_PRELOAD="$8"',
+    'export LD_LIBRARY_PATH="$9"',
+    'set -- "$plugin_root"',
+    '. "$launcher_path"',
+  ].join("\n");
+
+  return spawnSync(
+    "/bin/sh",
+    [
+      "-p",
+      "-c",
+      command,
+      "awf-loader-environment-test",
+      launcher,
+      pluginRoot,
+      `${untrustedLibrary}.dylib`,
+      `${untrustedLibrary}-dyld`,
+      `${untrustedLibrary}-framework`,
+      `${untrustedLibrary}-fallback`,
+      `${untrustedLibrary}-fallback-framework`,
+      `${untrustedLibrary}.so`,
+      `${untrustedLibrary}-ld`,
+    ],
+    {
+      encoding: "utf8",
+      input,
+      env,
+    },
+  );
+}
+
 function readFilesRecursively(directory) {
   const contents = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -92,15 +136,37 @@ test("streams stdin with a spaced plugin root and explicit runtime", (context) =
   assert.equal(fs.existsSync(inheritedMarker), false);
 });
 
-test("scrubs Node code-injection environment before execution", (context) => {
+test("scrubs worker injection environment after launcher startup", (context) => {
   const pluginRoot = makeTemporaryPlugin(context);
   fs.writeFileSync(
     path.join(pluginRoot, "scripts", "hook.mjs"),
-    'process.stdout.write("{}\\n");\n',
+    [
+      'import fs from "node:fs";',
+      "const forbidden = [",
+      '  "NODE_OPTIONS",',
+      '  "NODE_PATH",',
+      '  "OPENSSL_CONF",',
+      '  "DYLD_INSERT_LIBRARIES",',
+      '  "DYLD_LIBRARY_PATH",',
+      '  "DYLD_FRAMEWORK_PATH",',
+      '  "DYLD_FALLBACK_LIBRARY_PATH",',
+      '  "DYLD_FALLBACK_FRAMEWORK_PATH",',
+      '  "LD_PRELOAD",',
+      '  "LD_LIBRARY_PATH",',
+      "];",
+      "if (forbidden.some((name) => process.env[name] !== undefined)) {",
+      "  process.exit(73);",
+      "}",
+      'fs.writeFileSync(process.env.AWF_WORKER_MARKER, "ok");',
+      'process.stdout.write("{}\\n");',
+      "",
+    ].join("\n"),
     { mode: 0o600 },
   );
   const injectedModule = path.join(pluginRoot, "inject.cjs");
   const injectionMarker = path.join(pluginRoot, "injection-ran");
+  const directWorkerMarker = path.join(pluginRoot, "direct-worker-ran");
+  const loaderWorkerMarker = path.join(pluginRoot, "loader-worker-ran");
   fs.writeFileSync(
     injectedModule,
     [
@@ -111,23 +177,39 @@ test("scrubs Node code-injection environment before execution", (context) => {
     { mode: 0o600 },
   );
 
-  const result = invoke(pluginRoot, {
+  const directResult = invoke(pluginRoot, {
     input: '{"event":"scrub-environment"}\n',
     env: {
       AWF_INJECTION_MARKER: injectionMarker,
       AWF_NODE_PATH: process.execPath,
+      AWF_WORKER_MARKER: directWorkerMarker,
       NODE_OPTIONS: `--require=${injectedModule}`,
       NODE_PATH: pluginRoot,
       OPENSSL_CONF: path.join(pluginRoot, "untrusted-openssl.cnf"),
-      DYLD_INSERT_LIBRARIES: path.join(pluginRoot, "untrusted.dylib"),
-      LD_PRELOAD: path.join(pluginRoot, "untrusted.so"),
       PATH: path.join(pluginRoot, "untrusted"),
     },
   });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), {});
+  assert.equal(directResult.status, 0, directResult.stderr);
+  assert.deepEqual(JSON.parse(directResult.stdout), {});
+  assert.equal(fs.readFileSync(directWorkerMarker, "utf8"), "ok");
   assert.equal(fs.existsSync(injectionMarker), false);
+
+  const loaderResult = invokeWithLoaderEnvironmentAfterShellStartup(
+    pluginRoot,
+    {
+      input: '{"event":"scrub-loader-environment"}\n',
+      env: {
+        AWF_NODE_PATH: process.execPath,
+        AWF_WORKER_MARKER: loaderWorkerMarker,
+        PATH: path.join(pluginRoot, "untrusted"),
+      },
+    },
+  );
+
+  assert.equal(loaderResult.status, 0, loaderResult.stderr);
+  assert.deepEqual(JSON.parse(loaderResult.stdout), {});
+  assert.equal(fs.readFileSync(loaderWorkerMarker, "utf8"), "ok");
 });
 
 test("direct privileged launcher rejects startup and xtrace injection", (context) => {
@@ -523,8 +605,13 @@ test("both provider manifests route through the rooted launcher", () => {
   }
 });
 
-test("launcher source contains no inherited PATH lookup or input reader", () => {
+test("launcher source scrubs before fail-open and avoids PATH/input reads", () => {
   const source = fs.readFileSync(launcher, "utf8");
+  const loaderScrub = source.indexOf("unset DYLD_INSERT_LIBRARIES");
+  const pluginRootValidation = source.indexOf("plugin_root=${1-}");
+  assert.notEqual(loaderScrub, -1);
+  assert.notEqual(pluginRootValidation, -1);
+  assert.equal(loaderScrub < pluginRootValidation, true);
   assert.equal(source.includes("$PATH"), false);
   assert.equal(source.includes("${PATH"), false);
   assert.doesNotMatch(source, /\bcommand\s+-v\b/u);

@@ -3,9 +3,23 @@
 # Keep the provider's stdin attached to the worker. This launcher must never
 # consume, copy, or persist the raw hook envelope.
 #
-# This boundary begins only after the provider starts this file. Codex command
-# hooks currently pass command strings through the user's login shell first;
-# that provider-owned startup path remains a documented trusted boundary.
+# This boundary begins only after the provider-started /bin/sh is running this
+# file. Loader variables can affect that interpreter before these commands run.
+# Codex command hooks also pass command strings through the user's login shell
+# first. Those provider/user startup paths remain documented trusted boundaries.
+
+# Once this file is running, do not pass known injection variables into any
+# external process, including the fail-open warning path and alpha runtime.
+unset NODE_OPTIONS
+unset NODE_PATH
+unset OPENSSL_CONF
+unset DYLD_INSERT_LIBRARIES
+unset DYLD_LIBRARY_PATH
+unset DYLD_FRAMEWORK_PATH
+unset DYLD_FALLBACK_LIBRARY_PATH
+unset DYLD_FALLBACK_FRAMEWORK_PATH
+unset LD_PRELOAD
+unset LD_LIBRARY_PATH
 
 warn_unchecked() {
   /usr/bin/printf '%s\n' \
@@ -23,19 +37,6 @@ case "$plugin_root" in
   /*) ;;
   *) fail_open ;;
 esac
-
-# Do not let provider or shell startup environments inject code into the
-# external alpha runtime before AWF's audited worker starts.
-unset NODE_OPTIONS
-unset NODE_PATH
-unset OPENSSL_CONF
-unset DYLD_INSERT_LIBRARIES
-unset DYLD_LIBRARY_PATH
-unset DYLD_FRAMEWORK_PATH
-unset DYLD_FALLBACK_LIBRARY_PATH
-unset DYLD_FALLBACK_FRAMEWORK_PATH
-unset LD_PRELOAD
-unset LD_LIBRARY_PATH
 
 awf_darwin=false
 if [ -x /usr/bin/uname ] &&

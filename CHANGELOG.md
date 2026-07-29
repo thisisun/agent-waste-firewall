@@ -9,13 +9,13 @@
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
 - Route macOS/POSIX provider hooks through a fail-open launcher that never searches inherited
-  `PATH` after the inner launcher starts, strips Node and dynamic-loader injection variables,
-  rejects symlink or group/world-writable worker/runtime files on macOS, and uses a bounded
-  external Node allowlist for the alpha. Claude uses exec-form arguments for the inner
-  `/bin/sh -p`; Codex first invokes the command through inherited `$SHELL -lc`, which remains a
-  trusted user/provider startup boundary. The launcher emits one fixed, raw-free stderr warning
-  for every event it cannot check; this pre-runtime warning is not rate-limited. Windows
-  provider-hook execution remains unsupported.
+  `PATH` after it starts, rejects symlink or group/world-writable worker/runtime files on macOS,
+  and uses a bounded external Node allowlist for the alpha. After the interpreter starts, the
+  launcher removes Node and loader-related variables before spawning the worker. Provider and
+  initial interpreter/loader startup remain trusted; Codex has the additional inherited
+  `$SHELL -lc` boundary. The launcher emits one fixed, raw-free stderr warning for every event it
+  cannot check; this pre-runtime warning is not rate-limited. Windows provider-hook execution
+  remains unsupported.
 - Add best-effort `LiveEventV1` publication for every supported hook, independent of explicit
   recording.
 - Add a private, concurrent-writer-safe live spool with hard 4,096-event/8 MiB ceilings and a
