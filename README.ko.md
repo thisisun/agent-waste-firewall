@@ -19,8 +19,13 @@ AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실�
 않고, 절감 후보 호출 수와 감지 시점을 보여줍니다.
 SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패널을 포함한 macOS
 개발자 미리보기도 소스에 들어 있습니다. Xcode 앱은 hardened-runtime Swift
-`awf-hook`을 `Contents/Helpers`에 포함하지만, 아직 Node payload나 activation 설치 UI가
-없습니다. 따라서 서명·공증·패키징된 앱이 아니며 설치된 Node.js 18 이상이 필요합니다.
+`awf-hook`을 `Contents/Helpers`에 포함하며, 네이티브 연동 관리 화면과
+설치·업그레이드·복구·rollback·보수적 제거 코어도 구현됐습니다. 릴리스 입력은
+아키텍처별 Node.js `v24.18.0`으로 고정되며 공식 archive, 실행 파일, 전체 라이선스,
+중첩 서명, 정확한 버전과 서명 후 해시를 검증합니다. 다만 저장소에는 생성된 Node
+바이너리를 커밋하지 않으므로 일반 소스 빌드에서는 설치 버튼이 안전하게 비활성화됩니다.
+아직 Developer ID 서명·공증·배포 패키지는 없고, 개발자 미리보기 대시보드는 설치된
+Node.js 18 이상을 사용합니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
 사용자 소유 provider의 훅 신뢰·실시간 전달과 업그레이드·제거 검증은 아직 남아 있습니다.
@@ -38,8 +43,8 @@ Claude의 exec 형식은 별도의 명령 평가 shell을 추가하지 않지만
 단계가 추가되며, 이 경로도 AWF 경계 밖입니다. 자세한 근거는
 [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164)를
 참고하세요. 검사하지 못한 이벤트마다 원문 없는 고정 경고를 stderr에 출력하며, 이 사전
-runtime 경고는 rate-limit하지 않습니다. native handoff 기반은 들어갔지만 Node payload,
-설치·activation, Developer ID 서명과 공증이 완성됐다는 뜻은 아닙니다.
+runtime 경고는 rate-limit하지 않습니다. native handoff와 설치 수명주기는 구현됐지만
+Developer ID 서명·공증과 clean-machine provider 전달 검증이 끝났다는 뜻은 아닙니다.
 대시보드는 별도 녹화 없이 상시 `LiveEventV1` 저장소를 기본으로 읽습니다. 완성된 신규
 의미 이벤트만 증분 검사하고, 30초마다 제한된 현재 세대 전체를 다시 검사합니다. 세대
 교체·재연결 때는 화면 상태를 원자적으로 초기화하며, 같은 작업공간의 여러 가명 세션도
@@ -162,12 +167,13 @@ node bin/agent-waste-firewall.mjs dashboard
 
 ### macOS 개발자 미리보기
 
-macOS 13 이상과 Xcode가 필요합니다. Xcode 프로젝트는 GitHub 체크아웃에 들어 있습니다.
+macOS 13.5 이상과 Xcode가 필요합니다. Xcode 프로젝트는 GitHub 체크아웃에 들어 있습니다.
 공개 npm 배포물은 이식 가능한 플러그인/CLI 패키지이며 `macos/`를 포함하지 않으므로,
 아래 네이티브 명령은 GitHub 저장소를 복제한 뒤 실행해야 합니다. 현재 Xcode 프로젝트는
 검토된 `bin/`, `src/`, `assets/` 폴더와 hardened Swift `awf-hook`을 앱에 포함하지만,
-`awf-node`는 포함하지 않습니다. 대시보드는 시스템에 설치된 Node.js 18 이상을
-사용합니다. 서명하지 않은 소스 빌드는 다음과 같이 확인합니다.
+생성된 `awf-node`는 포함하지 않습니다. 따라서 연동 관리 화면은 봉인된 설치 파일을
+사용할 수 없다고 표시하고 변경 버튼을 비활성화합니다. 대시보드는 시스템에 설치된
+Node.js 18 이상을 사용할 수 있습니다. 서명하지 않은 소스 빌드는 다음과 같이 확인합니다.
 
 ```bash
 AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
@@ -185,7 +191,8 @@ xcodebuild \
 
 이 명령은 컴파일·번들 구성을 확인할 뿐 배포용 앱을 만들지 않습니다. helper는 향후
 서명을 위한 hardened 설정으로 빌드되지만 현재 Developer ID 서명은 없습니다. 공증, DMG,
-설치 프로그램, activation UI, 내장 Node 런타임도 아직 없습니다. 실제 개발 실행은
+내장 Node 런타임은 아직 없습니다. 연동 UI와 로컬 수명주기 관리자는 들어 있지만,
+서명된 런타임과 앱 서명으로 보호되는 해시가 없으면 fail-closed합니다. 실제 개발 실행은
 `macos/AWF.xcodeproj`를 Xcode에서 열고 로컬 서명을 사용합니다. 네이티브 앱은 상속된
 `PATH`를 검색하지 않고 절대 `AWF_NODE_PATH`, 제한된 Volta/NVM 위치, 고정 표준 위치만
 검사한 뒤 Node 18 이상인지 시간 제한 probe로 확인합니다.
@@ -195,8 +202,11 @@ native activation은 정확히
 허용합니다. 이 ID는 `integration-v1/versions/<releaseId>/awf-node`만 선택하며 manifest에
 실행 경로를 저장하지 않습니다. helper는 원문 stdin을 읽거나 저장하지 않고 worker에
 직접 연결하고, 닫힌 환경만 전달하며, child process group에 2.25초 deadline과 제한된
-종료·강제 정리·reap을 적용합니다. 현재 저장소에는 이 구조를 사용자 경로에 설치하거나
-활성화하는 기능이 아직 없습니다.
+종료·강제 정리·reap을 적용합니다. 네이티브 관리자는 전체 번들 파일을 먼저 검증한 뒤
+이 구조를 설치합니다. 같은 volume staging, 프로세스·프로세스 간 잠금, 해시 소유권 장부,
+side-by-side 릴리스, 원자적 활성화, rollback 보존, 중단 뒤 stale 기록 복구와
+잔여물 보존 제거를 적용합니다. 고정 Node 준비와 안쪽부터 서명하는 순서는
+[macOS 런타임 릴리스 봉인 가이드](docs/MACOS-RUNTIME-RELEASE.md)를 참고하세요.
 
 - `observe`: 감지만 기록하고 에이전트 작업에는 개입하지 않음
 - `warn`: 감지 내용을 사용자 화면과 에이전트 문맥에 짧게 전달
@@ -321,14 +331,27 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
   순서 공백과 drop 표시는 `불완전한 관측`으로 보여주지만, 저장장치 자체가 실패하면 그
   표시도 기록하지 못할 수 있습니다.
 - macOS 앱은 hardened Swift helper를 포함하지만 서명하지 않은 소스 미리보기입니다.
-  Node payload와 activation installer/UI가 없어 설치된 Node.js 18 이상에 의존합니다.
-  Developer ID 서명, 공증, 깨끗한 Mac 설치·업그레이드·제거 검증도 아직 완료되지
-  않았습니다.
+  연동 수명주기와 UI는 구현됐지만 저장소에는 생성된 Node 바이너리가 없습니다. 소스
+  미리보기 대시보드는 설치된 Node.js 18 이상에 의존합니다. Developer ID 서명, 공증,
+  clean-machine provider 전달과 배포 패키지는 아직 완료되지 않았습니다.
+- 2026-07-30 로컬 훅 성능은 100 ms 제품 목표를 넘었습니다. 외부 Node 경로의 두 번
+  p95는 129.037 ms와 210.986 ms였고, 봉인된 네이티브 경로는 248.935 ms였습니다.
+  대시보드와 spool gate는 통과했지만 훅 시작 최적화는 공개 베타 차단 조건입니다.
 - macOS shim은 안전한 고정 사용자 helper를 우선 사용할 수 있지만, helper가 없거나
   unsafe하면 외부 Node 알파 경로를 유지합니다. helper 호출 뒤 activation 오류는
   fail-open하고 Node로 재시도하지 않습니다. provider가 시작하는 최초 interpreter/loader와
-  Codex의 바깥 login shell은 신뢰 경계로 남습니다. 고정 runtime payload, 원자적
-  activation·복구·rollback은 public beta 차단 조건입니다.
+  Codex의 바깥 login shell은 신뢰 경계로 남습니다. 구현된 고정 runtime·원자적
+  activation·복구·rollback은 Developer ID·공증 및 clean-machine 종단 검증이 더
+  필요합니다.
+- 관리자는 번들 runtime이 바깥 앱에 봉인된 해시와 일치하는지 확인하고, 설치된
+  helper/runtime 바이트를 private ownership ledger와 대조합니다. 제한 시간 안에 Node
+  버전과 V8 준비 상태를 검사한 뒤 staged runtime을 사전 실행합니다. 릴리스 finalizer는
+  중첩 서명 무결성, hardened runtime, 정확히 하나의 entitlement를 별도로 검사하지만
+  Developer ID 신원과 공증은 여전히 릴리스 gate입니다.
+- x64 입력은 고정됐지만 Intel Mac 실행 검증은 아직 없습니다. 네이티브 UI 자동화,
+  최소 지원 macOS 실행, Developer ID 서명, 공증, Gatekeeper, clean-machine 검증도
+  완료되지 않았습니다. 공개 베타 전에는 원문 없는 고정 helper/worker protocol
+  handshake와 실제 프로세스 강제 종료 기반 crash 복구 테스트도 추가해야 합니다.
   Windows provider 훅 실행은 현재 지원하지 않으며 배포된 훅 경로는 macOS/POSIX
   우선입니다.
 
@@ -336,9 +359,10 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), macOS 제품 구조는
 [docs/MACOS-ARCHITECTURE.md](docs/MACOS-ARCHITECTURE.md), 현재 구현 상태는
 [docs/MACOS-IMPLEMENTATION.md](docs/MACOS-IMPLEMENTATION.md), 단계별 개발 가이드는
-[docs/DEVELOPMENT-GUIDE.md](docs/DEVELOPMENT-GUIDE.md), GitHub 경쟁·재사용 조사는
+[docs/DEVELOPMENT-GUIDE.md](docs/DEVELOPMENT-GUIDE.md), 런타임 봉인 절차는
+[docs/MACOS-RUNTIME-RELEASE.md](docs/MACOS-RUNTIME-RELEASE.md), GitHub 경쟁·재사용 조사는
 [docs/GITHUB-BENCHMARK-2026-07-29.md](docs/GITHUB-BENCHMARK-2026-07-29.md), 평가 기준은
 [docs/EVALUATION.md](docs/EVALUATION.md), 최신 실제 검증 결과는
-[docs/VALIDATION-REPORT-2026-07-29.md](docs/VALIDATION-REPORT-2026-07-29.md)를 참고하세요.
+[docs/VALIDATION-REPORT-2026-07-30.md](docs/VALIDATION-REPORT-2026-07-30.md)를 참고하세요.
 
 Apache-2.0 라이선스입니다.

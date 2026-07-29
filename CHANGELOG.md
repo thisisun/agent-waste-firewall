@@ -89,7 +89,7 @@
   degraded state.
 - Publish closed `DashboardReadyV1` and `DashboardStatusV1` contracts with JSON Schemas, synthetic
   conformance fixtures, dependency-free Node validators, and strict Swift decoders.
-- Add an unsigned macOS 13+ developer-preview Xcode project with SwiftUI/AppKit menu-bar lifecycle,
+- Add an unsigned macOS 13.5+ developer-preview Xcode project with SwiftUI/AppKit menu-bar lifecycle,
   a non-persistent restricted `WKWebView`, app-owned loopback dashboard supervision, English/Korean
   localization, and a transparent floating `NSPanel` sentinel.
 - Add a separate hardened-runtime Swift `awf-hook` target and embed it with `CodeSignOnCopy` under
@@ -98,8 +98,15 @@
   directly, applies a 2.25-second child deadline with process-group cleanup, and preserves the
   no-retry/no-second-JSON boundary after handoff.
 - Bundle the reviewed `assets`, `bin`, and `src` trees into the developer-preview app while retaining
-  an explicit installed-Node.js requirement. No Node payload, installation/activation UI,
-  Developer ID signature, notarization, or public-beta runtime is claimed.
+  an explicit installed-Node.js requirement for source builds. Add an English-default,
+  Korean-localized integration sheet plus transactional install, upgrade, repair, rollback, and
+  conservative uninstall backed by a closed ownership ledger.
+- Pin thin arm64/x64 Node.js `v24.18.0` release inputs and add dependency-free archive preparation
+  and app finalization. The finalizer requires hardened runtime, the exact one-key
+  `allow-jit=true` entitlement set, exact version, a fixed V8/JIT readiness probe, complete license,
+  and a post-sign digest before outer-app signing.
+- Keep generated Node binaries out of the source tree and npm package. No Developer ID signature,
+  notarization, distribution package, or public-beta runtime is claimed.
 - Add native unit and UI test targets and an unsigned macOS pull-request build/unit job. UI
   automation, Developer ID signing, notarization, and clean-machine acceptance remain release
   gates.

@@ -9,7 +9,7 @@ struct AWFApp: App {
 
     var body: some Scene {
         Window(
-            NSLocalizedString("app.name", comment: ""),
+            model.localized("app.name"),
             id: "dashboard"
         ) {
             DashboardContainerView(model: model)

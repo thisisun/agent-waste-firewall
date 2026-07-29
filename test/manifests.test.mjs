@@ -122,3 +122,16 @@ test("Claude marketplace exposes the root plugin with source provenance", () => 
   assert.equal(claudeManifest.repository, marketplace.owner.url);
   assert.equal(claudeManifest.author.url, marketplace.owner.url);
 });
+
+test("npm package allowlists only declarative runtime release inputs", () => {
+  const packageManifest = readJson("package.json");
+  assert.deepEqual(
+    packageManifest.files.filter((entry) => entry.startsWith("runtime/")),
+    [
+      "runtime/node-runtime-v1.json",
+      "runtime/node-runtime.entitlements",
+    ],
+  );
+  assert.equal(packageManifest.files.includes("runtime/"), false);
+  assert.equal(packageManifest.files.includes("macos/"), false);
+});

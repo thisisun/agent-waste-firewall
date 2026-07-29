@@ -29,7 +29,7 @@ Current portable core:
 Native shell:
 
 - a supported macOS development machine;
-- the current stable Xcode capable of targeting macOS 13 or newer;
+- the current stable Xcode capable of targeting macOS 13.5 or newer;
 - Node.js 18 or newer for the current developer preview;
 - an Apple Developer Program identity only for signed/notarized release builds.
 
@@ -117,11 +117,14 @@ Acceptance:
 
 Goal: make the current live monitor feel like a real Mac app without changing enforcement.
 
-Implementation status: an unsigned macOS 13+ developer preview is source-buildable. It implements
+Implementation status: an unsigned macOS 13.5+ developer preview is source-buildable. It implements
 the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboard subprocess, and
 transparent `NSPanel` sentinel. The app also embeds a separate hardened-runtime Swift `awf-hook`
-under `Contents/Helpers`. It still depends on an installed Node.js runtime because no Node payload
-or activation installer ships. The native sentinel decodes `ProviderIntegrationStatusV1` and
+under `Contents/Helpers`. The source tree now includes the native integration UI plus transactional
+install/upgrade/repair/rollback/uninstall and a pinned runtime release pipeline. Ordinary source
+builds still depend on an installed Node.js runtime because generated `awf-node` payloads are not
+committed; the integration UI fails closed when its sealed payload is absent. The native sentinel
+decodes `ProviderIntegrationStatusV1` and
 remains yellow until fresh audited provider activity is observed; retained or expired activity
 cannot make it green. Native coverage includes runtime discovery, the real bundled JavaScript
 worker, the helper's closed activation/environment rules, direct stdin handoff, and fail-open
@@ -426,9 +429,9 @@ AWFUITests/       initial app-lifecycle smoke test
 `assets/`, `bin/`, and `src/` are copied into the application as folder resources. `awf-hook` is
 copied into `Contents/Helpers` with hardened-runtime build settings and `CodeSignOnCopy`. There are
 no external Swift packages. This is signing-ready structure, not a Developer ID-signed artifact.
-The Node payload, installation/activation UI, Settings, a complete version handshake, and a
-notification sender remain later milestones. Introduce protocol-based interfaces around those
-future side effects so tests can use temporary directories and fake clocks.
+The integration-management sheet and local activation lifecycle are implemented. Settings, a
+helper/worker protocol handshake, a notification sender, signed distribution, and clean-machine
+provider acceptance remain later milestones.
 
 The Swift process must not read or mutate `StateStore` JSON. That state contains detector-internal
 metadata not approved for presentation and must have one writer: the Node worker.
@@ -470,6 +473,7 @@ The exact installation layout is:
 integration-v1/
   awf-hook
   activation.json
+  install-ledger.json
   versions/
     rel_<32 lowercase hex>/
       awf-node
@@ -484,28 +488,38 @@ has a 2.25-second deadline followed by bounded termination, forced cleanup when 
 Before child handoff the helper can emit the one fixed raw-free `{}` fail-open response; after
 handoff it must not add a second JSON value.
 
+Implemented release inputs and lifecycle:
+
+- `runtime/node-runtime-v1.json` pins thin Node.js `v24.18.0` arm64/x64 artifacts, official archive
+  digests, extracted executable digests, minimum macOS 13.5, and the complete license digest;
+- `prepare:macos-runtime` defaults to an explicit local archive and permits network download only
+  through `--download`; it parses the verified tar through a closed root/path allowlist and emits
+  only `awf-node`, `LICENSE`, and canonical `payload.json`;
+- `finalize:macos-runtime` runs after signing the nested runtime and before signing the outer app.
+  It rejects an already-signed outer app, verifies exact architecture/version, nested signature,
+  hardened runtime, the exact `allow-jit=true` entitlement allowlist, and a fixed V8/JIT readiness
+  probe, then writes the post-sign digest and complete Node license to fixed app paths, each
+  through an atomic replacement;
+- the native manager validates the entire payload before destination mutation, publishes
+  side-by-side releases and canonical activation atomically, retains verified rollback candidates,
+  reconciles definitely missing non-active crash records, and removes only digest-matched
+  ledger-owned entries;
+- the integration sheet shows closed English/Korean state, keeps raw errors and real paths out of
+  presentation, and requires inline confirmation for every mutation.
+
 Public beta work still required:
 
-- pin an LTS runtime version, architecture, checksum, upstream signature identity, and full
-  third-party license file. Node 24 is the current production LTS line; treat the exact patch as a
-  release input rather than a floating URL;
-- retain the helper assembled from reviewed source;
-- place standalone Mach-O helpers in `AWF.app/Contents/Helpers`, not `Resources`;
-- avoid dynamic downloads on first launch;
-- sign the helper and its nested libraries;
-- expose `--version`, `doctor --json`, and a protocol version;
-- keep stdout machine-readable and stderr diagnostic.
-
-The app may be absent while a correctly installed hook runs. A future release must add the pinned
-`awf-node` payload beside the existing embedded helper, install the next runtime into the versioned
-per-user directory, run health and protocol checks, then atomically replace the canonical
-regular-file activation manifest. Do not use a writable `current` symlink. Retain one known-good
-version for rollback. Record closed runtime IDs in a private ownership ledger and reconstruct
-paths from those IDs; uninstall must remove only ledger-owned entries. None of this
-install/activate/repair lifecycle is implemented by the current UI.
+- Developer ID-sign and notarize the complete per-architecture chain and exercise the documented
+  release pipeline on clean supported Macs;
+- add a fixed raw-free helper/worker protocol handshake and incompatible-helper counterexample;
+- add true subprocess `SIGKILL` checkpoints and stricter power-loss/TOCTOU durability tests;
+- prove user-owned Codex and Claude Code provider setup, trust, delivery, upgrade, rollback, and
+  uninstall without silently changing provider trust.
 
 Sign from the inside out (`awf-node`, `awf-hook`, app, distribution container), never use
 `codesign --deep` for signing, and include Node's complete bundled third-party `LICENSE`.
+Follow [MACOS-RUNTIME-RELEASE.md](MACOS-RUNTIME-RELEASE.md) for the exact preparation and sealing
+commands.
 Apple documents standalone command-line tools under the app's executable-code locations and
 requires every distributed executable to be signed for notarization. See
 [Apple bundle structure](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html),
@@ -750,10 +764,10 @@ The beta is done when a non-technical user can:
 
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
 dashboard projection, fixture-driven publication tests, and closed provider reality gate are
-implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates are
-also implemented and have passed on the validation Mac. The bounded delivery witness is
-implemented, but no
-user-owned Codex or Claude Code live-delivery pass is claimed yet. The next integration work is a
-reversible install/repair/uninstall manager plus actual user-owned trust and live-delivery
-acceptance. It must preserve each provider's trust model and must not infer successful monitoring
-from installation or retained historical events.
+implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates,
+bounded delivery witness, and reversible local integration manager are also implemented. No
+user-owned Codex or Claude Code live-delivery pass is claimed yet. The next integration work is
+Developer ID release assembly, a fixed helper/worker protocol handshake, clean-machine lifecycle
+testing, and actual user-owned trust/live-delivery acceptance. It must preserve each provider's
+trust model and must not infer successful monitoring from installation or retained historical
+events.

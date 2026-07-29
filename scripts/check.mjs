@@ -58,6 +58,7 @@ function collectJson(directory) {
 }
 
 collectJson(path.join(root, "protocol"));
+collectJson(path.join(root, "runtime"));
 
 for (const jsonFile of jsonFiles) {
   JSON.parse(fs.readFileSync(path.join(root, jsonFile), "utf8"));

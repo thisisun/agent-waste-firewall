@@ -61,6 +61,8 @@ const SECRET_ENVIRONMENT_KEYS = Object.freeze([
   "AWS_SECRET_ACCESS_KEY",
   "UNRELATED_SECRET",
 ]);
+const childProcessTimeoutMultiplier =
+  process.env.NODE_V8_COVERAGE ? 4 : 1;
 
 function runnerFrom(responses, calls = []) {
   return (command, args) => {
@@ -639,7 +641,10 @@ test("aborting a default async probe kills its in-flight provider child", async 
     signal: controller.signal,
   });
   const startedAt = Date.now();
-  while (!fs.existsSync(pidFile) && Date.now() - startedAt < 2000) {
+  while (
+    !fs.existsSync(pidFile)
+    && Date.now() - startedAt < 2_000 * childProcessTimeoutMultiplier
+  ) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   assert.equal(fs.existsSync(pidFile), true);
@@ -649,7 +654,10 @@ test("aborting a default async probe kills its in-flight provider child", async 
 
   const stoppedAt = Date.now();
   let alive = true;
-  while (alive && Date.now() - stoppedAt < 2000) {
+  while (
+    alive
+    && Date.now() - stoppedAt < 2_000 * childProcessTimeoutMultiplier
+  ) {
     try {
       process.kill(pid, 0);
       await new Promise((resolve) => setTimeout(resolve, 5));

@@ -12,6 +12,9 @@ import { LiveEventStore } from "../src/live-event-store.mjs";
 import { StateStore } from "../src/state-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
 
+const childProcessTimeoutMultiplier =
+  process.env.NODE_V8_COVERAGE ? 3 : 1;
+
 function requestStatus(url, headers) {
   return new Promise((resolve, reject) => {
     const request = http.get(url, { headers }, (response) => {
@@ -487,7 +490,7 @@ test("dashboard close kills in-flight default provider probes", async (context) 
       ["codex", "claude"].every((provider) =>
         fs.existsSync(path.join(directory, `${provider}.pid`))
       ),
-    2000,
+    2_000 * childProcessTimeoutMultiplier,
     "Provider probes did not start.",
   );
   for (const provider of ["codex", "claude"]) {
@@ -501,15 +504,19 @@ test("dashboard close kills in-flight default provider probes", async (context) 
 
   await withTimeout(
     dashboard.close(),
-    2000,
+    2_000 * childProcessTimeoutMultiplier,
     "Dashboard close did not settle after aborting provider probes.",
   );
   await waitUntil(
     () => pids.every((pid) => !processIsAlive(pid)),
-    2000,
+    2_000 * childProcessTimeoutMultiplier,
     "Provider child survived dashboard shutdown.",
   );
-  await withTimeout(request, 2000, "Integration request did not settle.");
+  await withTimeout(
+    request,
+    2_000 * childProcessTimeoutMultiplier,
+    "Integration request did not settle.",
+  );
 });
 
 test("keeps current warnings isolated by session progress and ranks severity", async (context) => {

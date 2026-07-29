@@ -37,6 +37,13 @@ function absoluteFileArgument(name) {
   return value;
 }
 
+function optionalAbsoluteFileArgument(name, fallback) {
+  if (!process.argv.includes(name)) {
+    return fallback;
+  }
+  return absoluteFileArgument(name);
+}
+
 function percentile(values, fraction) {
   const sorted = [...values].sort((left, right) => left - right);
   const index = Math.max(0, Math.ceil(sorted.length * fraction) - 1);
@@ -61,6 +68,16 @@ const sampleCount = integerArgument("--samples", 100, 10_000);
 const warmupCount = integerArgument("--warmups", 10, 1_000);
 const p95LimitMs = integerArgument("--p95-ms", 100, 60_000);
 const builtHelper = absoluteFileArgument("--helper");
+const builtRuntime = optionalAbsoluteFileArgument(
+  "--runtime",
+  process.execPath,
+);
+const runtimeSource = process.argv.includes("--runtime")
+  ? "explicit_runtime_clone"
+  : "temporary_node_clone";
+const runtimeReadinessMarker = "AWF_RUNTIME_READY\n";
+const runtimeReadinessScript =
+  'process.stdout.write("AWF_RUNTIME_READY\\n")';
 const temporaryRoot = fs.mkdtempSync(
   path.join(os.tmpdir(), "awf-native-hook-benchmark-"),
 );
@@ -89,7 +106,7 @@ fs.mkdirSync(workspace, { mode: 0o700 });
 fs.mkdirSync(path.join(workspace, ".git"), { mode: 0o700 });
 fs.copyFileSync(builtHelper, helper);
 fs.chmodSync(helper, 0o700);
-copyRuntime(process.execPath, runtime);
+copyRuntime(builtRuntime, runtime);
 fs.writeFileSync(
   path.join(integrationRoot, "activation.json"),
   `{"v":1,"releaseId":"${releaseID}","workerProtocol":1}\n`,
@@ -106,12 +123,45 @@ const env = {
   AGENT_WASTE_FIREWALL_MODE: "observe",
   AGENT_WASTE_FIREWALL_PLATFORM: "claude",
 };
+function prewarmRuntime() {
+  const startedAt = performance.now();
+  const result = spawnSync(
+    runtime,
+    [
+      "--no-addons",
+      "--disable-proto=throw",
+      "-e",
+      runtimeReadinessScript,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        HOME: home,
+        TMPDIR: os.tmpdir(),
+        LANG: "C",
+        PATH: "/usr/bin:/bin",
+      },
+      input: "",
+      maxBuffer: 4 * 1024,
+      timeout: 10_000,
+    },
+  );
+  const elapsedMs = performance.now() - startedAt;
+  if (
+    result.status !== 0
+    || result.stdout !== runtimeReadinessMarker
+    || result.stderr !== ""
+  ) {
+    throw new Error(
+      "Native hook runtime prewarm failed "
+        + `(status=${result.status ?? "none"}, `
+        + `stdoutBytes=${Buffer.byteLength(result.stdout ?? "", "utf8")}, `
+        + `stderrBytes=${Buffer.byteLength(result.stderr ?? "", "utf8")}).`,
+    );
+  }
+  return elapsedMs;
+}
 const traceStore = new TraceStore({ root: dataDir, env });
-traceStore.start({
-  workspace,
-  label: "native-hook-benchmark",
-  mode: "observe",
-});
 
 function invokeHook(index) {
   const payload = {
@@ -136,12 +186,22 @@ function invokeHook(index) {
   try {
     JSON.parse(result.stdout);
   } catch {
-    throw new Error("Native hook benchmark subprocess returned invalid JSON.");
+    throw new Error(
+      "Native hook benchmark subprocess returned invalid JSON "
+        + `(stdoutBytes=${Buffer.byteLength(result.stdout ?? "", "utf8")}, `
+        + `stderrBytes=${Buffer.byteLength(result.stderr ?? "", "utf8")}).`,
+    );
   }
   return elapsedMs;
 }
 
 try {
+  const runtimePrewarmMs = prewarmRuntime();
+  traceStore.start({
+    workspace,
+    label: "native-hook-benchmark",
+    mode: "observe",
+  });
   for (let index = 0; index < warmupCount; index += 1) {
     invokeHook(index);
   }
@@ -175,7 +235,9 @@ try {
         nativeHelperIncluded: true,
         providerShellIncluded: false,
         innerShellShimIncluded: true,
-        runtimeSource: "temporary_node_clone",
+        runtimeSource,
+        runtimePrewarmIncludedInLatency: false,
+        runtimePrewarmMs,
         activeSemanticTrace: true,
         alwaysOnLiveSpool: true,
         liveCommittedSequence: liveStatus.committedSeq,

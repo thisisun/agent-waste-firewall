@@ -45,11 +45,27 @@ struct SentinelView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
-                Text(NSLocalizedString("sentinel.accessibility.label", comment: ""))
+                Text(
+                    AppLocalization.string(
+                        "sentinel.accessibility.label",
+                        language: model.language
+                    )
+                )
             )
-            .accessibilityValue(Text(model.state.localizedTitle))
+            .accessibilityValue(
+                Text(
+                    model.state.localizedTitle(
+                        language: model.language
+                    )
+                )
+            )
             .accessibilityHint(
-                Text(NSLocalizedString("sentinel.accessibility.hint", comment: ""))
+                Text(
+                    AppLocalization.string(
+                        "sentinel.accessibility.hint",
+                        language: model.language
+                    )
+                )
             )
 
             if differentiateWithoutColor && model.state != .clear {

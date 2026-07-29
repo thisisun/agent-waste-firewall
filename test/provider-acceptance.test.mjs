@@ -65,7 +65,7 @@ function successfulRunner({ command, args, env, input, cwd, timeoutMs, maxOutput
   }
   if (command === "/bin/sh") {
     const result = spawnSync(command, args, {
-      env,
+      env: { ...env },
       input,
       cwd,
       encoding: "utf8",

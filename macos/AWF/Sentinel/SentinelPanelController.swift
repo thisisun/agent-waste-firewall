@@ -44,8 +44,11 @@ final class SentinelPanelController {
         panel.setFrameAutosaveName("AWFSentinelPanel")
     }
 
-    func update(_ state: SentinelVisualState) {
-        model.update(state)
+    func update(
+        _ state: SentinelVisualState,
+        language: AppLanguage
+    ) {
+        model.update(state, language: language)
     }
 
     func setVisible(_ visible: Bool) {

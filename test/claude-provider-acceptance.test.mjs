@@ -44,7 +44,7 @@ function runNodeWorker(specification) {
     specification.command,
     specification.args,
     {
-      env: specification.env,
+      env: { ...specification.env },
       input: specification.input,
       cwd: specification.cwd,
       encoding: "utf8",

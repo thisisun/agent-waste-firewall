@@ -4151,7 +4151,7 @@ export const DASHBOARD_JS = String.raw`(() => {
   }
 
   const state = {
-    language: "en",
+    language: null,
     theme: "light",
     view: "expanded",
     signal: "clear",
@@ -4730,8 +4730,10 @@ export const DASHBOARD_JS = String.raw`(() => {
     renderOverview();
   }
 
-  function setLanguage(value) {
+  function setLanguage(value, notifyNative = true) {
     const language = value === "ko" ? "ko" : "en";
+    const changed = state.language !== language;
+    if (!changed) return;
     state.language = language;
     const copy = currentCopy();
     document.documentElement.setAttribute("lang", language);
@@ -4766,7 +4768,23 @@ export const DASHBOARD_JS = String.raw`(() => {
     renderTimeline();
     renderProviderCards();
     renderOverview();
+    if (
+      changed &&
+      notifyNative &&
+      window.webkit &&
+      window.webkit.messageHandlers &&
+      window.webkit.messageHandlers.awfLanguage
+    ) {
+      window.webkit.messageHandlers.awfLanguage.postMessage({
+        v: 1,
+        language
+      });
+    }
   }
+
+  window.__awfSetLanguage = (language) => {
+    setLanguage(language, false);
+  };
 
   function renderMetrics() {
     const events = byId("metric-events");
@@ -5716,7 +5734,7 @@ export const DASHBOARD_JS = String.raw`(() => {
   setupCopyButton();
   setTheme("light");
   setView("expanded");
-  setLanguage("en");
+  setLanguage("en", false);
   let stream = null;
   let statusTimer = null;
   let integrationRefresh = null;

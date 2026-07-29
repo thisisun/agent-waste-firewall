@@ -283,7 +283,7 @@ AWF.app/
     Frameworks/
     Helpers/
       awf-hook                 # implemented hardened Swift helper
-      awf-node                 # future pinned runtime payload
+      awf-node                 # release-generated pinned runtime; not committed
     Resources/
       dashboard/
       plugins/
@@ -340,10 +340,11 @@ This native-first dispatch closes a runtime-selection foundation gap; it does no
 bundled-runtime release gate or harden provider/interpreter startup.
 
 The Xcode app now builds a hardened-runtime Swift `awf-hook` target and embeds it with
-`CodeSignOnCopy` at `Contents/Helpers/awf-hook`. Those settings make the nested helper ready for a
-future release-signing pipeline; the current source artifact has no Developer ID signature or
-notarization. It also contains no `awf-node` payload and has no installer or activation UI, so the
-embedded helper alone is not an installed public-beta runtime.
+`CodeSignOnCopy` at `Contents/Helpers/awf-hook`. Those settings fit the checked-in inside-out
+release-sealing pipeline; the current source artifact has no Developer ID signature or
+notarization. It also contains no generated `awf-node` payload. The activation UI and lifecycle
+manager are implemented, but fail closed until release assembly supplies a signed runtime and an
+outer-sealed post-sign digest.
 
 The fixed per-user integration has this exact activation record, including its trailing newline:
 
@@ -359,6 +360,7 @@ no path; the helper reconstructs and validates only this layout:
   integration-v1/
     awf-hook
     activation.json
+    install-ledger.json
     versions/
       rel_<32 lowercase hex>/
         awf-node
@@ -372,11 +374,13 @@ environment plus `PATH=/usr/bin:/bin`. The worker child owns a separate process 
 owned group. Before child handoff, launch failures return the fixed raw-free fail-open response.
 After handoff, the helper may warn but cannot append another JSON value.
 
-The app must eventually install this per-user tree rather than ask provider manifests to call an
-absolute path inside `/Applications/AWF.app`. The app can be moved, and provider trust should not
-change for every runtime upgrade. Install versions side by side, validate the new worker, then
-atomically replace the canonical regular-file activation manifest. Keep an installation ledger so
-repair, rollback, and uninstall touch only files created by AWF.
+The app installs this per-user tree rather than ask provider manifests to call an absolute path
+inside `/Applications/AWF.app`. The app can be moved, and provider trust does not need to change
+for every runtime upgrade. The implementation validates the whole payload before mutation, stages
+on the same volume, publishes versions side by side, validates the new active install, then
+atomically replaces the canonical regular-file activation manifest. A closed ownership ledger
+records helper/runtime digests; repair creates a new release, rollback selects only a verified
+candidate, and uninstall preserves unknown or changed residue.
 
 Do not choose the Mac App Store first. Provider plugin installation and execution of a bundled
 helper need to be proven under sandbox constraints. Start with hardened-runtime, Developer
@@ -419,10 +423,11 @@ milestone.
 3. ~~Connect a generation-aware live-spool cursor to the shared dashboard projection.~~ Completed.
 4. ~~Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.~~
    Developer preview implemented; signed distribution and native UI acceptance remain pending.
-5. Add explicit install/repair/uninstall flows for each provider, including atomic activation of
-   the embedded native helper.
-6. Add the pinned Node payload, then Developer ID-sign and notarize the helper/runtime/app chain;
-   retain protocol compatibility checks.
+5. ~~Add explicit local install/repair/rollback/uninstall with atomic activation of the embedded
+   native helper.~~ Implemented with a closed ownership ledger and fail-closed native UI.
+6. ~~Pin and verify an architecture-specific Node payload and define post-sign sealing.~~ Node
+   `v24.18.0` preparation and finalization are implemented; Developer ID signing, notarization,
+   clean-machine assembly, and protocol handshake acceptance remain.
 7. Add optional usage adapters only after the decision path is stable.
 8. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
 9. Consider `block` for public use only after the evaluation gates are met.
@@ -432,8 +437,9 @@ Current migration debt to address explicitly:
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
 - the browser dashboard is a large combined asset module;
 - macOS/POSIX manifests still use a transitional plugin-root shell shim. The macOS shim can prefer
-  a safe fixed per-user helper, but no Node payload or installer creates and activates that
-  integration yet; Windows provider-hook execution remains unsupported;
+  a safe fixed per-user helper. Release assembly must supply the generated signed Node payload
+  before the implemented installer can activate it; Windows provider-hook execution remains
+  unsupported;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those
   internal state JSON files.
 

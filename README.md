@@ -9,11 +9,15 @@ Claude Code.
 > path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, raw-free pseudonymous
 > recorder, and replay are implemented and tested. The source tree now also contains a
 > SwiftUI/AppKit menu-bar shell, local `WKWebView`, transparent floating sentinel, and a
-> hardened-runtime Swift hook helper embedded at `Contents/Helpers/awf-hook`. The helper is
-> structured for later signing, but the current app is not a Developer ID-signed, notarized, or
-> packaged release. It still needs an installed Node.js 18+ runtime because no Node payload or
-> activation installer ships yet. Exact token accounting, one-command installation, user-owned
-> provider trust/live delivery, and a bundled signed runtime remain pending.
+> hardened-runtime Swift hook helper embedded at `Contents/Helpers/awf-hook`. A native
+> integration manager now validates, installs, upgrades, repairs, rolls back, and conservatively
+> uninstalls an app-sealed helper/runtime payload. The repository pins Node.js `v24.18.0` for
+> architecture-specific release assembly and verifies its archive, executable, license, nested
+> signature, exact version, and post-sign digest. The checked-in source build intentionally
+> contains no generated Node binary, so installation stays disabled until that release payload is
+> assembled. The app is not yet Developer ID-signed, notarized, or packaged. Exact token
+> accounting, one-command provider setup, and user-owned trust/live-delivery acceptance remain
+> pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -45,9 +49,10 @@ AWF is not another token dashboard. It answers three earlier questions:
   trusted boundary. Codex additionally passes through the provider's inherited `$SHELL -lc`,
   which is also outside AWF's boundary. See the
   [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
-  The native handoff is a native-runtime foundation, not a public-beta runtime: the Node payload,
-  activation installer/UI, Developer ID signature, and notarization remain pending. Windows
-  provider-hook execution is currently unsupported.
+  The native handoff and its integration-management UI are implemented, but the checked-in source
+  build deliberately lacks the generated `awf-node` release payload. Developer ID signing,
+  notarization, and clean-machine provider acceptance remain pending. Windows provider-hook
+  execution is currently unsupported.
 - Ignores user-interrupted tool calls and distinguishes identical failures from changing failures.
 - Stores hashes and detector evidence locally. Raw prompts, tool inputs, and tool outputs are not
   persisted.
@@ -74,11 +79,17 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Keeps warning state independent for concurrent pseudonymous sessions. The sentinel, tab title,
   and favicon move from green to yellow to red; repeated high-severity signals also turn the
   compact background deep red.
-- Provides an unsigned macOS 13+ source preview with a `MenuBarExtra`, app-owned loopback dashboard
+- Provides an unsigned macOS 13.5+ source preview with a `MenuBarExtra`, app-owned loopback dashboard
   process, non-persistent `WKWebView`, transparent floating `NSPanel`, and a separate hardened
   Swift `awf-hook` target embedded under `Contents/Helpers`. The native sentinel maps only
   validated status enums and counters to clear, review, danger, critical, degraded, or offline
   presentation.
+- Provides an English-default, Korean-localized native integration sheet. It performs runtime
+  hashing only on launch, explicit refresh, or mutation completion—not in the one-second monitor
+  poll—and exposes closed status/result enums without displaying raw paths or underlying errors.
+- Uses a private ownership ledger, same-volume staging, process and cross-process locks,
+  descriptor-relative atomic publication, digest validation, side-by-side releases, bounded
+  rollback retention, crash reconciliation, and residue-preserving uninstall.
 - Validates the dashboard readiness line and status response against exact closed Swift contracts,
   refuses redirects and non-exact loopback navigation, and keeps the Node detector independent of
   the app lifecycle.
@@ -196,13 +207,14 @@ web alpha also mirrors the state in the tab title and favicon.
 
 ### Native macOS developer preview
 
-The GitHub checkout includes an Xcode project for macOS 13 or newer. The published npm artifact is
+The GitHub checkout includes an Xcode project for macOS 13.5 or newer. The published npm artifact is
 the portable plugin/CLI package and intentionally excludes `macos/`; clone the GitHub repository
 before running the native commands below. The Xcode project bundles the reviewed `bin/`, `src/`,
 and `assets/` directories into the app resources and embeds the hardened Swift `awf-hook`
-executable under `Contents/Helpers`. It does not bundle `awf-node`, so the dashboard still uses an
-installed Node.js 18+ executable during this developer-preview phase. Build the source without
-signing:
+executable under `Contents/Helpers`. The source build does not bundle the generated `awf-node`,
+so its integration sheet reports the sealed installer payload as unavailable and keeps mutation
+buttons disabled. The dashboard can still use an installed Node.js 18+ executable during this
+developer-preview phase. Build the source without signing:
 
 ```bash
 AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
@@ -220,8 +232,9 @@ xcodebuild \
 
 This is a compile/package check, not a distributable artifact. Hardened-runtime build settings and
 `CodeSignOnCopy` make the helper ready for the later release-signing pipeline; they do not give
-this source build a Developer ID signature. There is no notarization ticket, DMG, installer,
-activation UI, or bundled Node runtime. For interactive development, open
+this source build a Developer ID signature. There is no notarization ticket, DMG, or bundled Node
+runtime. The integration UI and local lifecycle manager are present, but fail closed without a
+signed runtime and its outer-sealed digest. For interactive development, open
 `macos/AWF.xcodeproj` in Xcode and use local signing. The dashboard process does not search
 inherited `PATH`. It checks an absolute `AWF_NODE_PATH`, bounded Volta/NVM locations, and fixed
 standard Node locations with a bounded Node 18+ probe.
@@ -241,6 +254,7 @@ side-by-side layout; the manifest never stores an executable path:
 integration-v1/
   awf-hook
   activation.json
+  install-ledger.json
   versions/
     rel_<32 lowercase hex>/
       awf-node
@@ -252,7 +266,12 @@ it, supplies only a closed worker environment, and gives the child process group
 deadline with bounded termination, forced cleanup, and reaping. A failure before child handoff
 returns the fixed raw-free fail-open response. After handoff, no launcher retries the event or
 adds another JSON value because the child may already have consumed stdin or emitted a response.
-The repository does not yet install this layout for users.
+The native manager creates this layout only after validating the complete bundled payload. It
+publishes a new release and activation transactionally, keeps verified rollback candidates,
+reconciles definitely missing non-active records after interruption, and removes only
+digest-matched ledger-owned files. Unknown or changed residue is preserved. See the
+[runtime release sealing guide](docs/MACOS-RUNTIME-RELEASE.md) for the pinned Node preparation and
+inside-out signing order.
 
 An explicit research trace is still opt-in and is the only source that can be audited, exported,
 or replayed. To capture one workspace:
@@ -467,9 +486,10 @@ See [core architecture](docs/ARCHITECTURE.md),
 [macOS product architecture](docs/MACOS-ARCHITECTURE.md),
 [macOS implementation status](docs/MACOS-IMPLEMENTATION.md),
 [macOS development guide](docs/DEVELOPMENT-GUIDE.md),
+[macOS runtime release sealing](docs/MACOS-RUNTIME-RELEASE.md),
 [GitHub landscape and reuse decision](docs/GITHUB-BENCHMARK-2026-07-29.md),
 [evaluation](docs/EVALUATION.md), the
-[latest local validation report](docs/VALIDATION-REPORT-2026-07-29.md), and the
+[latest local validation report](docs/VALIDATION-REPORT-2026-07-30.md), and the
 [first live pilot](docs/FIRST-PILOT.md).
 
 ## Honest limitations
@@ -487,15 +507,29 @@ See [core architecture](docs/ARCHITECTURE.md),
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
-- The native app is currently an unsigned source build. It embeds a hardened Swift hook helper but
-  no Node payload, activation installer, or integration-management UI. The dashboard therefore
-  still depends on an installed Node.js 18+ executable, and Developer ID signing, notarization,
-  clean-machine installation, upgrade, and uninstall testing remain incomplete.
+- The native app is currently an unsigned source build. Its integration lifecycle and UI are
+  implemented, but the repository does not commit or ship a generated Node binary. The dashboard
+  therefore still uses an installed Node.js 18+ executable in source-preview builds. Developer ID
+  release signing, notarization, clean-machine provider delivery, and distribution packaging
+  remain incomplete.
+- The 2026-07-30 local hook benchmarks missed the 100 ms product target: external-Node p95 was
+  129.037 ms and 210.986 ms in two runs, and the sealed native path was 248.935 ms. The dashboard
+  and spool gates passed, but hook-startup optimization remains a public-beta blocker.
 - The plugin-root macOS shim no longer searches inherited `PATH` after it starts. It can hand off
   to a safe fixed per-user helper, which then validates activation; otherwise it retains the
   external Node alpha fallback. Provider-spawned initial interpreter/loader startup, plus Codex's
-  outer login shell, remain trusted boundaries. A pinned runtime payload, atomic
-  activation/repair/rollback, and the clean-machine gate remain public-beta blockers.
+  outer login shell, remain trusted boundaries. The pinned payload and atomic
+  activation/repair/rollback implementation still require Developer ID/notarization and a
+  clean-machine end-to-end release gate before public beta.
+- The manager matches the bundled runtime to the digest sealed into the outer app and matches
+  installed helper/runtime bytes to its private ownership ledger. It performs bounded Node version
+  and V8 readiness probes and prewarms the staged runtime before activation. The release finalizer
+  separately checks nested signature integrity, hardened runtime, and the exact one-key entitlement
+  set; Developer ID identity and notarization remain release gates.
+- The pinned x64 input has not yet passed execution on an Intel Mac. Interactive native UI
+  automation, minimum-macOS runtime testing, Developer ID signing, notarization, Gatekeeper, and
+  clean-machine acceptance remain unverified. A fixed raw-free helper/worker protocol handshake
+  and true process-kill crash harness are also required before public beta.
 - Windows provider-hook execution is currently unsupported; the shipped hook launch path is
   macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
@@ -507,9 +541,10 @@ See [core architecture](docs/ARCHITECTURE.md),
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.
-4. Complete native UI acceptance, bundle a pinned worker runtime, and sign/notarize the
-   [macOS shell](docs/MACOS-ARCHITECTURE.md).
-5. Add one-command installation only after safe upgrade/uninstall behavior is tested.
+4. Assemble the pinned per-architecture runtime, run the release sealing pipeline, and
+   sign/notarize the [macOS shell](docs/MACOS-ARCHITECTURE.md).
+5. Add the helper/worker protocol handshake, real process-kill recovery tests, clean-machine
+   install/upgrade/rollback/uninstall acceptance, and explicit provider setup.
 
 ## License
 

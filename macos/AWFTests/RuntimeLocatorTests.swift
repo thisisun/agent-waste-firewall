@@ -282,6 +282,44 @@ final class RuntimeLocatorTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 1)
     }
 
+    func testNodeRuntimeReadinessRequiresJavaScriptExecution() throws {
+        let ready = temporaryDirectory.appendingPathComponent("ready-node")
+        try makeFile(
+            ready,
+            contents: """
+            #!/bin/sh
+            if [ "${1-}" = "--version" ]; then
+              printf '%s\\n' 'v22.22.3'
+              exit 0
+            fi
+            if [ "${1-}" = "--no-addons" ] &&
+              [ "${2-}" = "--disable-proto=throw" ] &&
+              [ "${3-}" = "-e" ]
+            then
+              printf '%s\\n' '\(RuntimeLocator.nodeRuntimeReadinessMarker)'
+              exit 0
+            fi
+            exit 1
+            """,
+            executable: true
+        )
+        let versionOnly = temporaryDirectory.appendingPathComponent(
+            "version-only-node"
+        )
+        try makeNode(versionOnly, version: "v22.22.3")
+
+        XCTAssertTrue(
+            RuntimeLocator.nodeRuntimeIsReady(at: ready)
+        )
+        XCTAssertEqual(
+            RuntimeLocator.supportedNodeMajorVersion(at: versionOnly),
+            22
+        )
+        XCTAssertFalse(
+            RuntimeLocator.nodeRuntimeIsReady(at: versionOnly)
+        )
+    }
+
     func testLocateWorkerResolvesSymlinkOverrideToRegularTarget() throws {
         let target = temporaryDirectory
             .appendingPathComponent("agent-waste-firewall-real.mjs")

@@ -2,8 +2,11 @@
 
 ## Data handling
 
-AWF (Agent Waste Firewall) is local-first. The current release has no network client and no telemetry
-exporter. It stores pseudonymous detector state under `~/.agent-waste-firewall/` by default.
+AWF (Agent Waste Firewall) is local-first. The installed runtime makes no outbound requests and has
+no telemetry exporter. Release preparation is separate from the product runtime:
+`prepare:macos-runtime` reads an explicit local archive by default and downloads an official Node
+archive only when a release engineer passes `--download`. AWF stores pseudonymous detector state
+under `~/.agent-waste-firewall/` by default.
 Raw session IDs, provider tool names, workspace basenames, file names, and absolute or relative
 paths are not persisted. Prompt, call, result, file-content, file-identity, and workspace
 identifiers use session-scoped keyed aliases. These aliases are pseudonyms rather than encryption.
@@ -34,8 +37,8 @@ the already-computed guard decision remains in force; a rate-limited local diagn
 degraded presentation.
 
 The always-on spool is short-lived local presentation transport and is not an export format.
-`agent-waste-firewall purge --all` removes it. The current browser dashboard still consumes an
-explicit trace recording; a direct live-spool consumer is planned next.
+`agent-waste-firewall purge --all` removes it. The browser dashboard consumes the spool by default;
+an explicitly supplied trace ID selects the separate historical trace view.
 
 Explicit live recordings use a stricter boundary than detector state:
 

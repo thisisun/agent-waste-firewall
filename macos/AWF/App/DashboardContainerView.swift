@@ -7,7 +7,10 @@ struct DashboardContainerView: View {
     var body: some View {
         ZStack(alignment: .top) {
             if let endpoint = model.endpoint {
-                DashboardWebView(endpoint: endpoint)
+                DashboardWebView(
+                    endpoint: endpoint,
+                    language: $model.language
+                )
                     .frame(minWidth: 720, minHeight: 520)
             } else {
                 launchPlaceholder
@@ -22,19 +25,14 @@ struct DashboardContainerView: View {
         .toolbar {
             ToolbarItemGroup {
                 statusLabel
+                integrationStatusButton
                 Button {
                     model.toggleSentinel()
                 } label: {
                     Label(
                         model.isSentinelVisible
-                            ? NSLocalizedString(
-                                "action.hideSentinel",
-                                comment: ""
-                            )
-                            : NSLocalizedString(
-                                "action.showSentinel",
-                                comment: ""
-                            ),
+                            ? model.localized("action.hideSentinel")
+                            : model.localized("action.showSentinel"),
                         systemImage: "magnifyingglass"
                     )
                 }
@@ -42,7 +40,7 @@ struct DashboardContainerView: View {
                     model.retry()
                 } label: {
                     Label(
-                        NSLocalizedString("action.retry", comment: ""),
+                        model.localized("action.retry"),
                         systemImage: "arrow.clockwise"
                     )
                 }
@@ -51,6 +49,24 @@ struct DashboardContainerView: View {
         .onAppear {
             registerWindowAction()
         }
+        .sheet(
+            isPresented: $model.isIntegrationManagerPresented
+        ) {
+            IntegrationManagerView(
+                snapshot: model.nativeIntegrationSnapshot,
+                payloadStatus: model.nativeIntegrationPayloadStatus,
+                operation: model.nativeIntegrationOperation,
+                result: model.nativeIntegrationResult,
+                localized: model.localized,
+                install: model.installNativeIntegration,
+                repair: model.repairNativeIntegration,
+                rollback: model.rollbackNativeIntegration,
+                uninstall: model.uninstallNativeIntegration,
+                refresh: {
+                    model.refreshNativeIntegration(clearResult: true)
+                }
+            )
+        }
     }
 
     private var launchPlaceholder: some View {
@@ -58,16 +74,16 @@ struct DashboardContainerView: View {
             Image(systemName: "magnifyingglass.circle.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(model.visualState.color)
-            Text(NSLocalizedString("launch.title", comment: ""))
+            Text(model.localized("launch.title"))
                 .font(.title2.bold())
             Text(
-                model.failure?.localizedTitle
-                    ?? NSLocalizedString("launch.starting", comment: "")
+                model.failure?.localizedTitle(language: model.language)
+                    ?? model.localized("launch.starting")
             )
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: 460)
-            Button(NSLocalizedString("action.retry", comment: "")) {
+            Button(model.localized("action.retry")) {
                 model.retry()
             }
             .keyboardShortcut(.defaultAction)
@@ -81,13 +97,10 @@ struct DashboardContainerView: View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
             Text(
-                model.failure?.localizedTitle
-                    ?? NSLocalizedString(
-                        "failure.statusUnavailable",
-                        comment: ""
-                    )
+                model.failure?.localizedTitle(language: model.language)
+                    ?? model.localized("failure.statusUnavailable")
             )
-            Button(NSLocalizedString("action.retry", comment: "")) {
+            Button(model.localized("action.retry")) {
                 model.retry()
             }
             .buttonStyle(.borderless)
@@ -102,14 +115,40 @@ struct DashboardContainerView: View {
 
     private var statusLabel: some View {
         Label(
-            model.visualState.localizedTitle,
+            model.visualState.localizedTitle(language: model.language),
             systemImage: model.visualState.symbolName
         )
         .foregroundStyle(model.visualState.color)
         .accessibilityLabel(
-            Text(NSLocalizedString("sentinel.accessibility.label", comment: ""))
+            Text(model.localized("sentinel.accessibility.label"))
         )
-        .accessibilityValue(Text(model.visualState.localizedTitle))
+        .accessibilityValue(
+            Text(
+                model.visualState.localizedTitle(
+                    language: model.language
+                )
+            )
+        )
+    }
+
+    private var integrationStatusButton: some View {
+        let presentation = NativeIntegrationPresentation.project(
+            snapshot: model.nativeIntegrationSnapshot,
+            payloadStatus: model.nativeIntegrationPayloadStatus,
+            operation: model.nativeIntegrationOperation,
+            result: model.nativeIntegrationResult
+        )
+        return Button {
+            model.requestOpenIntegrationManager()
+        } label: {
+            Label(
+                model.localized(presentation.titleKey),
+                systemImage: presentation.symbolName
+            )
+        }
+        .foregroundStyle(presentation.colorRole.color)
+        .help(model.localized("integration.action.manage"))
+        .accessibilityIdentifier("awf.integration.open")
     }
 
     private func registerWindowAction() {

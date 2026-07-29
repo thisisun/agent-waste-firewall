@@ -169,7 +169,7 @@ function defaultRunner(
 ) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
-    env: metadata.env,
+    env: { ...metadata.env },
     shell: false,
     timeout: timeoutMs,
     killSignal: "SIGKILL",
@@ -220,7 +220,7 @@ function defaultAsyncRunner(
       args,
       {
         encoding: "utf8",
-        env: metadata.env,
+        env: { ...metadata.env },
         timeout: timeoutMs,
         killSignal: "SIGKILL",
         maxBuffer: MAX_PLUGIN_OUTPUT_BYTES,

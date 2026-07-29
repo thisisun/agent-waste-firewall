@@ -4,13 +4,24 @@ import WebKit
 
 struct DashboardWebView: NSViewRepresentable {
     let endpoint: DashboardEndpoint
+    @Binding var language: AppLanguage
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(endpoint: endpoint)
+        let languageBinding = $language
+        return Coordinator(
+            endpoint: endpoint,
+            language: language
+        ) { language in
+            languageBinding.wrappedValue = language
+        }
     }
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(
+            context.coordinator,
+            name: Coordinator.languageHandlerName
+        )
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
@@ -34,14 +45,24 @@ struct DashboardWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         let expectedURL = endpoint.dashboardURL
-        context.coordinator.update(endpoint: endpoint)
-        if webView.url != expectedURL && !webView.isLoading {
+        context.coordinator.update(
+            endpoint: endpoint,
+            language: language
+        ) { language in
+            self.language = language
+        }
+        if webView.url != expectedURL {
+            if webView.isLoading {
+                webView.stopLoading()
+            }
             webView.load(
                 URLRequest(
                     url: expectedURL,
                     cachePolicy: .reloadIgnoringLocalAndRemoteCacheData
                 )
             )
+        } else {
+            context.coordinator.synchronizeLanguage(in: webView)
         }
     }
 
@@ -50,24 +71,104 @@ struct DashboardWebView: NSViewRepresentable {
         coordinator: Coordinator
     ) {
         webView.stopLoading()
+        webView.configuration.userContentController
+            .removeScriptMessageHandler(
+                forName: Coordinator.languageHandlerName
+            )
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
-        private var policy: DashboardNavigationPolicy
+    final class Coordinator:
+        NSObject,
+        WKNavigationDelegate,
+        WKUIDelegate,
+        WKScriptMessageHandler
+    {
+        static let languageHandlerName = "awfLanguage"
 
-        init(endpoint: DashboardEndpoint) {
+        private var policy: DashboardNavigationPolicy
+        private var language: AppLanguage
+        private var documentReady = false
+        private var lastAppliedLanguage: AppLanguage?
+        private var languageChanged: (AppLanguage) -> Void
+
+        init(
+            endpoint: DashboardEndpoint,
+            language: AppLanguage,
+            languageChanged: @escaping (AppLanguage) -> Void
+        ) {
             policy = DashboardNavigationPolicy(
                 dashboardURL: endpoint.dashboardURL
+            )
+            self.language = language
+            self.languageChanged = languageChanged
+        }
+
+        func update(
+            endpoint: DashboardEndpoint,
+            language: AppLanguage,
+            languageChanged: @escaping (AppLanguage) -> Void
+        ) {
+            policy = DashboardNavigationPolicy(
+                dashboardURL: endpoint.dashboardURL
+            )
+            self.language = language
+            self.languageChanged = languageChanged
+        }
+
+        func synchronizeLanguage(in webView: WKWebView) {
+            guard
+                documentReady,
+                !webView.isLoading,
+                lastAppliedLanguage != language
+            else {
+                return
+            }
+            lastAppliedLanguage = language
+            webView.evaluateJavaScript(
+                "window.__awfSetLanguage?.('\(language.rawValue)');"
             )
         }
 
-        func update(endpoint: DashboardEndpoint) {
-            policy = DashboardNavigationPolicy(
-                dashboardURL: endpoint.dashboardURL
-            )
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard
+                message.name == Self.languageHandlerName,
+                message.frameInfo.isMainFrame,
+                message.frameInfo.request.url?.absoluteString
+                    != "about:blank",
+                policy.allows(message.frameInfo.request.url),
+                let bridgeMessage = try? AppLanguageBridgeMessage(
+                    body: message.body
+                )
+            else {
+                return
+            }
+            if language != bridgeMessage.language {
+                language = bridgeMessage.language
+                lastAppliedLanguage = bridgeMessage.language
+                languageChanged(bridgeMessage.language)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didStartProvisionalNavigation navigation: WKNavigation!
+        ) {
+            documentReady = false
+            lastAppliedLanguage = nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFinish navigation: WKNavigation!
+        ) {
+            documentReady = true
+            synchronizeLanguage(in: webView)
         }
 
         func webView(

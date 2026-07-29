@@ -9,9 +9,15 @@ struct MenuBarLabelView: View {
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(model.visualState.color)
             .accessibilityLabel(
-                Text(NSLocalizedString("sentinel.accessibility.label", comment: ""))
+                Text(model.localized("sentinel.accessibility.label"))
             )
-            .accessibilityValue(Text(model.visualState.localizedTitle))
+            .accessibilityValue(
+                Text(
+                    model.visualState.localizedTitle(
+                        language: model.language
+                    )
+                )
+            )
     }
 }
 
@@ -20,7 +26,11 @@ struct MenuBarContentView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text(model.visualState.localizedTitle)
+        Text(
+            model.visualState.localizedTitle(
+                language: model.language
+            )
+        )
         Text(model.currentModeTitle)
             .foregroundStyle(.secondary)
 
@@ -30,26 +40,30 @@ struct MenuBarContentView: View {
 
         Divider()
 
-        Button(NSLocalizedString("action.openDashboard", comment: "")) {
+        Button(model.localized("action.openDashboard")) {
             openDashboard()
         }
         .keyboardShortcut("o")
 
+        Button(model.localized("integration.action.manage")) {
+            model.requestOpenIntegrationManager()
+        }
+
         Button(
             model.isSentinelVisible
-                ? NSLocalizedString("action.hideSentinel", comment: "")
-                : NSLocalizedString("action.showSentinel", comment: "")
+                ? model.localized("action.hideSentinel")
+                : model.localized("action.showSentinel")
         ) {
             model.toggleSentinel()
         }
 
-        Button(NSLocalizedString("action.retry", comment: "")) {
+        Button(model.localized("action.retry")) {
             model.retry()
         }
 
         Divider()
 
-        Button(NSLocalizedString("action.quit", comment: "")) {
+        Button(model.localized("action.quit")) {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")

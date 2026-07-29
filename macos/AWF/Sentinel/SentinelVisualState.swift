@@ -75,8 +75,11 @@ enum SentinelVisualState: String, CaseIterable, Sendable {
         }
     }
 
-    var localizedTitle: String {
-        NSLocalizedString("status.\(rawValue)", comment: "")
+    func localizedTitle(language: AppLanguage) -> String {
+        AppLocalization.string(
+            "status.\(rawValue)",
+            language: language
+        )
     }
 
     var isCritical: Bool {
@@ -96,11 +99,17 @@ enum SentinelVisualState: String, CaseIterable, Sendable {
 @MainActor
 final class SentinelPanelModel: ObservableObject {
     @Published private(set) var state: SentinelVisualState = .offline
+    @Published private(set) var language: AppLanguage = .defaultLanguage
 
-    func update(_ state: SentinelVisualState) {
-        guard self.state != state else {
-            return
+    func update(
+        _ state: SentinelVisualState,
+        language: AppLanguage
+    ) {
+        if self.state != state {
+            self.state = state
         }
-        self.state = state
+        if self.language != language {
+            self.language = language
+        }
     }
 }

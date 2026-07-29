@@ -31,6 +31,9 @@ struct DashboardLaunchConfiguration: Equatable, Sendable {
 enum RuntimeLocator {
     static let minimumNodeMajorVersion = 18
     static let maximumNVMVersionEntries = 64
+    static let nodeRuntimeReadinessMarker = "AWF_RUNTIME_READY"
+    static let nodeRuntimeReadinessScript =
+        #"process.stdout.write("AWF_RUNTIME_READY\n")"#
 
     private struct NodeVersion: Comparable {
         let major: Int
@@ -212,46 +215,15 @@ enum RuntimeLocator {
         at executableURL: URL,
         timeout: TimeInterval = 2
     ) -> Int? {
-        guard timeout > 0 else {
+        guard let data = runNodeProbe(
+            executableURL,
+            arguments: ["--version"],
+            timeout: timeout,
+            maximumOutputBytes: 64
+        ) else {
             return nil
         }
-
-        let process = Process()
-        let output = Pipe()
-        let exited = DispatchSemaphore(value: 0)
-        process.executableURL = executableURL
-        process.arguments = ["--version"]
-        process.environment = ["PATH": "/usr/bin:/bin"]
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        process.terminationHandler = { _ in
-            exited.signal()
-        }
-
-        do {
-            try process.run()
-            try? output.fileHandleForWriting.close()
-        } catch {
-            try? output.fileHandleForReading.close()
-            try? output.fileHandleForWriting.close()
-            return nil
-        }
-
-        guard exited.wait(timeout: .now() + timeout) == .success else {
-            stopVersionProbe(process, exited: exited)
-            try? output.fileHandleForReading.close()
-            return nil
-        }
-        guard process.terminationStatus == 0 else {
-            try? output.fileHandleForReading.close()
-            return nil
-        }
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        try? output.fileHandleForReading.close()
         guard
-            data.count <= 64,
             let value = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             value.first == "v",
@@ -270,6 +242,27 @@ enum RuntimeLocator {
             return nil
         }
         return major
+    }
+
+    static func nodeRuntimeIsReady(
+        at executableURL: URL,
+        timeout: TimeInterval = 10
+    ) -> Bool {
+        let expected = "\(nodeRuntimeReadinessMarker)\n"
+        guard let data = runNodeProbe(
+            executableURL,
+            arguments: [
+                "--no-addons",
+                "--disable-proto=throw",
+                "-e",
+                nodeRuntimeReadinessScript,
+            ],
+            timeout: timeout,
+            maximumOutputBytes: expected.utf8.count
+        ) else {
+            return false
+        }
+        return data == Data(expected.utf8)
     }
 
     static func locateWorker(
@@ -358,7 +351,57 @@ enum RuntimeLocator {
         ).standardizedFileURL
     }
 
-    private static func stopVersionProbe(
+    private static func runNodeProbe(
+        _ executableURL: URL,
+        arguments: [String],
+        timeout: TimeInterval,
+        maximumOutputBytes: Int
+    ) -> Data? {
+        guard timeout > 0, maximumOutputBytes > 0 else {
+            return nil
+        }
+
+        let process = Process()
+        let output = Pipe()
+        let exited = DispatchSemaphore(value: 0)
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.environment = ["PATH": "/usr/bin:/bin"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { _ in
+            exited.signal()
+        }
+
+        do {
+            try process.run()
+            try? output.fileHandleForWriting.close()
+        } catch {
+            try? output.fileHandleForReading.close()
+            try? output.fileHandleForWriting.close()
+            return nil
+        }
+
+        guard exited.wait(timeout: .now() + timeout) == .success else {
+            stopNodeProbe(process, exited: exited)
+            try? output.fileHandleForReading.close()
+            return nil
+        }
+        guard process.terminationStatus == 0 else {
+            try? output.fileHandleForReading.close()
+            return nil
+        }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        try? output.fileHandleForReading.close()
+        guard data.count <= maximumOutputBytes else {
+            return nil
+        }
+        return data
+    }
+
+    private static func stopNodeProbe(
         _ process: Process,
         exited: DispatchSemaphore
     ) {

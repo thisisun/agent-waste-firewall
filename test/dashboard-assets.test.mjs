@@ -419,7 +419,17 @@ function dashboardHarness(options = {}) {
     },
   };
 
+  const languageMessages = [];
   const window = {
+    ...(options.nativeBridge === false ? {} : { webkit: {
+      messageHandlers: {
+        awfLanguage: {
+          postMessage(message) {
+            languageMessages.push(message);
+          },
+        },
+      },
+    } }),
     setInterval() {
       return 1;
     },
@@ -498,6 +508,8 @@ function dashboardHarness(options = {}) {
     document,
     modeElements,
     languageButtons,
+    languageMessages,
+    window,
     themeButtons,
     providerCards,
     staticElements,
@@ -508,6 +520,38 @@ function dashboardHarness(options = {}) {
     compactSentinel: ids.get("compact-sentinel"),
   };
 }
+
+test("native language sync does not echo and user changes use a closed bridge message", async () => {
+  const harness = dashboardHarness();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  harness.window.__awfSetLanguage("ko");
+  assert.equal(harness.document.documentElement.attributes.get("lang"), "ko");
+  assert.equal(harness.document.documentElement.lang, "ko");
+  assert.equal(
+    harness.ids.get("provider-codex-state").textContent,
+    "활동 관찰됨",
+  );
+  assert.deepEqual(harness.languageMessages, []);
+
+  harness.languageButtons[0].click();
+
+  assert.equal(harness.document.documentElement.attributes.get("lang"), "en");
+  assert.equal(
+    JSON.stringify(harness.languageMessages.at(-1)),
+    JSON.stringify({ v: 1, language: "en" }),
+  );
+});
+
+test("language controls remain English-first without a native bridge", async () => {
+  const harness = dashboardHarness({ nativeBridge: false });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(harness.document.documentElement.attributes.get("lang"), "en");
+  harness.languageButtons[1].click();
+  assert.equal(harness.document.documentElement.attributes.get("lang"), "ko");
+  assert.deepEqual(harness.languageMessages, []);
+});
 
 test("live stream starts immediately but stays visibly waiting for a slow provider probe", async () => {
   const neverSettles = new Promise(() => {});
