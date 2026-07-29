@@ -1,6 +1,6 @@
 # AWF — Agent Waste Firewall
 
-[English](README.md)
+[영문 README](README.md)
 
 AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실시간 감시 도구를
 목표로 합니다.
@@ -13,15 +13,26 @@ AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실�
 3. 관찰된 낭비 원인이 사용자 지시, 에이전트, 실행 환경, 연결 도구 중 어디에 가까운가?
 
 현재 `0.1.0`은 연구용 알파입니다. 실시간 훅, 프롬프트 점검, 반복 차단기, 상시
-`LiveEventV1` 의미 이벤트 저장소, 원문 비저장 녹화, 익명 의미 재생, 로컬 대시보드가
+`LiveEventV1` 의미 이벤트 저장소, 원문 비저장 녹화, 원문 없는 가명 의미 재생, 로컬
+대시보드가
 동작합니다. 훅에는 정확한 토큰 사용량이 없으므로 아직 “몇 토큰을 절약했다”고 주장하지
 않고, 절감 후보 호출 수와 감지 시점을 보여줍니다.
 SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패널을 포함한 macOS
 개발자 미리보기도 소스에 들어 있습니다. 다만 아직 서명·공증·패키징된 앱이 아니며,
 설치된 Node.js 18 이상이 필요합니다.
-실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, Codex 격리
-설치·직접 훅 실행도 통과했습니다. 다만 사용자 소유 Codex의 훅 신뢰·실시간 전달과
-Claude 설치, 업그레이드·제거 검증은 아직 남아 있습니다.
+실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
+격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
+사용자 소유 provider의 훅 신뢰·실시간 전달과 업그레이드·제거 검증은 아직 남아 있습니다.
+macOS 훅은 작은 내부 fail-open launcher를 사용합니다. 이 launcher가 시작된 뒤에는
+상속된 `PATH`를 검색하지 않고 `/bin/sh -p`로 실행되며, Node·동적 loader 주입 환경과
+symlink·그룹/전체 사용자 쓰기가 가능한 worker/runtime을 거부합니다. Claude의 exec 형식은
+내부 launcher를 직접 실행하지만, Codex command 훅은 먼저 provider가 상속한
+`$SHELL -lc`를 거칩니다. 따라서 사용자/provider의 login shell 시작 과정은 정리됐다고
+주장하지 않는 신뢰 경계입니다. 자세한 근거는
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164)를
+참고하세요. 검사하지 못한 이벤트마다 원문 없는 고정 경고를 stderr에 출력하며, 이 사전
+runtime 경고는 rate-limit하지 않습니다. 이것은 외부 Node를 사용하는 알파 전환층이며,
+배포용 서명 runtime이 완성됐다는 뜻은 아닙니다.
 대시보드는 별도 녹화 없이 상시 `LiveEventV1` 저장소를 기본으로 읽습니다. 완성된 신규
 의미 이벤트만 증분 검사하고, 30초마다 제한된 현재 세대 전체를 다시 검사합니다. 세대
 교체·재연결 때는 화면 상태를 원자적으로 초기화하며, 같은 작업공간의 여러 가명 세션도
@@ -45,6 +56,11 @@ Claude 설치, 업그레이드·제거 검증은 아직 남아 있습니다.
 ## 실시간 앱 사용 흐름
 
 Node.js 18 이상이 필요합니다.
+
+외부 runtime을 사용하는 현재 알파는 symlink runtime 후보를 의도적으로 거부합니다.
+Homebrew나 Volta의 symlink만 있으면 fail-open 되므로 provider를 실행할 때
+`AWF_NODE_PATH`를 실제 절대 경로의 일반 Node 실행 파일로 지정하거나, NVM 버전 폴더의
+일반 실행 파일을 사용해야 합니다.
 
 ```bash
 npm test
@@ -97,20 +113,26 @@ node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
 실행·복구·설정하지도 않습니다. provider 상태 검사와 전달 검사는 서로 다른 읽기 전용
 근거입니다.
 
-Codex 플러그인 CLI가 있는 개발자는 별도의 격리된 worker 직접 실행 검증도 할 수 있습니다.
+provider CLI가 있는 개발자는 별도의 격리 설치·launcher 검증도 할 수 있습니다.
 
 ```bash
+npm run acceptance:providers
+# 또는 각각 실행
 npm run acceptance:codex
+npm run acceptance:claude
 ```
 
-이 검증은 임시 `HOME`과 `CODEX_HOME`에서 마켓플레이스 추가, 설치, 목록 확인,
-설치된 `UserPromptSubmit`·`PreToolUse`·`PostToolUse` 훅 직접 실행, 닫힌 Codex 의미
-이벤트, 원문 canary 비저장, 임시 파일 정리를 확인합니다. 프롬프트·세션·turn·작업공간·
-tool ID·입력·출력의 앞뒤에 필드별 고유 표식을 넣고, 원문 앞부분만 저장되는 회귀도
-검증 실패로 잡습니다. 검증된 시스템 임시 폴더 아래에 스스로 만든 새 하위 폴더만
-삭제합니다. 사용자의 전역 설정을 바꾸거나 Codex `/hooks` 신뢰 승인과 실제 세션 전달을
-증명하지는 않습니다. 즉 provider가 등록된 훅을 실제로 호출했다는 검증이 아니라, 설치된
-worker를 검증기가 직접 호출하는 패키징·개인정보 경계 검사입니다.
+두 검증은 임시 provider 설정에서 마켓플레이스 추가, 설치, 목록·상세 확인, 설치된
+launcher 실행, 닫힌 의미 이벤트, 원문 canary 비저장, 임시 파일 정리를 확인합니다.
+Codex는 prompt/pre-tool/post-tool과 관찰 전용 `Stop`을, Claude는 여기에
+`PostToolUseFailure`까지 검사합니다. 프롬프트·세션·turn·작업공간·tool ID·입력·출력의
+앞뒤에 필드별 고유 표식을 넣고, 원문 일부만 저장되는 회귀도 검증 실패로 잡습니다.
+
+이 검사는 사용자 전역 설정을 바꾸거나 Codex `/hooks` 신뢰를 승인하지 않으며, Claude의
+`disableAllHooks`나 조직 정책을 우회하지 않습니다. 실제 provider가 훅을 전달했다는
+주장도 하지 않습니다. 내부 launcher를 직접 실행하므로 Codex의 바깥 login shell 시작
+과정도 검증하지 않습니다. 사용자 소유 실제 세션 전달은 별도의 읽기 전용
+`integration verify`로 확인합니다.
 
 플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
 `LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 로컬
@@ -133,9 +155,11 @@ node bin/agent-waste-firewall.mjs dashboard
 
 ### macOS 개발자 미리보기
 
-macOS 13 이상과 Xcode가 필요합니다. 현재 프로젝트는 검토된 `bin/`, `src/`, `assets/`
-폴더를 앱 리소스에 포함하지만, 실행에는 시스템에 설치된 Node.js 18 이상을 사용합니다.
-서명하지 않은 소스 빌드는 다음과 같이 확인합니다.
+macOS 13 이상과 Xcode가 필요합니다. Xcode 프로젝트는 GitHub 체크아웃에 들어 있습니다.
+공개 npm 배포물은 이식 가능한 플러그인/CLI 패키지이며 `macos/`를 포함하지 않으므로,
+아래 네이티브 명령은 GitHub 저장소를 복제한 뒤 실행해야 합니다. 현재 Xcode 프로젝트는
+검토된 `bin/`, `src/`, `assets/` 폴더를 앱 리소스에 포함하지만, 실행에는 시스템에
+설치된 Node.js 18 이상을 사용합니다. 서명하지 않은 소스 빌드는 다음과 같이 확인합니다.
 
 ```bash
 AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
@@ -153,7 +177,9 @@ xcodebuild \
 
 이 명령은 컴파일·번들 구성을 확인할 뿐 배포용 앱을 만들지 않습니다. Developer ID 서명,
 공증, DMG, 설치 프로그램, 내장 Node 런타임은 아직 없습니다. 실제 개발 실행은
-`macos/AWF.xcodeproj`를 Xcode에서 열고 로컬 서명을 사용합니다.
+`macos/AWF.xcodeproj`를 Xcode에서 열고 로컬 서명을 사용합니다. 네이티브 앱은 상속된
+`PATH`를 검색하지 않고 절대 `AWF_NODE_PATH`, 제한된 Volta/NVM 위치, 고정 표준 위치만
+검사한 뒤 Node 18 이상인지 시간 제한 probe로 확인합니다.
 
 - `observe`: 감지만 기록하고 에이전트 작업에는 개입하지 않음
 - `warn`: 감지 내용을 사용자 화면과 에이전트 문맥에 짧게 전달
@@ -261,9 +287,9 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 이 저장소를 검증한 Mac의 셸 `PATH` 기준 읽기 전용 상태는 Codex `0.146.0`
 `needs_install`, Claude Code `not_detected`입니다. 네이티브 supervisor의 닫힌 검색
 경로는 안전한 사용자 로컬 위치의 Claude Code `2.1.207`도 찾아 `needs_install`로
-표시합니다. 같은 Mac에서
-`npm run acceptance:codex`의 격리 설치·훅·프라이버시·정리 검증은 통과했습니다. 하지만
-사용자 소유 설정에서 훅을 검토·신뢰했거나 실제 provider 이벤트가 전달됐다는 뜻은 아닙니다.
+표시합니다. 같은 Mac에서 Codex와 Claude의 격리 설치·launcher·프라이버시·정리 검증은
+모두 통과했습니다. 하지만 사용자 소유 설정에서 훅을 검토·신뢰했거나 실제 provider
+이벤트가 전달됐다는 뜻은 아닙니다.
 
 ## 한계
 
@@ -280,6 +306,11 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 - macOS 앱은 서명하지 않은 소스 미리보기이며 설치된 Node.js 18 이상에 의존합니다.
   네이티브 UI 승인, Developer ID 서명, 공증, 깨끗한 Mac 설치·업그레이드·제거 검증은
   아직 완료되지 않았습니다.
+- 내부 macOS launcher는 시작된 뒤 상속 `PATH`를 검색하지 않지만 아직 외부 Node를
+  사용하고, Codex의 바깥 login shell 시작 과정은 신뢰 경계로 남습니다. 서명된 native
+  launcher, 버전별 내장 runtime, 원자적 복구·rollback은 public beta 차단 조건입니다.
+  Windows provider 훅 실행은 현재 지원하지 않으며 배포된 훅 경로는 macOS/POSIX
+  우선입니다.
 
 영문 문서는 [README.md](README.md), 코어 설계는
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), macOS 제품 구조는

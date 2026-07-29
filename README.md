@@ -6,12 +6,14 @@ Local-first live monitoring, prompt coaching, and no-progress circuit breakers f
 Claude Code.
 
 > Status: `0.1.0` research alpha with an unsigned native macOS developer preview. The live hook
-> path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, anonymized recorder, and
-> replay work and are tested. The source tree now also contains a SwiftUI/AppKit menu-bar shell,
+> path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, raw-free pseudonymous
+> recorder, and replay are implemented and tested. The source tree now also contains a
+> SwiftUI/AppKit menu-bar shell,
 > local `WKWebView`, and transparent floating sentinel. It is not a signed, notarized, or packaged
 > release and still needs an installed Node.js 18+ runtime. Exact token accounting, one-command
-> installation, user-owned Codex hook trust/live delivery, and installed Claude acceptance remain
-> pending.
+> installation, user-owned provider trust/live delivery, and a bundled signed runtime remain
+> pending. Isolated Codex and Claude marketplace/install/launcher/privacy acceptance gates now
+> pass.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -29,6 +31,15 @@ AWF is not another token dashboard. It answers three earlier questions:
   result, or a new test/build result. Re-running the same passing test does not reset the counter.
 - Uses separate Codex and Claude Code hook registrations so Claude's `PostToolUseFailure` is
   observed without sending an unsupported event to Codex.
+- Routes macOS hooks through a small inner fail-open launcher. Once that launcher starts, it never
+  searches inherited `PATH`; it uses `/bin/sh -p`, strips Node and dynamic-loader injection
+  variables, rejects symlink or group/world-writable hook/runtime files, and supports bounded NVM
+  discovery. Claude's exec-form hook reaches the inner launcher directly. Codex command hooks
+  first pass through the provider's inherited `$SHELL -lc`, so AWF treats user/provider login-shell
+  startup as a trusted boundary rather than claiming to sanitize it. See the
+  [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
+  This is an external-runtime alpha bridge, not the signed runtime design for public distribution.
+  Windows provider-hook execution is currently unsupported.
 - Ignores user-interrupted tool calls and distinguishes identical failures from changing failures.
 - Stores hashes and detector evidence locally. Raw prompts, tool inputs, and tool outputs are not
   persisted.
@@ -64,14 +75,18 @@ AWF is not another token dashboard. It answers three earlier questions:
   the app lifecycle.
 - Audits every semantic event against a closed schema before export and rejects unknown fields,
   free text, paths, URLs, emails, and common secret formats.
-- Fails open if its hook cannot run, but shows a rate-limited warning instead of silently disabling
-  protection.
-- Replays anonymized semantic traces in `observe`, `warn`, and `block` modes without accessing a
-  repository or running commands. Legacy synthetic hook fixtures remain supported.
+- Fails open if its hook cannot run. The pre-runtime launcher emits one fixed, raw-free stderr
+  warning for each unchecked event; in-worker storage warnings remain rate-limited.
+- Replays raw-free pseudonymous semantic traces in `observe`, `warn`, and `block` modes without
+  accessing a repository or running commands. Legacy synthetic hook fixtures remain supported.
 
 ## Quick start
 
 Requirements: Node.js 18 or newer.
+
+The external-runtime alpha intentionally rejects symlink runtime candidates. A Homebrew or Volta
+symlink by itself therefore fails open; launch the provider with `AWF_NODE_PATH` set to the
+underlying absolute regular Node executable, or use a regular NVM version binary.
 
 ```bash
 npm test
@@ -143,24 +158,26 @@ identity of the process that wrote the local semantic event. It also never insta
 launches, repairs, or configures Codex or Claude Code. Provider status and this delivery witness
 are separate read-only checks.
 
-Contributors with the Codex plugin CLI can run the isolated worker direct-execution acceptance
-gate:
+Contributors with the provider CLIs can run isolated install and launcher acceptance:
 
 ```bash
+npm run acceptance:providers
+# Or separately:
 npm run acceptance:codex
+npm run acceptance:claude
 ```
 
-The gate uses private temporary `HOME` and `CODEX_HOME` directories, stages the reviewed plugin
-subset, adds its temporary marketplace, installs and lists the plugin, and directly executes the
-installed `UserPromptSubmit`, `PreToolUse`, and `PostToolUse` hooks. It requires a closed Codex
-`LiveEventV1` prompt incident, scans the bounded temporary tree for short per-field nonce markers
-placed at both ends of raw prompt/session/turn/workspace/tool-ID/input/output values, and removes
-only the fresh child directory it created under the validated system temp tree. A regression
-fixture confirms that persisting only an initial raw fragment still fails the gate. It does not
-invoke Codex `/hooks`, modify the user's provider configuration, approve hook trust, or prove
-delivery from a real user-owned Codex session. In other words, this checks packaging and the
-privacy boundary by invoking the installed worker directly; it is not provider-driven registration
-or live-delivery proof.
+Each gate uses private temporary provider state, stages only a reviewed package allowlist, adds a
+temporary marketplace, installs and inventories the plugin, and invokes the installed launcher
+with synthetic hook envelopes. Codex covers prompt/pre-tool/post-tool and observation-only
+`Stop`; Claude also covers `PostToolUseFailure`. Both require closed `LiveEventV1` evidence, scan
+the bounded temporary tree for per-field raw canaries, and remove only the fresh child directory
+they created. The Claude report fixes `providerDelivery` to `not_tested`.
+
+These gates do not invoke Codex `/hooks`, start a real Claude session, change user configuration,
+approve trust, bypass `disableAllHooks` or managed policy, or prove provider-driven delivery.
+They directly invoke the inner launcher and therefore do not exercise Codex's outer login-shell
+startup. `integration verify` remains the separate read-only witness for a user-owned live session.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
@@ -168,9 +185,11 @@ web alpha also mirrors the state in the tab title and favicon.
 
 ### Native macOS developer preview
 
-The repository includes an Xcode project for macOS 13 or newer. It bundles the reviewed `bin/`,
-`src/`, and `assets/` directories into the app resources, but intentionally uses an installed
-Node.js 18+ executable during this developer-preview phase. Build the source without signing:
+The GitHub checkout includes an Xcode project for macOS 13 or newer. The published npm artifact is
+the portable plugin/CLI package and intentionally excludes `macos/`; clone the GitHub repository
+before running the native commands below. The Xcode project bundles the reviewed `bin/`, `src/`,
+and `assets/` directories into the app resources, but intentionally uses an installed Node.js 18+
+executable during this developer-preview phase. Build the source without signing:
 
 ```bash
 AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
@@ -188,8 +207,9 @@ xcodebuild \
 
 This is a compile/package check, not a distributable artifact. It has no Developer ID signature,
 notarization ticket, DMG, installer, or bundled Node runtime. For interactive development, open
-`macos/AWF.xcodeproj` in Xcode and use local signing. The app searches explicit and standard Node
-locations; `AWF_NODE_PATH` may point to an absolute regular executable for development.
+`macos/AWF.xcodeproj` in Xcode and use local signing. The app does not search inherited `PATH`.
+It checks an absolute `AWF_NODE_PATH`, bounded Volta/NVM locations, and fixed standard Node
+locations with a bounded Node 18+ probe.
 
 An explicit research trace is still opt-in and is the only source that can be audited, exported,
 or replayed. To capture one workspace:
@@ -244,10 +264,10 @@ On the validation Mac used for this repository, the shell-inherited CLI probe de
 `0.146.0` with state `needs_install`; Claude Code is `not_detected` on that shell `PATH`. The
 native supervisor's closed search path also finds Claude Code `2.1.207` in a safe user-local
 location and reports `needs_install`. These are machine-specific snapshots of the user-owned
-configuration. On the same Mac, `npm run acceptance:codex` passed its
-isolated marketplace add/install/list, installed-hook execution, closed-event, raw-canary, and
-cleanup checks. That temporary result is not a claim that the user's Codex hooks were reviewed,
-trusted, or observed delivering live events.
+configuration. On the same Mac, both isolated provider acceptance gates passed marketplace
+add/install/inventory, installed-launcher execution, closed-event, raw-canary, and cleanup checks.
+Those temporary results are not claims that either user-owned provider reviewed, trusted, or
+delivered a live hook.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
 outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE
@@ -427,12 +447,18 @@ See [core architecture](docs/ARCHITECTURE.md),
 - The native app is currently an unsigned source build. It depends on an installed Node.js 18+
   executable and has not completed UI acceptance, Developer ID signing, notarization, clean-machine
   installation, upgrade, or uninstall testing.
-- Windows hook loading has not been tested in this repository yet.
+- The inner macOS launcher no longer searches inherited `PATH` after it starts, but it still uses
+  an external Node runtime, and Codex's outer login-shell startup remains a trusted boundary. The
+  signed native launcher, versioned bundled runtime, atomic repair/rollback, and clean-machine gate
+  remain public-beta blockers.
+- Windows provider-hook execution is currently unsupported; the shipped hook launch path is
+  macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
 
 ## Roadmap
 
-1. Run an observe-only anonymized real-world pilot and publish precision/false-block results.
+1. Run an observe-only pilot with raw-free pseudonymous records and publish precision/false-block
+   results.
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.

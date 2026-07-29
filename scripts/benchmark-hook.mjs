@@ -36,12 +36,13 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const hook = path.join(projectRoot, "scripts", "hook.mjs");
+const launcher = path.join(projectRoot, "scripts", "hook-launcher.sh");
 fs.mkdirSync(workspace, { mode: 0o700 });
 fs.mkdirSync(path.join(workspace, ".git"), { mode: 0o700 });
 
 const env = {
   ...process.env,
+  AWF_NODE_PATH: process.execPath,
   AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
   AGENT_WASTE_FIREWALL_MODE: "observe",
   AGENT_WASTE_FIREWALL_PLATFORM: "codex",
@@ -64,7 +65,7 @@ function invokeHook(index) {
     tool_input: { command: "git status --short" },
   };
   const startedAt = performance.now();
-  const result = spawnSync(process.execPath, [hook], {
+  const result = spawnSync("/bin/sh", ["-p", launcher, projectRoot], {
     encoding: "utf8",
     env,
     input: JSON.stringify(payload),
@@ -103,6 +104,8 @@ try {
       {
         sampleCount,
         warmupCount,
+        executionPath: "direct_launcher",
+        providerShellIncluded: false,
         activeSemanticTrace: true,
         alwaysOnLiveSpool: true,
         liveCommittedSequence: liveStatus.committedSeq,

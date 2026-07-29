@@ -64,6 +64,126 @@ final class RuntimeLocatorTests: XCTestCase {
         )
     }
 
+    func testLocateNodeNeverExecutesInheritedPathCandidate() throws {
+        let pathDirectory = temporaryDirectory.appendingPathComponent(
+            "hostile-path",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: pathDirectory,
+            withIntermediateDirectories: true
+        )
+        let marker = temporaryDirectory.appendingPathComponent(
+            "path-node-executed"
+        )
+        let hostileNode = pathDirectory.appendingPathComponent("node")
+        try makeFile(
+            hostileNode,
+            contents: """
+            #!/bin/sh
+            /usr/bin/touch '\(marker.path)'
+            printf '%s\\n' 'v99.0.0'
+            """,
+            executable: true
+        )
+
+        let located = RuntimeLocator.locateNode(
+            environment: ["PATH": pathDirectory.path]
+        )
+
+        XCTAssertNotEqual(
+            located,
+            hostileNode.standardizedFileURL.resolvingSymlinksInPath()
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    func testLocateNodeFindsNewestStrictNVMVersionWithoutNVMEnvironment()
+        throws
+    {
+        let home = temporaryDirectory.appendingPathComponent(
+            "finder-home",
+            isDirectory: true
+        )
+        let versions = home
+            .appendingPathComponent(".nvm", isDirectory: true)
+            .appendingPathComponent("versions", isDirectory: true)
+            .appendingPathComponent("node", isDirectory: true)
+        for (name, reportedVersion) in [
+            ("v20.12.2", "v20.12.2"),
+            ("v22.9.0", "v22.9.0"),
+            ("v22.10.0", "v22.10.0"),
+            ("v17.99.0", "v99.0.0"),
+            ("v023.0.0", "v99.0.0"),
+            ("v23.0", "v99.0.0"),
+            ("v23.0.0-rc.1", "v99.0.0"),
+            ("latest", "v99.0.0"),
+        ] {
+            let node = versions
+                .appendingPathComponent(name, isDirectory: true)
+                .appendingPathComponent("bin", isDirectory: true)
+                .appendingPathComponent("node")
+            try FileManager.default.createDirectory(
+                at: node.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try makeNode(node, version: reportedVersion)
+        }
+
+        let located = RuntimeLocator.locateNode(
+            environment: [
+                "HOME": home.path,
+                "PATH": temporaryDirectory.path,
+            ]
+        )
+
+        XCTAssertEqual(
+            located,
+            versions
+                .appendingPathComponent("v22.10.0", isDirectory: true)
+                .appendingPathComponent("bin", isDirectory: true)
+                .appendingPathComponent("node")
+        )
+    }
+
+    func testNVMDiscoveryInspectsAtMostTheBoundedEntryLimit() throws {
+        let home = temporaryDirectory.appendingPathComponent(
+            "bounded-home",
+            isDirectory: true
+        )
+        let versions = home
+            .appendingPathComponent(".nvm", isDirectory: true)
+            .appendingPathComponent("versions", isDirectory: true)
+            .appendingPathComponent("node", isDirectory: true)
+        for patch in 0..<(RuntimeLocator.maximumNVMVersionEntries + 12) {
+            try FileManager.default.createDirectory(
+                at: versions.appendingPathComponent(
+                    "v20.0.\(patch)",
+                    isDirectory: true
+                ),
+                withIntermediateDirectories: true
+            )
+        }
+
+        let candidates = RuntimeLocator.nvmNodeCandidates(home: home)
+        let patches = candidates.compactMap {
+            Int(
+                $0
+                    .deletingLastPathComponent()
+                    .deletingLastPathComponent()
+                    .lastPathComponent
+                    .split(separator: ".")
+                    .last ?? ""
+            )
+        }
+
+        XCTAssertEqual(
+            candidates.count,
+            RuntimeLocator.maximumNVMVersionEntries
+        )
+        XCTAssertEqual(patches, patches.sorted(by: >))
+    }
+
     func testLocateNodeRequiresExecutableRegularFile() throws {
         let notExecutable = temporaryDirectory.appendingPathComponent("node")
         try makeFile(notExecutable, contents: "not executable\n")

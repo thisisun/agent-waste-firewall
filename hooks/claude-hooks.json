@@ -6,9 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
+            "command": "/bin/sh",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"
+              "-p",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
+              "${CLAUDE_PLUGIN_ROOT}"
             ],
             "timeout": 3
           }
@@ -20,9 +22,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
+            "command": "/bin/sh",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"
+              "-p",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
+              "${CLAUDE_PLUGIN_ROOT}"
             ],
             "timeout": 3
           }
@@ -34,9 +38,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
+            "command": "/bin/sh",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"
+              "-p",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
+              "${CLAUDE_PLUGIN_ROOT}"
             ],
             "timeout": 3
           }
@@ -48,9 +54,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
+            "command": "/bin/sh",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"
+              "-p",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
+              "${CLAUDE_PLUGIN_ROOT}"
             ],
             "timeout": 3
           }
@@ -62,9 +70,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
+            "command": "/bin/sh",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs"
+              "-p",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
+              "${CLAUDE_PLUGIN_ROOT}"
             ],
             "timeout": 3
           }

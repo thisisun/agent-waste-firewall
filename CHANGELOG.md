@@ -8,6 +8,14 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
+- Route macOS/POSIX provider hooks through a fail-open launcher that never searches inherited
+  `PATH` after the inner launcher starts, strips Node and dynamic-loader injection variables,
+  rejects symlink or group/world-writable worker/runtime files on macOS, and uses a bounded
+  external Node allowlist for the alpha. Claude uses exec-form arguments for the inner
+  `/bin/sh -p`; Codex first invokes the command through inherited `$SHELL -lc`, which remains a
+  trusted user/provider startup boundary. The launcher emits one fixed, raw-free stderr warning
+  for every event it cannot check; this pre-runtime warning is not rate-limited. Windows
+  provider-hook execution remains unsupported.
 - Add best-effort `LiveEventV1` publication for every supported hook, independent of explicit
   recording.
 - Add a private, concurrent-writer-safe live spool with hard 4,096-event/8 MiB ceilings and a
@@ -34,10 +42,13 @@
   review, and trust remain user-controlled. Current activity requires a new audited event after
   dashboard startup and expires after five minutes; retained spool and trace events do not count.
 - Add an isolated `npm run acceptance:codex` gate for temporary marketplace add, plugin
-  install/list, direct installed prompt/pre-tool/post-tool hook execution, closed-event production,
-  prefix/suffix raw-canary scanning, and cleanup. This worker direct-execution check deliberately
-  does not claim provider-driven registration, user-owned `/hooks` trust, or live provider
-  delivery.
+  install/list, installed-launcher prompt/pre-tool/post-tool/Stop execution, closed-event production,
+  prefix/suffix raw-canary scanning, and cleanup. This direct-launcher check deliberately does not
+  claim provider-driven registration, user-owned `/hooks` trust, or live provider delivery.
+- Add an isolated `npm run acceptance:claude` gate for local marketplace add/install,
+  list/details, installed-launcher execution across prompt/pre-tool/post-tool/failure/Stop,
+  closed-event and raw-canary auditing, and owned-root cleanup. Its closed report fixes provider
+  delivery to `not_tested` and never bypasses trust or managed hook policy.
 - Add a repository-root Claude Code marketplace entry and source provenance for the plugin
   manifest. Document Claude's source-trust/load boundary, read-only `/hooks` view,
   `/reload-plugins`, and session-only `--plugin-dir` behavior separately from Codex hook-hash
@@ -90,5 +101,7 @@
   allowlist. The native worker can discover the Codex executable bundled with the ChatGPT app
   without widening its environment. Node discovery validates major version 18+ with a bounded
   direct probe. The minimized native sentinel decodes the closed provider contract and requires
-  recent observed provider activity before it turns green. The local native unit/integration
-  target passes 36/36 tests with no skips.
+  recent observed provider activity before it turns green.
+- Remove inherited `PATH` lookup from the native Node locator. Prefer an explicit override, then
+  Volta, a strict 64-entry NVM scan, and fixed standard paths, while retaining the bounded Node 18+
+  version probe. The local native unit/integration target passes 39/39 tests with no skips.

@@ -35,7 +35,9 @@
     "SECURITY.md"
   ],
   "scripts": {
+    "acceptance:claude": "node scripts/claude-provider-acceptance.mjs",
     "acceptance:codex": "node scripts/provider-acceptance.mjs",
+    "acceptance:providers": "npm run acceptance:codex && npm run acceptance:claude",
     "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
     "benchmark:hook": "node scripts/benchmark-hook.mjs",
     "benchmark:live-dashboard": "node scripts/benchmark-live-dashboard.mjs",

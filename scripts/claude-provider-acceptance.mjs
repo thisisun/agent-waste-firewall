@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,6 +8,9 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { LiveEventStore } from "../src/live-event-store.mjs";
+import {
+  runProviderAcceptanceCommand,
+} from "./provider-acceptance.mjs";
 
 const PROJECT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -16,27 +18,28 @@ const PROJECT_ROOT = path.resolve(
 );
 const MARKETPLACE_NAME = "agent-waste-firewall";
 const PLUGIN_NAME = "agent-waste-firewall";
-const CODEX_APP_BINARY =
-  "/Applications/ChatGPT.app/Contents/Resources/codex";
-const REQUIRED_HOOK_EVENTS = Object.freeze([
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "Stop",
+const PLUGIN_ID = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
+const ACCEPTANCE_SCOPE = "isolated_install_and_direct_launcher";
+const PROVIDER_DELIVERY = "not_tested";
+const CLAUDE_PLUGIN_ROOT_REFERENCE = "${CLAUDE_PLUGIN_ROOT}";
+const EXPECTED_LAUNCHER_ARGUMENTS = Object.freeze([
+  "-p",
+  `${CLAUDE_PLUGIN_ROOT_REFERENCE}/scripts/hook-launcher.sh`,
+  CLAUDE_PLUGIN_ROOT_REFERENCE,
 ]);
-const CONTEXT_HOOK_EVENTS = new Set([
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-]);
-const EXPECTED_HOOK_COMMAND =
-  '/bin/sh -p "${PLUGIN_ROOT}/scripts/hook-launcher.sh" "${PLUGIN_ROOT}"';
 const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const MAX_AUDIT_BYTES = 32 * 1024 * 1024;
 const MAX_AUDIT_FILES = 2_048;
 const MAX_STAGE_BYTES = 8 * 1024 * 1024;
 const MAX_STAGE_FILES = 256;
 const MAX_DURATION_MS = 10 * 60 * 1_000;
+const REQUIRED_HOOK_EVENTS = Object.freeze([
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "Stop",
+]);
 const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "LANG",
   "LC_ALL",
@@ -45,10 +48,9 @@ const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "TERM",
   "TZ",
 ]);
-
 const ACCEPTANCE_BUNDLE_PATHS = Object.freeze([
-  ".codex-plugin/plugin.json",
-  "hooks/hooks.json",
+  ".claude-plugin/plugin.json",
+  "hooks/claude-hooks.json",
   "scripts/hook-launcher.sh",
   "scripts/hook.mjs",
   "src",
@@ -58,53 +60,58 @@ const ACCEPTANCE_BUNDLE_PATHS = Object.freeze([
 
 const FAILURE_CODES = new Set([
   "none",
-  "codex_unavailable",
-  "codex_probe_failed",
+  "claude_unavailable",
+  "claude_probe_failed",
   "package_stage_failed",
   "marketplace_add_failed",
   "plugin_install_failed",
   "plugin_list_failed",
-  "installed_hook_missing",
-  "hook_failed",
+  "plugin_details_failed",
+  "installed_launcher_invalid",
+  "launcher_failed",
   "event_missing",
   "privacy_violation",
   "cleanup_failed",
   "internal_failure",
 ]);
 const RESULTS = new Set(["passed", "failed", "skipped"]);
-const CODEX_STATES = new Set(["available", "unavailable", "unknown"]);
-const REPORT_KEYS = [
+const CLAUDE_STATES = new Set(["available", "unavailable", "unknown"]);
+const REPORT_KEYS = Object.freeze([
   "v",
   "kind",
+  "scope",
+  "providerDelivery",
   "result",
   "failure",
-  "codex",
+  "claude",
   "checks",
   "durationsMs",
-];
-const CHECK_KEYS = [
-  "codexDetected",
+]);
+const CHECK_KEYS = Object.freeze([
+  "claudeDetected",
   "packageStaged",
   "marketplaceAdded",
   "pluginInstalled",
   "pluginListed",
-  "installedHookFound",
-  "hookExecuted",
+  "pluginDetailed",
+  "installedLauncherWired",
+  "launcherExecuted",
   "eventProduced",
   "privacyPreserved",
   "cleanupSucceeded",
-];
-const DURATION_KEYS = [
+]);
+const DURATION_KEYS = Object.freeze([
   "total",
   "probe",
   "packageStage",
   "marketplaceAdd",
   "pluginInstall",
   "pluginList",
+  "pluginDetails",
   "hook",
   "audit",
   "cleanup",
-];
+]);
 
 function isRecord(value) {
   return (
@@ -125,16 +132,20 @@ function hasExactKeys(value, expected) {
 }
 
 function fail(field) {
-  throw new TypeError(`Invalid CodexProviderAcceptanceV1 at ${field}.`);
+  throw new TypeError(`Invalid ClaudeProviderAcceptanceV1 at ${field}.`);
 }
 
-export function validateProviderAcceptanceReport(value) {
+export function validateClaudeProviderAcceptanceReport(value) {
   if (!hasExactKeys(value, REPORT_KEYS)) fail("report");
   if (value.v !== 1) fail("report.v");
-  if (value.kind !== "codex_provider_acceptance") fail("report.kind");
+  if (value.kind !== "claude_provider_acceptance") fail("report.kind");
+  if (value.scope !== ACCEPTANCE_SCOPE) fail("report.scope");
+  if (value.providerDelivery !== PROVIDER_DELIVERY) {
+    fail("report.providerDelivery");
+  }
   if (!RESULTS.has(value.result)) fail("report.result");
   if (!FAILURE_CODES.has(value.failure)) fail("report.failure");
-  if (!CODEX_STATES.has(value.codex)) fail("report.codex");
+  if (!CLAUDE_STATES.has(value.claude)) fail("report.claude");
   if (!hasExactKeys(value.checks, CHECK_KEYS)) fail("report.checks");
   for (const key of CHECK_KEYS) {
     if (typeof value.checks[key] !== "boolean") {
@@ -154,39 +165,36 @@ export function validateProviderAcceptanceReport(value) {
       fail(`report.durationsMs.${key}`);
     }
   }
+
+  const checks = value.checks;
+  const prerequisitePairs = [
+    ["packageStaged", "claudeDetected"],
+    ["marketplaceAdded", "packageStaged"],
+    ["pluginInstalled", "marketplaceAdded"],
+    ["pluginListed", "pluginInstalled"],
+    ["pluginDetailed", "pluginListed"],
+    ["installedLauncherWired", "pluginDetailed"],
+    ["launcherExecuted", "installedLauncherWired"],
+    ["eventProduced", "launcherExecuted"],
+    ["privacyPreserved", "launcherExecuted"],
+  ];
   if (
     (value.result === "passed" && value.failure !== "none") ||
     (value.result !== "passed" && value.failure === "none") ||
     (value.result === "passed" &&
-      CHECK_KEYS.some((key) => value.checks[key] !== true)) ||
-    (value.result === "skipped" &&
-      value.failure !== "codex_unavailable")
-  ) {
-    fail("report.consistency");
-  }
-  const checks = value.checks;
-  const prerequisitePairs = [
-    ["packageStaged", "codexDetected"],
-    ["marketplaceAdded", "packageStaged"],
-    ["pluginInstalled", "marketplaceAdded"],
-    ["pluginListed", "pluginInstalled"],
-    ["installedHookFound", "pluginListed"],
-    ["hookExecuted", "installedHookFound"],
-    ["eventProduced", "hookExecuted"],
-    ["privacyPreserved", "hookExecuted"],
-  ];
-  if (
+      CHECK_KEYS.some((key) => checks[key] !== true)) ||
+    checks.claudeDetected !== (value.claude === "available") ||
     prerequisitePairs.some(
       ([current, prerequisite]) =>
         checks[current] && !checks[prerequisite],
     ) ||
-    checks.codexDetected !== (value.codex === "available") ||
     (!checks.cleanupSucceeded && value.failure !== "cleanup_failed") ||
     (checks.cleanupSucceeded && value.failure === "cleanup_failed") ||
-    (value.failure === "codex_unavailable" &&
-      (value.result !== "skipped" || value.codex !== "unavailable")) ||
+    (value.failure === "claude_unavailable" &&
+      (value.result !== "skipped" || value.claude !== "unavailable")) ||
     (value.result === "skipped" &&
-      (value.codex !== "unavailable" ||
+      (value.failure !== "claude_unavailable" ||
+        value.claude !== "unavailable" ||
         CHECK_KEYS.slice(0, -1).some((key) => checks[key]) ||
         !checks.cleanupSucceeded))
   ) {
@@ -198,10 +206,12 @@ export function validateProviderAcceptanceReport(value) {
 function emptyReport() {
   return {
     v: 1,
-    kind: "codex_provider_acceptance",
+    kind: "claude_provider_acceptance",
+    scope: ACCEPTANCE_SCOPE,
+    providerDelivery: PROVIDER_DELIVERY,
     result: "failed",
     failure: "internal_failure",
-    codex: "unknown",
+    claude: "unknown",
     checks: Object.fromEntries(CHECK_KEYS.map((key) => [key, false])),
     durationsMs: Object.fromEntries(
       DURATION_KEYS.map((key) => [key, 0]),
@@ -218,39 +228,6 @@ function durationSince(clock, startedAt) {
 function markFailed(report, failure) {
   report.result = "failed";
   report.failure = FAILURE_CODES.has(failure) ? failure : "internal_failure";
-}
-
-export function runProviderAcceptanceCommand({
-  command,
-  args,
-  cwd,
-  env,
-  input,
-  timeoutMs,
-  maxOutputBytes,
-}) {
-  const result = spawnSync(command, args, {
-    cwd,
-    env,
-    input,
-    encoding: "utf8",
-    shell: false,
-    timeout: timeoutMs,
-    killSignal: "SIGKILL",
-    maxBuffer: maxOutputBytes,
-    windowsHide: true,
-    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
-  });
-  if (result.error?.code === "ENOENT") {
-    return { outcome: "not_found", stdout: "" };
-  }
-  if (result.error || result.status !== 0) {
-    return { outcome: "failed", stdout: "" };
-  }
-  return {
-    outcome: "ok",
-    stdout: typeof result.stdout === "string" ? result.stdout : "",
-  };
 }
 
 function runBounded(runner, specification) {
@@ -293,7 +270,7 @@ function assertPrivateDirectory(directory) {
     stat.isSymbolicLink() ||
     (uid !== null && stat.uid !== uid)
   ) {
-    throw new Error("Unsafe acceptance directory.");
+    throw new Error("Unsafe Claude acceptance directory.");
   }
   if ((stat.mode & 0o077) !== 0) fs.chmodSync(directory, 0o700);
 }
@@ -312,7 +289,7 @@ function acceptanceTempParent(candidate = os.tmpdir()) {
     relative.startsWith("..") ||
     path.isAbsolute(relative)
   ) {
-    throw new Error("Unsafe acceptance temp parent.");
+    throw new Error("Unsafe Claude acceptance temp parent.");
   }
   return resolved;
 }
@@ -325,7 +302,7 @@ function privateDirectoryIdentity(directory) {
     stat.isSymbolicLink() ||
     (uid !== null && stat.uid !== uid)
   ) {
-    throw new Error("Unsafe acceptance directory identity.");
+    throw new Error("Unsafe Claude acceptance directory identity.");
   }
   return { dev: stat.dev, ino: stat.ino };
 }
@@ -355,13 +332,15 @@ function packagePathAllowed(relativePath, packageFiles) {
 function copyClosedEntry(source, destination, budget) {
   const stat = fs.lstatSync(source);
   if (stat.isSymbolicLink()) {
-    throw new Error("Acceptance bundle rejected a symlink.");
+    throw new Error("Claude acceptance bundle rejected a symlink.");
   }
   if (stat.isDirectory()) {
     fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
       if (entry.name === ".git" || entry.name === "node_modules") {
-        throw new Error("Acceptance bundle rejected an unexpected directory.");
+        throw new Error(
+          "Claude acceptance bundle rejected an unexpected directory.",
+        );
       }
       copyClosedEntry(
         path.join(source, entry.name),
@@ -372,14 +351,17 @@ function copyClosedEntry(source, destination, budget) {
     return;
   }
   if (!stat.isFile()) {
-    throw new Error("Acceptance bundle rejected a special file.");
+    throw new Error("Claude acceptance bundle rejected a special file.");
   }
   budget.files += 1;
   budget.bytes += stat.size;
   if (budget.files > MAX_STAGE_FILES || budget.bytes > MAX_STAGE_BYTES) {
-    throw new Error("Acceptance bundle exceeded its closed size budget.");
+    throw new Error("Claude acceptance bundle exceeded its closed size budget.");
   }
-  fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.dirname(destination), {
+    recursive: true,
+    mode: 0o700,
+  });
   fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
   fs.chmodSync(destination, stat.mode & 0o111 ? 0o700 : 0o600);
 }
@@ -399,7 +381,9 @@ function defaultStageBundle({ marketplaceRoot, projectRoot }) {
   }
   for (const relativePath of ACCEPTANCE_BUNDLE_PATHS) {
     if (!packagePathAllowed(relativePath, packageJson.files)) {
-      throw new Error("Acceptance bundle path is not package-allowlisted.");
+      throw new Error(
+        "Claude acceptance bundle path is not package-allowlisted.",
+      );
     }
   }
 
@@ -412,30 +396,25 @@ function defaultStageBundle({ marketplaceRoot, projectRoot }) {
       budget,
     );
   }
+
   const marketplaceManifest = {
     name: MARKETPLACE_NAME,
-    interface: {
-      displayName: "AWF — Agent Waste Firewall",
+    owner: {
+      name: "AWF contributors",
+      url: "https://github.com/thisisun/agent-waste-firewall",
     },
+    description:
+      "Local-first monitoring and no-progress guardrails for coding agents.",
     plugins: [
       {
         name: PLUGIN_NAME,
-        source: {
-          source: "local",
-          path: "./plugin",
-        },
-        policy: {
-          installation: "AVAILABLE",
-          authentication: "ON_INSTALL",
-        },
-        category: "Productivity",
+        source: "./plugin",
       },
     ],
   };
   const manifestPath = path.join(
     marketplaceRoot,
-    ".agents",
-    "plugins",
+    ".claude-plugin",
     "marketplace.json",
   );
   fs.mkdirSync(path.dirname(manifestPath), {
@@ -449,50 +428,34 @@ function defaultStageBundle({ marketplaceRoot, projectRoot }) {
   );
 }
 
-function pluginIdentity(value) {
-  return (
-    value === PLUGIN_NAME ||
-    (typeof value === "string" &&
-      value.startsWith(`${PLUGIN_NAME}@`) &&
-      value.length > PLUGIN_NAME.length + 1)
-  );
-}
-
-function installedPluginListed(output) {
-  let parsed;
+function sameRealPath(first, second) {
   try {
-    parsed = JSON.parse(output);
+    return fs.realpathSync(first) === fs.realpathSync(second);
   } catch {
     return false;
   }
-  let entries;
-  let installedCollection = false;
-  if (Array.isArray(parsed)) {
-    entries = parsed;
-  } else if (isRecord(parsed) && Array.isArray(parsed.installed)) {
-    entries = parsed.installed;
-    installedCollection = true;
-  } else if (isRecord(parsed) && Array.isArray(parsed.plugins)) {
-    entries = parsed.plugins;
-  } else {
-    return false;
+}
+
+function ownedDirectoryTree(root, relative) {
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  let current = root;
+  for (const segment of ["", ...relative.split(path.sep)]) {
+    if (segment) current = path.join(current, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch {
+      return false;
+    }
+    if (
+      !stat.isDirectory() ||
+      stat.isSymbolicLink() ||
+      (uid !== null && stat.uid !== uid)
+    ) {
+      return false;
+    }
   }
-  const matches = entries.filter(
-    (entry) =>
-      isRecord(entry) &&
-      [entry.name, entry.id, entry.pluginId].some(pluginIdentity),
-  );
-  if (matches.length !== 1) return false;
-  const entry = matches[0];
-  if (
-    entry.enabled === false ||
-    ["disabled", "installed_disabled"].includes(entry.status)
-  ) {
-    return false;
-  }
-  if (typeof entry.installed === "boolean") return entry.installed;
-  if (installedCollection) return true;
-  return ["installed", "enabled", "installed_enabled"].includes(entry.status);
+  return true;
 }
 
 function installedHooksUseExpectedLauncher(hookManifest) {
@@ -514,43 +477,53 @@ function installedHooksUseExpectedLauncher(hookManifest) {
       return false;
     }
     const hooks = groups[0].hooks;
-    const expectedHookKeys = CONTEXT_HOOK_EVENTS.has(eventName)
-      ? ["type", "command", "timeout", "additionalContextLimit"]
-      : ["type", "command", "timeout"];
     if (
       !Array.isArray(hooks) ||
       hooks.length !== 1 ||
-      !hasExactKeys(hooks[0], expectedHookKeys)
+      !hasExactKeys(hooks[0], ["type", "command", "args", "timeout"])
     ) {
       return false;
     }
     const hook = hooks[0];
     return (
       hook.type === "command" &&
-      hook.command === EXPECTED_HOOK_COMMAND &&
-      hook.timeout === 3 &&
-      (CONTEXT_HOOK_EVENTS.has(eventName)
-        ? hook.additionalContextLimit === 2500
-        : hook.additionalContextLimit === undefined)
+      hook.command === "/bin/sh" &&
+      Array.isArray(hook.args) &&
+      hook.args.length === EXPECTED_LAUNCHER_ARGUMENTS.length &&
+      hook.args.every(
+        (argument, index) =>
+          argument === EXPECTED_LAUNCHER_ARGUMENTS[index],
+      ) &&
+      hook.timeout === 3
     );
   });
 }
 
-function validateInstalledPluginRoot(candidate, codexHome) {
-  const relative = path.relative(
-    path.join(codexHome, "plugins", "cache", MARKETPLACE_NAME),
-    candidate,
+function validateInstalledPluginRoot(candidate, claudeConfigDir) {
+  if (typeof candidate !== "string" || !path.isAbsolute(candidate)) {
+    return null;
+  }
+  const cacheRoot = path.join(
+    claudeConfigDir,
+    "plugins",
+    "cache",
+    MARKETPLACE_NAME,
+    PLUGIN_NAME,
   );
+  const relative = path.relative(cacheRoot, candidate);
   if (
+    relative === "" ||
     relative.startsWith("..") ||
     path.isAbsolute(relative) ||
     relative.split(path.sep).includes(".git")
   ) {
     return null;
   }
+  if (!ownedDirectoryTree(cacheRoot, relative)) return null;
+
   for (const filename of [
-    ".codex-plugin/plugin.json",
-    "hooks/hooks.json",
+    ".claude-plugin/plugin.json",
+    "hooks/claude-hooks.json",
     "scripts/hook-launcher.sh",
     "scripts/hook.mjs",
     "package.json",
@@ -564,12 +537,19 @@ function validateInstalledPluginRoot(candidate, codexHome) {
     }
     if (!stat.isFile() || stat.isSymbolicLink()) return null;
   }
+
   try {
     const manifest = JSON.parse(
-      fs.readFileSync(path.join(candidate, ".codex-plugin/plugin.json"), "utf8"),
+      fs.readFileSync(
+        path.join(candidate, ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
     );
     const hookManifest = JSON.parse(
-      fs.readFileSync(path.join(candidate, "hooks/hooks.json"), "utf8"),
+      fs.readFileSync(
+        path.join(candidate, "hooks", "claude-hooks.json"),
+        "utf8",
+      ),
     );
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(candidate, "package.json"), "utf8"),
@@ -579,6 +559,7 @@ function validateInstalledPluginRoot(candidate, codexHome) {
       !isRecord(hookManifest) ||
       !isRecord(packageJson) ||
       manifest.name !== PLUGIN_NAME ||
+      manifest.hooks !== "./hooks/claude-hooks.json" ||
       packageJson.name !== PLUGIN_NAME ||
       manifest.version !== packageJson.version ||
       !installedHooksUseExpectedLauncher(hookManifest)
@@ -591,47 +572,51 @@ function validateInstalledPluginRoot(candidate, codexHome) {
   return candidate;
 }
 
-function defaultLocateInstalledPlugin(codexHome) {
-  const cacheRoot = path.join(
-    codexHome,
-    "plugins",
-    "cache",
-    MARKETPLACE_NAME,
-  );
-  if (!fs.existsSync(cacheRoot)) return null;
-  const pending = [{ directory: cacheRoot, depth: 0 }];
-  let visited = 0;
-  const candidates = [];
-  while (pending.length > 0 && visited <= MAX_AUDIT_FILES) {
-    const { directory, depth } = pending.shift();
-    visited += 1;
-    if (depth > 8) continue;
-    let entries;
-    try {
-      entries = fs.readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return null;
-    }
-    if (entries.some((entry) => entry.isSymbolicLink())) return null;
-    if (
-      entries.some(
-        (entry) => entry.isDirectory() && entry.name === ".codex-plugin",
-      )
-    ) {
-      const candidate = validateInstalledPluginRoot(directory, codexHome);
-      if (candidate) candidates.push(candidate);
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        pending.push({
-          directory: path.join(directory, entry.name),
-          depth: depth + 1,
-        });
-      }
-    }
+function installedPluginEntry(output, workspace) {
+  let parsed;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return null;
   }
-  if (visited > MAX_AUDIT_FILES || candidates.length !== 1) return null;
-  return candidates[0];
+  if (!Array.isArray(parsed)) return null;
+  const matches = parsed.filter(
+    (entry) =>
+      isRecord(entry) &&
+      entry.id === PLUGIN_ID &&
+      entry.scope === "local" &&
+      entry.enabled !== false,
+  );
+  if (matches.length !== 1) return null;
+  const entry = matches[0];
+  if (
+    typeof entry.projectPath !== "string" ||
+    !sameRealPath(entry.projectPath, workspace)
+  ) {
+    return null;
+  }
+  return entry;
+}
+
+function defaultLocateInstalledPlugin({
+  output,
+  claudeConfigDir,
+  workspace,
+}) {
+  const entry = installedPluginEntry(output, workspace);
+  if (!entry) return null;
+  return validateInstalledPluginRoot(
+    entry.installPath,
+    claudeConfigDir,
+  );
+}
+
+function pluginDetailsConfirmed(output) {
+  return (
+    typeof output === "string" &&
+    output.includes(PLUGIN_NAME) &&
+    REQUIRED_HOOK_EVENTS.every((eventName) => output.includes(eventName))
+  );
 }
 
 function scanForCanaries(root, canaries) {
@@ -692,11 +677,16 @@ function safeBaseEnvironment(baseEnv) {
   return safe;
 }
 
-function codexEnvironment(baseEnv, isolatedHome, codexHome, tempRoot) {
+function claudeEnvironment(
+  baseEnv,
+  isolatedHome,
+  claudeConfigDir,
+  tempRoot,
+) {
   return {
     ...safeBaseEnvironment(baseEnv),
     HOME: isolatedHome,
-    CODEX_HOME: codexHome,
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
     XDG_CONFIG_HOME: path.join(isolatedHome, ".config"),
     TMPDIR: path.join(tempRoot, "tmp"),
   };
@@ -705,24 +695,184 @@ function codexEnvironment(baseEnv, isolatedHome, codexHome, tempRoot) {
 function hookEnvironment(
   baseEnv,
   isolatedHome,
-  codexHome,
+  claudeConfigDir,
+  installedPluginRoot,
   dataDir,
   tempRoot,
 ) {
   return {
     ...safeBaseEnvironment(baseEnv),
     HOME: isolatedHome,
-    CODEX_HOME: codexHome,
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+    CLAUDE_PLUGIN_ROOT: installedPluginRoot,
     XDG_CONFIG_HOME: path.join(isolatedHome, ".config"),
     TMPDIR: path.join(tempRoot, "tmp"),
     AWF_NODE_PATH: process.execPath,
     AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
-    AGENT_WASTE_FIREWALL_PLATFORM: "codex",
+    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
     AGENT_WASTE_FIREWALL_MODE: "observe",
   };
 }
 
-export function runProviderAcceptance(options = {}) {
+function claudeCommandCandidates(options, baseEnv) {
+  if (options.claudeCommand) return [options.claudeCommand];
+  const candidates = ["claude"];
+  const actualHome =
+    typeof baseEnv.HOME === "string" ? baseEnv.HOME : os.homedir();
+  for (const candidate of [
+    path.join(actualHome, ".local", "bin", "claude"),
+    "/opt/homebrew/bin/claude",
+    "/usr/local/bin/claude",
+  ]) {
+    if (fs.existsSync(candidate)) candidates.push(candidate);
+  }
+  return [...new Set(candidates)];
+}
+
+function hookPayloads({
+  nonce,
+  workspace,
+  transcriptPath,
+}) {
+  const promptMarker = acceptanceCanary(nonce, "prompt");
+  const sessionMarker = acceptanceCanary(nonce, "session");
+  const turnMarker = acceptanceCanary(nonce, "turn");
+  const successUseMarker = acceptanceCanary(nonce, "success-use");
+  const failureUseMarker = acceptanceCanary(nonce, "failure-use");
+  const toolInputMarker = acceptanceCanary(nonce, "tool-input");
+  const toolOutputMarker = acceptanceCanary(nonce, "tool-output");
+  const toolErrorMarker = acceptanceCanary(nonce, "tool-error");
+  const assistantMarker = acceptanceCanary(nonce, "assistant");
+  const transcriptMarker = acceptanceCanary(nonce, "transcript");
+  const rawSession = `${sessionMarker}:session:${sessionMarker}`;
+  const rawTurn = `${turnMarker}:turn:${turnMarker}`;
+  const rawToolInput = `${toolInputMarker} printf acceptance`;
+  const rawToolOutput =
+    `${toolOutputMarker}:successful-output:${toolOutputMarker}`;
+  const rawToolError =
+    `${toolErrorMarker}:failed-output:${toolErrorMarker}`;
+
+  return {
+    canaries: [
+      promptMarker,
+      sessionMarker,
+      turnMarker,
+      successUseMarker,
+      failureUseMarker,
+      toolInputMarker,
+      toolOutputMarker,
+      toolErrorMarker,
+      assistantMarker,
+      transcriptMarker,
+    ],
+    values: [
+      {
+        session_id: rawSession,
+        transcript_path:
+          `${transcriptPath}-${transcriptMarker}.jsonl`,
+        cwd: workspace,
+        hook_event_name: "UserPromptSubmit",
+        turn_id: rawTurn,
+        prompt:
+          `${promptMarker} Please ensure everything works across the whole ` +
+          `repository. ` +
+          promptMarker,
+      },
+      {
+        session_id: rawSession,
+        transcript_path:
+          `${transcriptPath}-${transcriptMarker}.jsonl`,
+        cwd: workspace,
+        hook_event_name: "PreToolUse",
+        turn_id: rawTurn,
+        tool_name: "Bash",
+        tool_use_id:
+          `${successUseMarker}:success-use:${successUseMarker}`,
+        tool_input: {
+          command: rawToolInput,
+        },
+      },
+      {
+        session_id: rawSession,
+        transcript_path:
+          `${transcriptPath}-${transcriptMarker}.jsonl`,
+        cwd: workspace,
+        hook_event_name: "PostToolUse",
+        turn_id: rawTurn,
+        tool_name: "Bash",
+        tool_use_id:
+          `${successUseMarker}:success-use:${successUseMarker}`,
+        tool_input: {
+          command: rawToolInput,
+        },
+        tool_response: {
+          stdout: rawToolOutput,
+        },
+      },
+      {
+        session_id: rawSession,
+        transcript_path:
+          `${transcriptPath}-${transcriptMarker}.jsonl`,
+        cwd: workspace,
+        hook_event_name: "PostToolUseFailure",
+        turn_id: rawTurn,
+        tool_name: "Bash",
+        tool_use_id:
+          `${failureUseMarker}:failure-use:${failureUseMarker}`,
+        tool_input: {
+          command: rawToolInput,
+        },
+        error: rawToolError,
+        is_interrupt: false,
+      },
+      {
+        session_id: rawSession,
+        transcript_path:
+          `${transcriptPath}-${transcriptMarker}.jsonl`,
+        cwd: workspace,
+        hook_event_name: "Stop",
+        turn_id: rawTurn,
+        stop_hook_active: false,
+        last_assistant_message:
+          `${assistantMarker}:assistant:${assistantMarker}`,
+      },
+    ],
+  };
+}
+
+function expectedSemanticEvents(events) {
+  return (
+    events.length === REQUIRED_HOOK_EVENTS.length &&
+    events.every(
+      (event) =>
+        isRecord(event) &&
+        event.v === 1 &&
+        event.platform === "claude",
+    ) &&
+    events.some(
+      (event) =>
+        event.family === "prompt" &&
+        event.operation === "prompt" &&
+        event.ruleId === "prompt_contract",
+    ) &&
+    events.some((event) => event.outcome === "started") &&
+    events.some((event) => event.outcome === "succeeded") &&
+    events.some((event) => event.outcome === "failed") &&
+    events.some(
+      (event) =>
+        event.family === "system" && event.operation === "progress",
+    )
+  );
+}
+
+/**
+ * This acceptance deliberately stops short of provider-driven hook delivery.
+ * Claude Code may require source trust at load/install time, and managed
+ * disableAllHooks policy can skip hooks. This runner never changes or bypasses
+ * either control: it validates an isolated local install, then executes the
+ * installed AWF launcher directly with synthetic payloads.
+ */
+export function runClaudeProviderAcceptance(options = {}) {
   const clock = options.clock ?? (() => performance.now());
   const runner = options.runner ?? runProviderAcceptanceCommand;
   const stageBundle = options.stageBundle ?? defaultStageBundle;
@@ -737,19 +887,20 @@ export function runProviderAcceptance(options = {}) {
   try {
     const tempParent = acceptanceTempParent(options.tempParent);
     tempRoot = fs.mkdtempSync(
-      path.join(tempParent, "awf-codex-acceptance-"),
+      path.join(tempParent, "awf-claude-acceptance-"),
     );
     assertPrivateDirectory(tempRoot);
     tempRootIdentity = privateDirectoryIdentity(tempRoot);
-    const nonce = crypto.randomBytes(12).toString("hex");
+
     const isolatedHome = path.join(tempRoot, "home");
-    const codexHome = path.join(tempRoot, "codex-home");
+    const claudeConfigDir = path.join(tempRoot, "claude-config");
     const marketplaceRoot = path.join(tempRoot, "marketplace");
     const workspace = path.join(tempRoot, "workspace");
     const dataDir = path.join(tempRoot, "awf-data");
+    const transcriptPath = path.join(tempRoot, "transcript");
     for (const directory of [
       isolatedHome,
-      codexHome,
+      claudeConfigDir,
       marketplaceRoot,
       workspace,
       path.join(tempRoot, "tmp"),
@@ -757,51 +908,46 @@ export function runProviderAcceptance(options = {}) {
       assertPrivateDirectory(directory);
     }
     fs.mkdirSync(path.join(workspace, ".git"), { mode: 0o700 });
-    const codexEnv = codexEnvironment(
+
+    const claudeEnv = claudeEnvironment(
       baseEnv,
       isolatedHome,
-      codexHome,
+      claudeConfigDir,
       tempRoot,
     );
-    const candidates = options.codexCommand
-      ? [options.codexCommand]
-      : [
-          "codex",
-          ...(fs.existsSync(CODEX_APP_BINARY) ? [CODEX_APP_BINARY] : []),
-        ];
-    let codexCommand = null;
+    let claudeCommand = null;
     let probeFailed = false;
     const probeStartedAt = clock();
-    for (const candidate of [...new Set(candidates)]) {
+    for (const candidate of claudeCommandCandidates(options, baseEnv)) {
       const probe = runBounded(runner, {
         command: candidate,
         args: ["plugin", "--help"],
-        cwd: tempRoot,
-        env: codexEnv,
+        cwd: workspace,
+        env: claudeEnv,
         timeoutMs: 5_000,
       });
       if (probe.outcome === "ok") {
-        codexCommand = candidate;
+        claudeCommand = candidate;
         break;
       }
       if (probe.outcome === "failed") probeFailed = true;
     }
     report.durationsMs.probe = durationSince(clock, probeStartedAt);
-    if (codexCommand === null) {
+    if (claudeCommand === null) {
       if (probeFailed) {
-        report.codex = "unknown";
-        markFailed(report, "codex_probe_failed");
+        report.claude = "unknown";
+        markFailed(report, "claude_probe_failed");
       } else {
-        report.codex = "unavailable";
+        report.claude = "unavailable";
         report.result = "skipped";
-        report.failure = "codex_unavailable";
+        report.failure = "claude_unavailable";
       }
     } else {
-      report.codex = "available";
-      report.checks.codexDetected = true;
+      report.claude = "available";
+      report.checks.claudeDetected = true;
     }
 
-    if (report.checks.codexDetected) {
+    if (report.checks.claudeDetected) {
       const stageStartedAt = clock();
       try {
         stageBundle({ marketplaceRoot, projectRoot: PROJECT_ROOT });
@@ -813,17 +959,24 @@ export function runProviderAcceptance(options = {}) {
     }
 
     if (report.checks.packageStaged) {
-      const marketplaceStartedAt = clock();
+      const addStartedAt = clock();
       const added = runBounded(runner, {
-        command: codexCommand,
-        args: ["plugin", "marketplace", "add", marketplaceRoot, "--json"],
-        cwd: tempRoot,
-        env: codexEnv,
+        command: claudeCommand,
+        args: [
+          "plugin",
+          "marketplace",
+          "add",
+          marketplaceRoot,
+          "--scope",
+          "local",
+        ],
+        cwd: workspace,
+        env: claudeEnv,
         timeoutMs: 30_000,
       });
       report.durationsMs.marketplaceAdd = durationSince(
         clock,
-        marketplaceStartedAt,
+        addStartedAt,
       );
       if (added.outcome === "ok") {
         report.checks.marketplaceAdded = true;
@@ -835,15 +988,16 @@ export function runProviderAcceptance(options = {}) {
     if (report.checks.marketplaceAdded) {
       const installStartedAt = clock();
       const installed = runBounded(runner, {
-        command: codexCommand,
+        command: claudeCommand,
         args: [
           "plugin",
-          "add",
-          `${PLUGIN_NAME}@${MARKETPLACE_NAME}`,
-          "--json",
+          "install",
+          PLUGIN_ID,
+          "--scope",
+          "local",
         ],
-        cwd: tempRoot,
-        env: codexEnv,
+        cwd: workspace,
+        env: claudeEnv,
         timeoutMs: 30_000,
       });
       report.durationsMs.pluginInstall = durationSince(
@@ -857,121 +1011,89 @@ export function runProviderAcceptance(options = {}) {
       }
     }
 
+    let pluginListOutput = "";
     if (report.checks.pluginInstalled) {
       const listStartedAt = clock();
       const listed = runBounded(runner, {
-        command: codexCommand,
+        command: claudeCommand,
         args: ["plugin", "list", "--json"],
-        cwd: tempRoot,
-        env: codexEnv,
+        cwd: workspace,
+        env: claudeEnv,
         timeoutMs: 10_000,
       });
       report.durationsMs.pluginList = durationSince(clock, listStartedAt);
       if (
         listed.outcome === "ok" &&
-        installedPluginListed(listed.stdout)
+        installedPluginEntry(listed.stdout, workspace)
       ) {
+        pluginListOutput = listed.stdout;
         report.checks.pluginListed = true;
       } else {
         markFailed(report, "plugin_list_failed");
       }
     }
 
-    let installedPluginRoot = null;
     if (report.checks.pluginListed) {
+      const detailsStartedAt = clock();
+      const detailed = runBounded(runner, {
+        command: claudeCommand,
+        args: ["plugin", "details", PLUGIN_ID],
+        cwd: workspace,
+        env: claudeEnv,
+        timeoutMs: 10_000,
+      });
+      report.durationsMs.pluginDetails = durationSince(
+        clock,
+        detailsStartedAt,
+      );
+      if (
+        detailed.outcome === "ok" &&
+        pluginDetailsConfirmed(detailed.stdout)
+      ) {
+        report.checks.pluginDetailed = true;
+      } else {
+        markFailed(report, "plugin_details_failed");
+      }
+    }
+
+    let installedPluginRoot = null;
+    if (report.checks.pluginDetailed) {
       try {
-        installedPluginRoot = locateInstalledPlugin(codexHome);
+        installedPluginRoot = locateInstalledPlugin({
+          output: pluginListOutput,
+          claudeConfigDir,
+          workspace,
+        });
       } catch {
         installedPluginRoot = null;
       }
       if (installedPluginRoot) {
-        report.checks.installedHookFound = true;
+        report.checks.installedLauncherWired = true;
       } else {
-        markFailed(report, "installed_hook_missing");
+        markFailed(report, "installed_launcher_invalid");
       }
     }
 
-    const promptMarker = acceptanceCanary(nonce, "prompt");
-    const rawPrompt =
-      `${promptMarker} Please ensure everything works across the whole ` +
-      `repository. ${promptMarker}`;
-    const sessionMarker = acceptanceCanary(nonce, "session");
-    const turnMarker = acceptanceCanary(nonce, "turn");
-    const toolUseMarker = acceptanceCanary(nonce, "tool-use");
-    const toolInputMarker = acceptanceCanary(nonce, "tool-input");
-    const toolOutputMarker = acceptanceCanary(nonce, "tool-output");
-    const assistantMarker = acceptanceCanary(nonce, "assistant");
-    const rawSession = `${sessionMarker}:session:${sessionMarker}`;
-    const rawTurn = `${turnMarker}:turn:${turnMarker}`;
-    const rawToolUse = `${toolUseMarker}:tool-use:${toolUseMarker}`;
-    const rawToolInput = `${toolInputMarker}:tool-input:${toolInputMarker}`;
-    const rawToolOutput =
-      `${toolOutputMarker}:tool-output:${toolOutputMarker}`;
-    const canaries = [
-      promptMarker,
-      sessionMarker,
-      turnMarker,
+    const nonce = crypto.randomBytes(12).toString("hex");
+    const payloadFixture = hookPayloads({
+      nonce,
       workspace,
-      toolUseMarker,
-      toolInputMarker,
-      toolOutputMarker,
-      assistantMarker,
-    ];
-    const hookEnv = hookEnvironment(
-      baseEnv,
-      isolatedHome,
-      codexHome,
-      dataDir,
-      tempRoot,
-    );
-    if (report.checks.installedHookFound) {
+      transcriptPath,
+    });
+    const launcherOutputs = [];
+    let hookEnv = null;
+    if (report.checks.installedLauncherWired) {
+      hookEnv = hookEnvironment(
+        baseEnv,
+        isolatedHome,
+        claudeConfigDir,
+        installedPluginRoot,
+        dataDir,
+        tempRoot,
+      );
       const hookStartedAt = clock();
-      const hookPayloads = [
-        {
-          session_id: rawSession,
-          cwd: workspace,
-          hook_event_name: "UserPromptSubmit",
-          turn_id: rawTurn,
-          prompt: rawPrompt,
-        },
-        {
-          session_id: rawSession,
-          cwd: workspace,
-          hook_event_name: "PreToolUse",
-          turn_id: rawTurn,
-          tool_name: "Bash",
-          tool_use_id: rawToolUse,
-          tool_input: {
-            command: `${rawToolInput} printf acceptance`,
-          },
-        },
-        {
-          session_id: rawSession,
-          cwd: workspace,
-          hook_event_name: "PostToolUse",
-          turn_id: rawTurn,
-          tool_name: "Bash",
-          tool_use_id: rawToolUse,
-          tool_input: {
-            command: `${rawToolInput} printf acceptance`,
-          },
-          tool_response: {
-            exit_code: 0,
-            stdout: rawToolOutput,
-          },
-        },
-        {
-          session_id: rawSession,
-          cwd: workspace,
-          hook_event_name: "Stop",
-          turn_id: rawTurn,
-          stop_hook_active: false,
-          last_assistant_message:
-            `${assistantMarker}:assistant:${assistantMarker}`,
-        },
-      ];
-      let validHookOutput = true;
-      for (const payload of hookPayloads) {
+      let validLauncherOutput = true;
+      for (const payload of payloadFixture.values) {
         const hookResult = runBounded(runner, {
           command: "/bin/sh",
           args: [
@@ -990,27 +1112,31 @@ export function runProviderAcceptance(options = {}) {
           maxOutputBytes: 64 * 1024,
         });
         if (hookResult.outcome !== "ok") {
-          validHookOutput = false;
+          validLauncherOutput = false;
           break;
         }
         try {
-          validHookOutput = isEmptyHookOutput(
+          validLauncherOutput = isEmptyHookOutput(
             JSON.parse(hookResult.stdout),
           );
         } catch {
-          validHookOutput = false;
+          validLauncherOutput = false;
         }
-        if (!validHookOutput) break;
+        if (!validLauncherOutput) break;
+        launcherOutputs.push(hookResult.stdout);
       }
       report.durationsMs.hook = durationSince(clock, hookStartedAt);
-      if (validHookOutput) {
-        report.checks.hookExecuted = true;
+      if (
+        validLauncherOutput &&
+        launcherOutputs.length === REQUIRED_HOOK_EVENTS.length
+      ) {
+        report.checks.launcherExecuted = true;
       } else {
-        markFailed(report, "hook_failed");
+        markFailed(report, "launcher_failed");
       }
     }
 
-    if (report.checks.hookExecuted) {
+    if (report.checks.launcherExecuted) {
       const auditStartedAt = clock();
       let events = [];
       try {
@@ -1021,24 +1147,16 @@ export function runProviderAcceptance(options = {}) {
       } catch {
         events = [];
       }
-      report.checks.eventProduced =
-        events.length > 0 &&
-        events.every(
-          (event) =>
-            isRecord(event) &&
-            event.v === 1 &&
-            event.platform === "codex",
-        ) &&
-        events.some(
-          (event) =>
-            event.kind === "incident" &&
-            event.ruleId === "prompt_contract",
-        );
+      report.checks.eventProduced = expectedSemanticEvents(events);
       try {
-        report.checks.privacyPreserved = scanForCanaries(
-          tempRoot,
-          canaries,
-        );
+        report.checks.privacyPreserved =
+          scanForCanaries(tempRoot, payloadFixture.canaries) &&
+          scanForCanaries(dataDir, [workspace]) &&
+          launcherOutputs.every(
+            (output) =>
+              !containsCanary(output, payloadFixture.canaries) &&
+              !output.includes(workspace),
+          );
       } catch {
         report.checks.privacyPreserved = false;
       }
@@ -1051,7 +1169,7 @@ export function runProviderAcceptance(options = {}) {
     }
 
     if (
-      report.checks.codexDetected &&
+      report.checks.claudeDetected &&
       CHECK_KEYS.slice(0, -1).every((key) => report.checks[key])
     ) {
       report.result = "passed";
@@ -1086,20 +1204,20 @@ export function runProviderAcceptance(options = {}) {
     } else if (
       report.result === "failed" &&
       report.failure === "internal_failure" &&
-      report.codex === "unavailable"
+      report.claude === "unavailable"
     ) {
       report.result = "skipped";
-      report.failure = "codex_unavailable";
+      report.failure = "claude_unavailable";
     }
     report.durationsMs.total = durationSince(clock, totalStartedAt);
   }
 
-  return validateProviderAcceptanceReport(report);
+  return validateClaudeProviderAcceptanceReport(report);
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
 if (invokedPath === fileURLToPath(import.meta.url)) {
-  const report = runProviderAcceptance();
+  const report = runClaudeProviderAcceptance();
   process.stdout.write(`${JSON.stringify(report)}\n`);
   if (report.result === "failed") process.exitCode = 1;
 }

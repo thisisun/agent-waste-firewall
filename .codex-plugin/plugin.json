@@ -16,7 +16,7 @@
   "interface": {
     "displayName": "AWF — Agent Waste Firewall",
     "shortDescription": "Monitor coding agents and catch no-progress loops.",
-    "longDescription": "Checks instructions before execution, detects repeated work without repository progress, records strict anonymized semantic traces, and powers a local live dashboard with prompt coaching.",
+    "longDescription": "Checks instructions before execution, detects repeated work without repository progress, records strict raw-free pseudonymous semantic traces, and powers a local live dashboard with prompt coaching.",
     "developerName": "AWF contributors",
     "category": "Productivity",
     "capabilities": [

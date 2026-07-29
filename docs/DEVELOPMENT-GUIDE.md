@@ -4,6 +4,9 @@ This guide turns the [macOS product architecture](MACOS-ARCHITECTURE.md) into an
 plan. English is the source language for public GitHub documentation; Korean README content should
 summarize and link to the English source.
 
+Native commands in this guide assume a GitHub checkout. The published npm artifact is the portable
+plugin/CLI package and intentionally excludes `macos/`.
+
 ## Working principles
 
 1. Keep the hook path local, deterministic, dependency-free, and independent of the GUI.
@@ -29,6 +32,10 @@ Native shell:
 - the current stable Xcode capable of targeting macOS 13 or newer;
 - Node.js 18 or newer for the current developer preview;
 - an Apple Developer Program identity only for signed/notarized release builds.
+
+The external-runtime hook launcher rejects symlink candidates in this alpha. For a provider
+launched from a Homebrew- or Volta-only environment, set `AWF_NODE_PATH` to the underlying absolute
+regular Node executable; a symlink path alone fails open.
 
 Run the current baseline before changing anything:
 
@@ -56,6 +63,13 @@ receive only the explicit caller environment after allowlist projection. The shi
 dashboard paths run Codex and Claude concurrently; each provider's version and plugin-list steps
 share one three-second result budget. Timeout and thrown-error detail collapse to the same closed
 `unknown` state. Dashboard shutdown aborts and kills in-flight default provider children.
+
+Provider hook launch boundaries differ. Claude's exec-form manifest invokes the protected inner
+`/bin/sh -p` launcher directly. Codex first evaluates its command string through inherited
+`$SHELL -lc`; user/provider login-shell startup is therefore a trusted boundary outside AWF's
+environment scrubbing. Direct launcher acceptance and latency benchmarks do not exercise that
+outer Codex shell. See the
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
 
 ## Milestone plan
 
@@ -102,7 +116,8 @@ the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboa
 transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The native
 sentinel decodes `ProviderIntegrationStatusV1` and remains yellow until fresh audited provider
 activity is observed; retained or expired activity cannot make it green. The local `AWFTests`
-target passes 36/36 with no skips, including the real bundled worker. The current PR head passes
+target passes 39/39 with no skips, including inherited-`PATH` rejection, bounded NVM discovery,
+and the real bundled worker. The prior PR head passes
 the configured GitHub Node matrix, dashboard benchmark jobs, and unsigned native build/unit job.
 M1 acceptance is still incomplete because a successfully materialized UI run, signed launch, and
 clean-machine tests remain pending.
@@ -171,17 +186,17 @@ Acceptance:
 
 Goal: make installation safe and reversible for non-technical users.
 
-Implementation status: read-only detection, a bounded live-delivery witness, and an isolated Codex
-acceptance runner are available, but user-owned installation management and live-provider
+Implementation status: read-only detection, a bounded live-delivery witness, and isolated Codex
+and Claude acceptance runners are available, but user-owned installation management and live-provider
 acceptance are not complete. On the current validation Mac, the shell-inherited CLI probe detects
 Codex `0.146.0` as `needs_install` and reports Claude Code as `not_detected` on that shell `PATH`.
 The native supervisor's closed search path also detects user-local Claude Code `2.1.207` as
-`needs_install`. On that same Mac, `npm run acceptance:codex` passed isolated marketplace add,
-plugin install/list, direct execution of installed prompt/pre-tool/post-tool hooks, closed-event
-production, prefix/suffix raw-canary exclusion, and temporary-tree cleanup. A productive non-nonce
-counterexample is allowed while a fixture persisting only the first 20 bytes of raw
-prompt/input/output fails the gate. The runner uses private temporary `HOME` and `CODEX_HOME`
-values and does not modify global provider configuration.
+`needs_install`. On that same Mac, `npm run acceptance:providers` passed isolated marketplace
+add/install/inventory, installed-launcher execution, closed-event production, raw-canary
+exclusion, and temporary-tree cleanup for both providers. Codex covers four hook events including
+observation-only Stop; Claude covers five by also including failure. Productive non-nonce
+counterexamples are allowed while partial raw persistence fails the gates. The runners use private
+temporary provider state and do not modify global configuration.
 
 The isolated gate deliberately does not invoke `/hooks` or approve provider trust. Installation,
 enablement, hook review, and trust are user-controlled actions, and a successful install must not
@@ -190,18 +205,19 @@ Provider probes receive a closed environment allowlist rather than the whole par
 The acceptance runner validates a system-temp parent, creates a fresh child itself, and recursively
 removes only that owned child.
 
-Run the acceptance gate on a Mac with the Codex plugin CLI:
+Run the acceptance gates on a Mac with the provider CLIs:
 
 ```bash
-npm run acceptance:codex
+npm run acceptance:providers
 ```
 
-A pass establishes only that the isolated package/install/direct-hook path and privacy cleanup
+A pass establishes only that the isolated package/install/direct-launcher path and privacy cleanup
 worked on that machine. Actual user-owned `/hooks` review/trust, provider-driven live delivery,
 upgrade, repair, rollback, and uninstall remain separate acceptance gates.
 
-This isolated gate is worker direct execution, not proof that a provider registered and called the
-hook. To collect a user-controlled live-delivery witness, first complete the provider's trust
+These isolated gates invoke installed launchers directly; they are not proof that a provider
+registered and called the hook. Claude reports `providerDelivery: "not_tested"` explicitly. To
+collect a user-controlled live-delivery witness, first complete the provider's trust
 flow. Then start one of these in a normal terminal and submit a new harmless short prompt in a
 separate conversation of that provider:
 
@@ -416,26 +432,43 @@ metadata not approved for presentation and must have one writer: the Node worker
 Developer preview:
 
 - bundles the reviewed JavaScript worker source, dashboard source, and visual assets;
-- discovers Node 18+ explicitly with a bounded direct `--version` probe and no interactive shell;
+- discovers Node 18+ explicitly with a bounded direct `--version` probe, no interactive shell, and
+  no inherited `PATH`;
 - accepts `AWF_NODE_PATH` only as an absolute regular executable path;
+- checks Volta, at most 64 strict NVM versions, and fixed standard locations;
 - still needs to show the resolved executable and version in health UI;
 - never assume an interactive shell `PATH`;
 - fail with an actionable install message.
 
 Public beta:
 
-- pin a runtime version and checksum;
+- pin an LTS runtime version, architecture, checksum, upstream signature identity, and full
+  third-party license file. Node 24 is the current production LTS line; treat the exact patch as a
+  release input rather than a floating URL;
 - assemble the helper from reviewed source;
-- place it in the app bundle;
+- place standalone Mach-O helpers in `AWF.app/Contents/Helpers`, not `Resources`;
 - avoid dynamic downloads on first launch;
 - sign the helper and its nested libraries;
 - expose `--version`, `doctor --json`, and a protocol version;
 - keep stdout machine-readable and stderr diagnostic.
 
-The hook should launch the packaged worker through a stable app-owned launcher. The app may be
-absent. Install the next runtime into a versioned directory, run its health check, atomically switch
-the active version, and retain one known-good version for rollback. Record the exact installed
-files in a private ownership ledger; uninstall must remove only those entries.
+The hook should launch the packaged worker through a stable native launcher under
+`~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/`. The app
+may be absent. Ship signed `awf-hook` and `awf-node` payloads in `Contents/Helpers`, install the
+next runtime into a versioned directory, run its health and protocol checks, then atomically replace
+a closed regular-file manifest. Do not use a writable `current` symlink. Retain one known-good
+version for rollback. Record closed runtime IDs in a private ownership ledger and reconstruct
+paths from those IDs; uninstall must remove only ledger-owned entries.
+
+Sign from the inside out (`awf-node`, `awf-hook`, app, distribution container), never use
+`codesign --deep` for signing, and include Node's complete bundled third-party `LICENSE`.
+Apple documents standalone command-line tools under the app's executable-code locations and
+requires every distributed executable to be signed for notarization. See
+[Apple bundle structure](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html),
+[distribution signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/),
+[notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution),
+[Node release status](https://nodejs.org/en/about/previous-releases), and the
+[Node license](https://github.com/nodejs/node/blob/main/LICENSE).
 
 ## Test strategy
 
@@ -656,12 +689,13 @@ The beta is done when a non-technical user can:
 6. continue working if the app is closed or crashes;
 7. inspect the evidence without exposing prompt, command, output, path, or source text;
 8. purge local data and uninstall the integration;
-9. reproduce the published evaluation on anonymized semantic fixtures.
+9. reproduce the published evaluation on synthetic, raw-free semantic fixtures.
 
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
 dashboard projection, fixture-driven publication tests, and closed provider reality gate are
-implemented. The isolated Codex package/install/direct-hook acceptance gate is also implemented
-and has passed on the validation Mac. The bounded delivery witness is implemented, but no
+implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates are
+also implemented and have passed on the validation Mac. The bounded delivery witness is
+implemented, but no
 user-owned Codex or Claude Code live-delivery pass is claimed yet. The next integration work is a
 reversible install/repair/uninstall manager plus actual user-owned trust and live-delivery
 acceptance. It must preserve each provider's trust model and must not infer successful monitoring

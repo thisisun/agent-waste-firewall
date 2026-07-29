@@ -141,7 +141,8 @@ The worker must:
 - make no model call;
 - have no install-time npm dependencies;
 - emit only provider JSON on standard output;
-- keep diagnostics on standard error and rate-limit them;
+- keep diagnostics on standard error and rate-limit in-worker warnings; the pre-runtime launcher
+  instead emits one fixed, raw-free warning for each event it cannot check;
 - fail open on crashes, timeouts, corrupt optional telemetry, or an unavailable UI;
 - use per-session locking so concurrent agents do not overwrite each other;
 - finish under 100 ms at p95 on supported Macs, measured from fixture-driven integration tests.
@@ -307,11 +308,22 @@ shell `PATH`, version manager, or Homebrew installation. The bundled runtime and
 helper must be signed as part of the app. Keep the portable source and CLI runnable with system
 Node for contributors.
 
+The current alpha now routes macOS/POSIX hooks through a plugin-root inner launcher and removes
+inherited `PATH` lookup from both that launcher and the native dashboard locator after they start.
+The inner launcher uses `/bin/sh -p`, scrubs known Node/dynamic-loader injection variables, rejects
+symlink or group/world-writable hook/runtime files on macOS, and falls back only to explicit,
+bounded external Node locations. Claude's exec-form hook reaches it directly. Codex command hooks
+first evaluate the command through inherited `$SHELL -lc`; user/provider login-shell startup is a
+trusted boundary outside AWF's scrubbing, and the direct launcher tests do not cover it. See the
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
+This closes an inner-launcher reliability gap; it does not satisfy the bundled-runtime release
+gate or harden the outer Codex shell.
+
 The public hook manifest should call a small stable launcher in an app-owned per-user integration
 directory, not an absolute path inside `/Applications/AWF.app`. The app can be moved, and
 provider trust should not change for every runtime upgrade. Install versions side by side, validate
-the new worker with `doctor`, then atomically switch a `current` pointer. Keep an installation
-ledger so repair, rollback, and uninstall touch only files created by AWF.
+the new worker with `doctor`, then atomically replace a closed regular-file activation manifest.
+Keep an installation ledger so repair, rollback, and uninstall touch only files created by AWF.
 
 Do not choose the Mac App Store first. Provider plugin installation and execution of a bundled
 helper need to be proven under sandbox constraints. Start with hardened-runtime, Developer
@@ -363,7 +375,9 @@ Current migration debt to address explicitly:
 
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
 - the browser dashboard is a large combined asset module;
-- current manifests invoke `node` from the user's environment;
+- macOS/POSIX manifests use a transitional plugin-root launcher with an external Node allowlist;
+  Windows provider-hook execution is unsupported, and no signed native launcher/runtime is
+  installed yet;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those
   internal state JSON files.
 

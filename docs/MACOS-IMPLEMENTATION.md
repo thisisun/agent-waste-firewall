@@ -62,6 +62,9 @@ best-effort publication is incomplete coverage; corruption is degraded.
 
 An unsigned, source-buildable macOS 13+ shell now exists under `macos/`:
 
+This native source is available in the GitHub checkout. The published npm artifact is the portable
+plugin/CLI package and intentionally excludes `macos/`.
+
 - `AWF.xcodeproj` contains the `AWF`, `AWFTests`, and `AWFUITests` targets and one shared `AWF`
   scheme. It uses SwiftUI, AppKit, WebKit, Foundation, and XCTest without external packages.
 - The SwiftUI lifecycle owns a normal dashboard window and a `MenuBarExtra`; closing the main
@@ -71,10 +74,11 @@ An unsigned, source-buildable macOS 13+ shell now exists under `macos/`:
   the translucent red panel background. It decodes the closed provider integration response and
   requires fresh `observed` activity before showing green; retained or expired activity stays
   yellow unless a real warning takes precedence.
-- The app supervisor locates an installed Node.js 18+ executable with a bounded direct
-  `--version` probe, launches the bundled `bin/agent-waste-firewall.mjs dashboard --port 0 --json`,
-  accepts one bounded readiness line, and terminates only its presentation subprocess when the app
-  exits.
+- The app supervisor locates an installed Node.js 18+ executable without consulting inherited
+  `PATH`. It checks an absolute developer override, Volta, at most 64 strict numeric NVM versions,
+  and fixed standard paths, then performs a bounded direct `--version` probe. It launches the bundled
+  `bin/agent-waste-firewall.mjs dashboard --port 0 --json`, accepts one bounded readiness line, and
+  terminates only its presentation subprocess when the app exits.
 - The app bundle copies the reviewed `assets/`, `bin/`, and `src/` directories as folder
   resources. This packages the AWF JavaScript source but not a Node runtime.
 - The main window embeds the existing loopback dashboard in a non-persistent `WKWebView`.
@@ -87,6 +91,17 @@ The source build has no Developer ID signature, notarization ticket, DMG, instal
 mechanism, or bundled/pinned Node runtime. It is a developer preview, not a downloadable beta.
 Provider install/repair/uninstall, start at login, signed helper lifecycle, and release packaging
 remain pending.
+
+Provider manifests now use a plugin-root inner launcher on macOS/POSIX. It streams stdin without
+reading or persisting it. Once it starts under `/bin/sh -p`, it does not search inherited `PATH`;
+it strips Node and dynamic-loader injection variables, rejects symlink and group/world-writable
+worker/runtime files on macOS, and uses only explicit or bounded external Node candidates. Claude
+reaches this launcher through exec-form arguments. Codex first evaluates its command string through
+inherited `$SHELL -lc`, so user/provider login-shell startup remains a trusted boundary outside
+AWF's scrubbing and direct tests. The launcher emits one fixed, raw-free stderr warning for each
+event that it cannot check; this pre-runtime warning is not rate-limited. Windows provider-hook
+execution is unsupported. This is an alpha transition layer; no Node runtime or native hook
+launcher is bundled or installed yet.
 
 ## Native privacy boundary
 
@@ -109,18 +124,18 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The current portable rerun passed `npm run check` across 53 JavaScript and 32 JSON files and
-`npm test` with 203/203 tests. The same-machine performance rerun measured:
+The current portable rerun passed `npm run check` across 58 JavaScript and 46 JSON files and
+`npm test` with 266/266 tests. The same-machine performance rerun measured:
 
 | Path | Result |
 | --- | ---: |
-| Real hook subprocess | p95 94.641 ms; p99 103.181 ms |
-| Live dashboard full-generation cold audit | 233.230 ms |
-| Live dashboard warm status | p95 2.204 ms |
-| Concurrent live publication | p95 18.927 ms |
-| Full-generation rotation | 15.779 ms |
-| SSE reset visibility | 451.285 ms; 0 drops |
-| 15,000-event trace cursor | 107.937 ms cold startup; 2.368 ms status p95; 1.639 ms append visibility |
+| Direct inner launcher plus real hook subprocess | p95 54.614 ms; p99 57.059 ms |
+| Live dashboard full-generation cold audit | 143.181 ms |
+| Live dashboard warm status | p95 0.980 ms |
+| Concurrent live publication | p95 7.946 ms |
+| Full-generation rotation | 8.913 ms |
+| SSE reset visibility | 476.955 ms; 0 drops |
+| 15,000-event trace cursor | 56.223 ms cold startup; 1.517 ms status p95; 1.029 ms append visibility |
 
 SSE visibility includes the bounded polling interval and is not hook decision latency.
 
@@ -143,9 +158,10 @@ xcodebuild \
 
 This command verifies source compilation, the guardian-mark app icon, Info.plist processing,
 localization, and folder-resource assembly. It does not create a signed release. The local
-`AWFTests` target passed 36/36 tests with no skips, including Node 18+ probe boundaries, a real
-bundled-worker launch, closed status/provider fetches, child cancellation and forced reap, exact
-protocol decoding, navigation rejection, and the fresh-provider sentinel state table. A direct
+`AWFTests` target passed 39/39 tests with no skips, including Node 18+ probe boundaries,
+inherited-`PATH` rejection, bounded Finder-style NVM discovery, a real bundled-worker launch,
+closed status/provider fetches, child cancellation and forced reap, exact protocol decoding,
+navigation rejection, and the fresh-provider sentinel state table. A direct
 temporary-data launch
 remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
 and removed its Node child on normal quit.
