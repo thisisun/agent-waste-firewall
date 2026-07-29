@@ -179,6 +179,256 @@ test("integration status emits only the closed provider contract", (context) => 
   assert.equal(result.stdout.includes(root), false);
 });
 
+test("integration verify JSON readiness observes a real hook event without changing provider config", async (context) => {
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-integration-verify-"),
+  );
+  const dataDir = path.join(tempRoot, "data");
+  const providerHome = path.join(tempRoot, "provider-home");
+  const codexHome = path.join(providerHome, ".codex");
+  const claudeConfig = path.join(providerHome, ".claude");
+  const workspace = path.join(tempRoot, "workspace");
+  fs.mkdirSync(codexHome, { recursive: true });
+  fs.mkdirSync(claudeConfig, { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  const codexSentinel = path.join(codexHome, "config.toml");
+  const claudeSentinel = path.join(claudeConfig, "settings.json");
+  fs.writeFileSync(codexSentinel, "SENTINEL_CODEX_CONFIG\n");
+  fs.writeFileSync(claudeSentinel, '{"sentinel":"claude-config"}\n');
+  context.after(() =>
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  );
+
+  const env = {
+    ...process.env,
+    HOME: providerHome,
+    CODEX_HOME: codexHome,
+    CLAUDE_CONFIG_DIR: claudeConfig,
+    AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+    AGENT_WASTE_FIREWALL_PLATFORM: "codex",
+  };
+  const child = spawn(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "integration",
+      "verify",
+      "codex",
+      "--timeout",
+      "5",
+      "--json",
+    ],
+    {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (!child.killed) child.kill("SIGKILL");
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  let hookStarted = false;
+  let hookResult = null;
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+    if (
+      !hookStarted &&
+      stderr.includes("AWF_READY provider=codex timeoutSeconds=5")
+    ) {
+      hookStarted = true;
+      hookResult = spawnSync(
+        process.execPath,
+        [path.join(root, "scripts/hook.mjs")],
+        {
+          encoding: "utf8",
+          env,
+          input: JSON.stringify({
+            session_id: "SECRET-VERIFY-SESSION",
+            cwd: workspace,
+            hook_event_name: "UserPromptSubmit",
+            turn_id: "SECRET-VERIFY-TURN",
+            prompt: "SECRET-VERIFY-PROMPT",
+          }),
+        },
+      );
+    }
+  });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Integration verification timed out."));
+    }, 8_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+
+  assert.equal(hookStarted, true, stdout);
+  assert.equal(hookResult?.status, 0, hookResult?.stderr);
+  assert.equal(exitCode, 0, `${stdout}\n${stderr}`);
+  const verification = JSON.parse(stdout);
+  assert.deepEqual(Object.keys(verification), [
+    "v",
+    "kind",
+    "provider",
+    "result",
+    "reason",
+    "waitedMs",
+    "event",
+  ]);
+  assert.equal(verification.provider, "codex");
+  assert.equal(verification.result, "observed");
+  assert.equal(verification.reason, "fresh_prompt_event");
+  assert.equal(
+    stderr,
+    "AWF_READY provider=codex timeoutSeconds=5\n",
+  );
+  for (const canary of [
+    "SECRET-VERIFY-SESSION",
+    "SECRET-VERIFY-TURN",
+    "SECRET-VERIFY-PROMPT",
+  ]) {
+    assert.equal(stdout.includes(canary), false);
+    assert.equal(stderr.includes(canary), false);
+  }
+  assert.equal(
+    fs.readFileSync(codexSentinel, "utf8"),
+    "SENTINEL_CODEX_CONFIG\n",
+  );
+  assert.equal(
+    fs.readFileSync(claudeSentinel, "utf8"),
+    '{"sentinel":"claude-config"}\n',
+  );
+});
+
+test("integration verify rejects unsafe or ambiguous options", () => {
+  const cli = path.join(root, "bin/agent-waste-firewall.mjs");
+  for (const [args, expected] of [
+    [
+      ["integration", "verify", "codex", "--timeout"],
+      /timeout must be 1–300 seconds/u,
+    ],
+    [
+      ["integration", "verify", "codex", "--timeout", "301"],
+      /timeout must be 1–300 seconds/u,
+    ],
+    [
+      ["integration", "verify", "other"],
+      /requires codex or claude/u,
+    ],
+    [
+      ["integration", "verify", "claude", "--unknown"],
+      /Unknown integration verify option/u,
+    ],
+    [
+      ["integration", "status", "--timeout", "1"],
+      /integration status accepts only --json/u,
+    ],
+  ]) {
+    const result = spawnSync(process.execPath, [cli, ...args], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, expected);
+  }
+});
+
+test("integration verify emits a closed JSON cancellation result", async (context) => {
+  const parent = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-integration-cancel-"),
+  );
+  const dataDir = path.join(parent, "must-stay-missing");
+  context.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  const child = spawn(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "integration",
+      "verify",
+      "claude",
+      "--timeout",
+      "5",
+      "--json",
+    ],
+    {
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (!child.killed) child.kill("SIGKILL");
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  let interrupted = false;
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+    if (
+      !interrupted &&
+      stderr.includes("AWF_READY provider=claude timeoutSeconds=5")
+    ) {
+      interrupted = true;
+      child.kill("SIGINT");
+    }
+  });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("Integration cancellation timed out."));
+    }, 5_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+
+  assert.equal(interrupted, true);
+  assert.equal(exitCode, 130, `${stdout}\n${stderr}`);
+  const verification = JSON.parse(stdout);
+  assert.ok(
+    verification.waitedMs >= 0 && verification.waitedMs < 1_000,
+  );
+  assert.deepEqual({ ...verification, waitedMs: 0 }, {
+    v: 1,
+    kind: "provider_delivery_verification",
+    provider: "claude",
+    result: "cancelled",
+    reason: "interrupted",
+    waitedMs: 0,
+    event: null,
+  });
+  assert.equal(
+    stderr,
+    "AWF_READY provider=claude timeoutSeconds=5\n",
+  );
+  assert.equal(fs.existsSync(dataDir), false);
+});
+
 test("dashboard emits one closed JSON readiness record", async (context) => {
   const dataDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "awf-dashboard-ready-"),

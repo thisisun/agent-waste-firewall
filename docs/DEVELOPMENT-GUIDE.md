@@ -141,6 +141,15 @@ closed discovery environment. The shipped CLI/dashboard probes run providers con
 give each provider one shared three-second version/list budget. Restart policy, notifications,
 start-at-login, and a complete diagnostics bundle remain pending.
 
+The bounded `integration verify <codex|claude> --timeout 60 [--json]` command is the narrower
+live-delivery witness. It takes a read-only live-spool baseline, waits for a fresh audited prompt
+event from the selected provider, and returns the closed `ProviderDeliveryVerificationV1`
+contract. It does not call a provider CLI, install or enable a plugin, launch a provider, repair an
+integration, or write provider configuration. Retained prompt events, other-provider events, and
+tool events cannot satisfy the check. A timeout means no qualifying post-baseline event was
+observed; it does not prove that a provider is broken. The event is local semantic evidence rather
+than cryptographic provider attestation.
+
 Deliverables:
 
 - worker/protocol version handshake;
@@ -162,17 +171,17 @@ Acceptance:
 
 Goal: make installation safe and reversible for non-technical users.
 
-Implementation status: read-only detection and an isolated Codex acceptance runner are available,
-but user-owned installation management and live-provider acceptance are not complete. On the
-current validation Mac, the shell-inherited CLI probe detects Codex `0.146.0` as `needs_install`
-and reports Claude Code as `not_detected` on that shell `PATH`. The native supervisor's closed
-search path also detects user-local Claude Code `2.1.207` as `needs_install`. On that same Mac,
-`npm run acceptance:codex` passed isolated marketplace add, plugin install/list, direct execution
-of installed prompt/pre-tool/post-tool hooks, closed-event production, prefix/suffix raw-canary
-exclusion, and temporary-tree cleanup. A productive non-nonce counterexample is allowed while a
-fixture persisting only the first 20 bytes of raw prompt/input/output fails the gate. The runner
-uses private temporary `HOME` and `CODEX_HOME` values and does not modify global provider
-configuration.
+Implementation status: read-only detection, a bounded live-delivery witness, and an isolated Codex
+acceptance runner are available, but user-owned installation management and live-provider
+acceptance are not complete. On the current validation Mac, the shell-inherited CLI probe detects
+Codex `0.146.0` as `needs_install` and reports Claude Code as `not_detected` on that shell `PATH`.
+The native supervisor's closed search path also detects user-local Claude Code `2.1.207` as
+`needs_install`. On that same Mac, `npm run acceptance:codex` passed isolated marketplace add,
+plugin install/list, direct execution of installed prompt/pre-tool/post-tool hooks, closed-event
+production, prefix/suffix raw-canary exclusion, and temporary-tree cleanup. A productive non-nonce
+counterexample is allowed while a fixture persisting only the first 20 bytes of raw
+prompt/input/output fails the gate. The runner uses private temporary `HOME` and `CODEX_HOME`
+values and does not modify global provider configuration.
 
 The isolated gate deliberately does not invoke `/hooks` or approve provider trust. Installation,
 enablement, hook review, and trust are user-controlled actions, and a successful install must not
@@ -190,6 +199,43 @@ npm run acceptance:codex
 A pass establishes only that the isolated package/install/direct-hook path and privacy cleanup
 worked on that machine. Actual user-owned `/hooks` review/trust, provider-driven live delivery,
 upgrade, repair, rollback, and uninstall remain separate acceptance gates.
+
+This isolated gate is worker direct execution, not proof that a provider registered and called the
+hook. To collect a user-controlled live-delivery witness, first complete the provider's trust
+flow. Then start one of these in a normal terminal and submit a new harmless short prompt in a
+separate conversation of that provider:
+
+```bash
+node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
+node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
+```
+
+The JSON form reserves stdout for one final closed result and emits a fixed
+`AWF_READY provider=<codex|claude> timeoutSeconds=<1..300>` readiness line on stderr after the
+baseline. Automated callers must wait for that line before submitting the fresh prompt.
+
+Provider-specific trust and troubleshooting:
+
+- Codex: connect the marketplace, install and enable AWF, review the AWF command hooks in `/hooks`,
+  and trust the exact current hook hash. A changed hook after an upgrade can require re-review.
+- Claude Code marketplace: run
+  `claude plugin marketplace add thisisun/agent-waste-firewall`, then
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`, and run `/reload-plugins`.
+  Trust is attached to the plugin source at load/install time. Claude's `/hooks` is a read-only
+  inspection view, not an approval UI.
+- Claude Code development checkout: `claude --plugin-dir /absolute/path/to/agent-waste-firewall`
+  loads the checkout only for that new session. It is not a global installation and is not expected
+  in the global `claude plugin list`; use `/reload-plugins` after hook changes.
+- If nothing arrives, check plugin enablement and provider reload/restart. For Codex, check the
+  current hook hash in `/hooks`. For Claude Code, inspect `/hooks` and account for
+  `disableAllHooks` and enterprise `allowManagedHooksOnly`. Managed policy can exclude local plugin
+  hooks even when plugin files are present.
+
+Do not run `integration verify` from the same provider turn whose `UserPromptSubmit` event you are
+trying to witness: that event precedes the command's baseline. The watcher belongs in a terminal,
+and the qualifying prompt belongs in a separate provider conversation after the watcher starts.
+No user-owned live-delivery pass is claimed until that manual sequence is completed and recorded
+as such.
 
 Deliverables for each provider:
 
@@ -615,7 +661,8 @@ The beta is done when a non-technical user can:
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
 dashboard projection, fixture-driven publication tests, and closed provider reality gate are
 implemented. The isolated Codex package/install/direct-hook acceptance gate is also implemented
-and has passed on the validation Mac. The next integration work is a reversible
-install/repair/uninstall manager plus actual user-owned Codex and Claude Code `/hooks` trust and
-live-delivery acceptance. It must preserve the provider's explicit trust decision and must not
-infer successful monitoring from installation or retained historical events.
+and has passed on the validation Mac. The bounded delivery witness is implemented, but no
+user-owned Codex or Claude Code live-delivery pass is claimed yet. The next integration work is a
+reversible install/repair/uninstall manager plus actual user-owned trust and live-delivery
+acceptance. It must preserve each provider's trust model and must not infer successful monitoring
+from installation or retained historical events.

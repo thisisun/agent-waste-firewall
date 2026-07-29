@@ -73,7 +73,31 @@ Codex·Claude 검사를 동시에 실행합니다. 각 provider의 버전 확인
 상태로 정리합니다. 프로세스 시작과 그 밖의 CLI 작업 시간은 이 provider 검사 예산과
 별개입니다.
 
-Codex 플러그인 CLI가 있는 개발자는 격리 검증을 실행할 수 있습니다.
+플러그인을 불러온 뒤 실제 훅 전달을 읽기 전용으로 확인하려면 일반 터미널에서 다음 중
+하나를 실행합니다.
+
+```bash
+node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
+node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
+```
+
+기다리는 동안 선택한 provider의 별도 대화에서 짧고 무해한 새 프롬프트를 제출합니다.
+검증기는 시작 전에 남아 있던 이벤트를 무시하고, 시작 기준선 뒤에 도착한 해당 provider의
+감사된 프롬프트 의미 이벤트 하나만 인정합니다. `observed`는 로컬 AWF 훅 경로가 그
+이벤트를 만들었다는 근거입니다. `timed_out`은 제한 시간 안에 조건을 만족하는 이벤트가
+없었다는 뜻일 뿐, provider나 훅이 고장 났다는 증명은 아닙니다. 결과에는 프롬프트,
+명령어, 출력, transcript, 경로, provider CLI 원문이 들어가지 않습니다.
+
+`--json`에서는 stdout에 최종 닫힌 결과 하나만 출력합니다. 기준선이 준비되면 stderr에
+`AWF_READY provider=claude timeoutSeconds=60` 같은 고정 한 줄이 나오므로, 그 줄을 확인한
+뒤 새 프롬프트를 보냅니다.
+
+이 검사는 전달을 관찰하는 도구이지 provider 신원 증명은 아닙니다. 로컬 의미 이벤트를
+쓴 프로세스의 신원을 암호학적으로 증명하지 않으며, Codex나 Claude Code를 설치·활성화·
+실행·복구·설정하지도 않습니다. provider 상태 검사와 전달 검사는 서로 다른 읽기 전용
+근거입니다.
+
+Codex 플러그인 CLI가 있는 개발자는 별도의 격리된 worker 직접 실행 검증도 할 수 있습니다.
 
 ```bash
 npm run acceptance:codex
@@ -85,7 +109,8 @@ npm run acceptance:codex
 tool ID·입력·출력의 앞뒤에 필드별 고유 표식을 넣고, 원문 앞부분만 저장되는 회귀도
 검증 실패로 잡습니다. 검증된 시스템 임시 폴더 아래에 스스로 만든 새 하위 폴더만
 삭제합니다. 사용자의 전역 설정을 바꾸거나 Codex `/hooks` 신뢰 승인과 실제 세션 전달을
-증명하지는 않습니다.
+증명하지는 않습니다. 즉 provider가 등록된 훅을 실제로 호출했다는 검증이 아니라, 설치된
+worker를 검증기가 직접 호출하는 패키징·개인정보 경계 검사입니다.
 
 플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
 `LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 로컬
@@ -206,14 +231,32 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 
 ## 플랫폼 연결
 
-- Claude Code: 체크아웃을 `claude --plugin-dir /absolute/path/to/agent-waste-firewall`로
-  불러올 수 있습니다.
-- Codex: 로컬 마켓플레이스에서 플러그인을 연결한 뒤 훅을 검토하고 신뢰해야 합니다.
+- Codex: 마켓플레이스를 연결하고 AWF를 설치·활성화한 뒤 `/hooks`를 엽니다. AWF 명령을
+  확인하고 현재 훅 설정의 정확한 hash를 명시적으로 신뢰한 다음
+  `integration verify codex`를 실행합니다. 업그레이드로 훅이 바뀌면 hash가 달라져 다시
+  검토해야 할 수 있습니다.
+- Claude Code 마켓플레이스 설치:
+  `claude plugin marketplace add thisisun/agent-waste-firewall`을 실행하고
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`로 설치한 뒤 활성 세션에서
+  `/reload-plugins`를 실행합니다. Claude의 신뢰 경계는 플러그인을 불러오거나 설치할 때의
+  source이며, `/hooks`는 읽기 전용 확인 화면이지 별도의 훅 승인 단계가 아닙니다.
+- Claude Code 체크아웃: 새 세션을
+  `claude --plugin-dir /absolute/path/to/agent-waste-firewall`로 시작합니다. 이 방식은 해당
+  세션에서만 체크아웃을 신뢰하고 불러오며, 전역 설치를 만들지 않아 전역
+  `claude plugin list`에 나타나지 않는 것이 정상입니다. 훅을 바꾼 뒤에는
+  `/reload-plugins`를 실행합니다.
 
-플러그인 설치와 훅 검토·신뢰는 서로 다른 단계입니다. AWF는 provider의 신뢰 절차를
-우회하지 않으며, 현재 버전은 전역 설정을 자동으로 수정하지 않습니다. 전역 설치, 활성화,
-훅 검토와 신뢰는 사용자가 명시적으로 결정합니다. Codex와 Claude의 훅 형식 차이는 별도
-manifest로 처리하며 탐지 코어와 대시보드는 공유합니다.
+AWF는 provider의 신뢰 절차를 우회하지 않습니다. Codex는 정확한 훅 hash를 별도로
+검토하고, Claude Code는 플러그인 source를 불러오거나 설치할 때 신뢰합니다. 현재 AWF
+명령은 전역 provider 설정을 자동으로 수정하지 않습니다. 전역 설치, 활성화, 훅 검토와
+신뢰는 사용자가 명시적으로 결정합니다. Codex와 Claude의 훅 형식 차이는 별도 manifest로
+처리하며 탐지 코어와 대시보드는 공유합니다.
+
+새 프롬프트가 관찰되지 않으면 플러그인 활성화 상태를 확인하고 provider를 reload하거나
+다시 시작합니다. Codex는 `/hooks`에서 현재 hash가 다시 신뢰를 요구하는지 확인합니다.
+Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableAllHooks` 또는 조직의
+`allowManagedHooksOnly` 정책이 플러그인 훅을 제외하는지 확인합니다. 관리형 설정은
+플러그인 파일이 있어도 로컬 훅 실행을 막을 수 있습니다.
 
 이 저장소를 검증한 Mac의 셸 `PATH` 기준 읽기 전용 상태는 Codex `0.146.0`
 `needs_install`, Claude Code `not_detected`입니다. 네이티브 supervisor의 닫힌 검색

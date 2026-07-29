@@ -13,6 +13,10 @@ import {
   providerIntegrationStatus,
   providerIntegrationStatusAsync,
 } from "./provider-integration-status.mjs";
+import {
+  PROVIDER_DELIVERY_MAX_WAIT_MS,
+  verifyProviderDelivery,
+} from "./provider-delivery-verification.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
 import { TraceStore } from "./trace-store.mjs";
@@ -105,6 +109,7 @@ Usage:
   agent-waste-firewall report [--json]
   agent-waste-firewall purge [--all] [--json]
   agent-waste-firewall integration status [--json]
+  agent-waste-firewall integration verify <codex|claude> [--timeout 60] [--json]
   agent-waste-firewall doctor [--json]
 
 Modes:
@@ -201,19 +206,142 @@ function providerStatusPrefix(provider) {
 }
 
 async function commandIntegration(args, env = process.env) {
-  const [action] = positionalArguments(args);
-  if (action !== "status") {
-    throw new Error("integration requires status.");
-  }
-  const integration = await integrationStatusAsync(env);
-  const { monitoring } = summarizeProviderMonitoring(integration);
-  if (args.includes("--json")) {
-    console.log(JSON.stringify(integration, null, 2));
+  const positional = positionalArguments(args, ["--timeout"]);
+  const [action, provider, ...extra] = positional;
+  if (action === "status") {
+    if (
+      provider !== undefined ||
+      extra.length > 0 ||
+      args.some(
+        (item) => item.startsWith("--") && item !== "--json",
+      )
+    ) {
+      throw new Error("integration status accepts only --json.");
+    }
+    const integration = await integrationStatusAsync(env);
+    const { monitoring } = summarizeProviderMonitoring(integration);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(integration, null, 2));
+      return;
+    }
+    console.log(`Monitoring: ${monitoring}`);
+    for (const current of integration.providers) {
+      console.log(providerStatusLine(current));
+    }
     return;
   }
-  console.log(`Monitoring: ${monitoring}`);
-  for (const provider of integration.providers) {
-    console.log(providerStatusLine(provider));
+  if (action !== "verify") {
+    throw new Error("integration requires status or verify.");
+  }
+  if (!["codex", "claude"].includes(provider) || extra.length > 0) {
+    throw new Error("integration verify requires codex or claude.");
+  }
+  const allowedOptions = new Set(["--json", "--timeout"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current.startsWith("--") && !allowedOptions.has(current)) {
+      throw new Error(`Unknown integration verify option: ${current}`);
+    }
+    if (current === "--timeout") index += 1;
+  }
+  if (args.filter((item) => item === "--timeout").length > 1) {
+    throw new Error("integration verify accepts one --timeout value.");
+  }
+  const hasTimeout = args.includes("--timeout");
+  const timeoutText = hasTimeout
+    ? argumentValue(args, "--timeout")
+    : "60";
+  if (hasTimeout && timeoutText === undefined) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+  if (!/^[1-9]\d{0,2}$/u.test(timeoutText)) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+  const timeoutSeconds = Number.parseInt(timeoutText, 10);
+  const timeoutMs = timeoutSeconds * 1_000;
+  if (timeoutMs > PROVIDER_DELIVERY_MAX_WAIT_MS) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+
+  const config = configFromEnv(env);
+  const store = new LiveEventStore({
+    root: config.dataDir,
+    env,
+    maxEvents: config.liveMaxEvents,
+    maxBytes: config.liveMaxBytes,
+    maxAgeMs: config.liveMaxAgeMinutes * 60 * 1_000,
+  });
+  const controller = new AbortController();
+  let interruptedExitCode = 130;
+  const interrupt = (exitCode) => {
+    interruptedExitCode = exitCode;
+    controller.abort();
+  };
+  const onSigint = () => interrupt(130);
+  const onSigterm = () => interrupt(143);
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  const json = args.includes("--json");
+  const name = provider === "codex" ? "Codex" : "Claude Code";
+  let verification;
+  try {
+    verification = await verifyProviderDelivery({
+      provider,
+      store,
+      timeoutMs,
+      signal: controller.signal,
+      onBaseline: () => {
+        if (json) {
+          process.stderr.write(
+            `AWF_READY provider=${provider} timeoutSeconds=${timeoutSeconds}\n`,
+          );
+        } else {
+          console.log(
+            `Waiting for a fresh audited ${name} prompt event for up to ${timeoutSeconds} seconds.`,
+          );
+          console.log(
+            `Submit one short prompt in a separate, already loaded ${name} session.`,
+          );
+          console.log(
+            "AWF will not change provider configuration. Press Ctrl-C to cancel.",
+          );
+        }
+      },
+    });
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
+  }
+
+  if (json) {
+    console.log(JSON.stringify(verification, null, 2));
+  } else if (verification.result === "observed") {
+    console.log(
+      `PASS  Fresh audited ${name} prompt activity observed in ${verification.waitedMs} ms.`,
+    );
+  } else if (verification.result === "timed_out") {
+    console.log(
+      `TIMEOUT  No fresh audited ${name} prompt activity was observed.`,
+    );
+    console.log(
+      "This does not prove hooks are broken. Check install, enable, and trust state, then retry.",
+    );
+  } else if (verification.result === "cancelled") {
+    console.log("CANCELLED  Provider delivery verification was interrupted.");
+  } else if (verification.reason === "stream_reset") {
+    console.log(
+      "UNAVAILABLE  The audited live stream changed during verification. Retry once.",
+    );
+  } else {
+    console.log(
+      "UNAVAILABLE  The audited live spool could not be read safely.",
+    );
+  }
+
+  if (verification.result === "cancelled") {
+    process.exitCode = interruptedExitCode;
+  } else if (verification.result !== "observed") {
+    process.exitCode = 1;
   }
 }
 
@@ -559,6 +687,7 @@ async function commandDoctor(args, env = process.env) {
   const requiredFiles = [
     ".codex-plugin/plugin.json",
     ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
     "hooks/hooks.json",
     "hooks/claude-hooks.json",
     "scripts/hook.mjs",
@@ -566,6 +695,7 @@ async function commandDoctor(args, env = process.env) {
     "src/live-event-projection.mjs",
     "src/live-event-store.mjs",
     "src/provider-integration-status.mjs",
+    "src/provider-delivery-verification.mjs",
     "src/trace-schema.mjs",
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
@@ -577,6 +707,7 @@ async function commandDoctor(args, env = process.env) {
     "src/dashboard-trace-cursor.mjs",
     "src/dashboard-assets.mjs",
     "protocol/provider-integration-status-v1.schema.json",
+    "protocol/provider-delivery-verification-v1.schema.json",
   ];
   const checks = requiredFiles.map((relativePath) => ({
     check: relativePath,

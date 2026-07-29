@@ -1,10 +1,15 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "agent-waste-firewall",
+  "displayName": "AWF — Agent Waste Firewall",
   "version": "0.1.0",
   "description": "AWF is a local-first live monitor, prompt coach, and no-progress circuit breaker for coding agents.",
   "author": {
-    "name": "AWF contributors"
+    "name": "AWF contributors",
+    "url": "https://github.com/thisisun/agent-waste-firewall"
   },
+  "homepage": "https://github.com/thisisun/agent-waste-firewall#readme",
+  "repository": "https://github.com/thisisun/agent-waste-firewall",
   "license": "Apache-2.0",
   "hooks": "./hooks/claude-hooks.json",
   "keywords": [

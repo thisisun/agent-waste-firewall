@@ -18,6 +18,9 @@ The current Node.js product path works as a research alpha:
 - A read-only provider reality gate now distinguishes AWF engine readiness, provider installation
   state, and audited hook activity. Its closed result is available from
   `integration status [--json]` and the dashboard provider cards.
+- A bounded `integration verify <codex|claude>` witness now excludes retained, other-provider, and
+  tool events, then accepts only a fresh audited prompt event after its baseline. A real CLI child
+  and real hook-worker child passed this path without changing sentinel provider configuration.
 - The isolated `npm run acceptance:codex` gate passed marketplace add, plugin install/list, direct
   execution of three installed hook phases, closed semantic events, prefix-fragment raw-canary
   exclusion, and temporary-tree cleanup checks on this Mac.
@@ -73,9 +76,11 @@ evidence rather than provider trust or live-delivery evidence.
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 53 JavaScript files and 32 JSON files |
-| `npm test` | Pass: 203/203 |
-| `npm run acceptance:codex` | Pass: isolated marketplace add/install/list, three installed hooks, closed event, prefix-fragment privacy scan, and cleanup |
+| `npm run check` | Pass: 55 JavaScript files and 46 JSON files |
+| `npm test` | Pass: 223/223 |
+| `npm run acceptance:codex` | Pass in 301 ms: isolated marketplace add/install/list, three installed hooks, closed event, prefix-fragment privacy scan, and cleanup |
+| `claude plugin validate . --strict` | Pass: root marketplace, plugin metadata, and five registered Claude hook phases |
+| `npm pack --dry-run --json` | Pass: 109 files; Claude marketplace, delivery schema/fixtures, verifier, and docs included |
 | Unsigned `xcodebuild ... build-for-testing` | Pass locally: Debug app and test bundles, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
 | Native `AWFTests` | Pass locally: 36/36, 0 failures, 0 skips |
 | Native UI runner | Inconclusive: worker did not materialize or launch AWF in 74 seconds; interrupted |
@@ -91,6 +96,26 @@ coverage, a clean dependency audit, and a passing package dry run. Those measure
 rerun for this native-preview snapshot and are not presented as current native release gates.
 
 ## Functional end-to-end results
+
+### Read-only live-delivery witness
+
+The CLI end-to-end test started
+`integration verify codex --timeout 5 --json` against a private temporary data directory and
+waited for its fixed stderr `AWF_READY` line. A separate real `scripts/hook.mjs` process then
+received a Codex-shaped `UserPromptSubmit` event and published the audited semantic projection.
+The verifier returned one closed stdout `observed` result and exited successfully in about 155 ms
+under the full parallel test run.
+
+The result exposed only the closed `ProviderDeliveryVerificationV1` fields and none of the
+synthetic prompt, session, or turn canaries. Sentinel Codex and Claude configuration files under
+the test's isolated provider home were byte-for-byte unchanged. Productive counterexamples confirm
+that retained prompts, another provider's prompt, and same-provider tool progress do not satisfy
+the witness. Generation rotation with monotonic sequence progress remains valid; reset or sequence
+regression returns a closed unavailable result.
+
+This proves the local baseline-to-hook-to-audited-reader implementation, not provider attestation.
+The test deliberately invokes the worker itself. A user-owned live pass still requires a fresh
+prompt from an already loaded and trusted provider session while the terminal watcher is running.
 
 ### Isolated Codex acceptance
 
@@ -287,28 +312,28 @@ load its images. Dashboard startup also no longer waits for image reads: each al
 loaded and cached only on its first HTTP request. The latest M1 `npm run benchmark:hook` rerun
 measured the real subprocess with both the always-on spool and an active explicit semantic trace:
 
-| Condition | p95 | p99 |
-| --- | ---: | ---: |
-| Always-on spool + active semantic recording | 94.641 ms | 103.181 ms |
+| Samples | Warmups | p50 | p95 | p99 | Max |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 10 | 39.512 ms | 42.757 ms | 44.285 ms | 46.485 ms |
 
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
 
 | Condition | p50 | p95 | p99 | Max / rotation |
 | --- | ---: | ---: | ---: | ---: |
-| Semantic publish before rotation | 1.479 ms | 3.006 ms | 7.853 ms | 25.569 ms |
-| Replace a full generation | — | — | — | 19.048 ms |
+| Semantic publish before rotation | 0.690 ms | 0.937 ms | 1.186 ms | 10.149 ms |
+| Replace a full generation | — | — | — | 7.789 ms |
 
 The steady-state gate is 100 ms p95 and the full-generation rotation gate is 1,000 ms. Both passed
 on this machine.
 
 The latest isolated `npm run benchmark:live-dashboard` rerun saturated the full 4,096-event
 generation, started the real loopback server, read status repeatedly, forced rotation, observed the
-SSE reset, and published concurrently. The initial full-generation audit took 233.230 ms:
+SSE reset, and published concurrently. The initial full-generation audit took 120.480 ms:
 
 | Warm status p95 | Concurrent publish p95 | Rotation | SSE reset visible | Drops |
 | ---: | ---: | ---: | ---: | ---: |
-| 2.204 ms | 18.927 ms | 15.779 ms | 451.285 ms | 0 |
+| 0.911 ms | 7.405 ms | 8.065 ms | 479.345 ms | 0 |
 
 The SSE visibility number includes the dashboard's bounded polling interval; it is not hook-path
 latency. Warm status, concurrent publication, and rotation passed their checked-in limits.
@@ -395,13 +420,14 @@ the rejected bytes.
 ### P1 — No user-owned provider trust/live-delivery acceptance
 
 The read-only reality gate resolves the earlier false-green visibility gap, and the isolated Codex
-runner validates the package/install/direct-hook path. Neither result resolves user-owned provider
-acceptance. The shell-path snapshot remains Codex `needs_install` and Claude Code `not_detected`;
-the native closed search path reports both detected CLIs as `needs_install`. Installation also
-does not imply that a user has reviewed and trusted the hooks or that provider delivery works. A
-public claim of installed Codex/Claude compatibility still requires explicit user-owned `/hooks`
-review/trust, live warning, upgrade, repair, and uninstall smoke tests in the actual provider
-applications.
+runner validates the package/install/direct-hook path. The bounded delivery witness now provides a
+safe way to collect fresh semantic evidence, but it has not yet been run against a user-owned
+provider session. The shell-path snapshot remains Codex `needs_install` and Claude Code
+`not_detected`; the native closed search path reports both detected CLIs as `needs_install`.
+Installation also does not imply that provider delivery works. A public compatibility claim still
+requires Codex install/enable plus exact-hash `/hooks` review/trust, Claude source trust at
+load/install plus read-only `/hooks` inspection, a live warning, and upgrade, repair, and uninstall
+smoke tests in the actual provider applications.
 
 ### Partially resolved P1 — No distributable native macOS product
 
@@ -467,12 +493,15 @@ audit, and a one-second retention-only maintenance loop. It never takes the publ
    and passed on this Mac.
 7. ~~Observe the updated Node and unsigned native build/unit jobs on GitHub CI.~~ Current PR head
    passes all seven configured jobs.
-8. Add user-owned Codex `/hooks` trust/live-delivery and Claude install/trust smoke tests.
-9. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
+8. ~~Add a bounded, read-only fresh-event witness without changing provider configuration.~~
+   Completed and passed through a real CLI child plus real hook-worker child.
+9. Add user-owned Codex exact-hash `/hooks` trust/live-delivery and Claude source-trust/install/live
+   smoke tests.
+10. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
    implemented; native UI acceptance remains pending.
-10. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
-11. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
-12. Add optional actual-usage adapters and run the observe-only evaluation corpus.
+11. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
+12. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
+13. Add optional actual-usage adapters and run the observe-only evaluation corpus.
 
 Current release classification: **working Node research alpha plus unsigned native developer
 preview; no-go as an installable macOS beta**.

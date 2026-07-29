@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "kind": "provider_delivery_verification",
+  "provider": "claude",
+  "result": "observed",
+  "reason": "fresh_prompt_event",
+  "waitedMs": 1250,
+  "event": {
+    "kind": "incident",
+    "family": "prompt",
+    "operation": "prompt",
+    "outcome": "warned"
+  }
+}

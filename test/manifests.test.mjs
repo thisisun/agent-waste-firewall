@@ -36,6 +36,22 @@ test("Codex and Claude load platform-specific hook event sets", () => {
   }
   assert.equal(codexHooks.PostToolUseFailure, undefined);
   assert.ok(claudeHooks.PostToolUseFailure);
+  for (const event of [
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+  ]) {
+    for (const group of codexHooks[event]) {
+      for (const hook of group.hooks) {
+        assert.equal(hook.additionalContextLimit, 2500);
+      }
+    }
+  }
+  for (const group of codexHooks.Stop) {
+    for (const hook of group.hooks) {
+      assert.equal(hook.additionalContextLimit, undefined);
+    }
+  }
 });
 
 test("all hook commands resolve the bundled script from the plugin root", () => {
@@ -83,4 +99,26 @@ test("repo marketplace exposes the root plugin without external paths", () => {
     },
     category: "Productivity",
   });
+});
+
+test("Claude marketplace exposes the root plugin with source provenance", () => {
+  const packageManifest = readJson("package.json");
+  const marketplace = readJson(".claude-plugin/marketplace.json");
+  const claudeManifest = readJson(".claude-plugin/plugin.json");
+  assert.ok(
+    packageManifest.files.includes(".claude-plugin/"),
+    "the published package must retain the Claude marketplace",
+  );
+  assert.equal(marketplace.name, "agent-waste-firewall");
+  assert.equal(marketplace.plugins.length, 1);
+  assert.deepEqual(marketplace.plugins[0], {
+    name: "agent-waste-firewall",
+    source: "./",
+  });
+  assert.equal(
+    marketplace.owner.url,
+    "https://github.com/thisisun/agent-waste-firewall",
+  );
+  assert.equal(claudeManifest.repository, marketplace.owner.url);
+  assert.equal(claudeManifest.author.url, marketplace.owner.url);
 });

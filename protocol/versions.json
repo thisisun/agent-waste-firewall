@@ -29,6 +29,13 @@
       ],
       "schema": "provider-integration-status-v1.schema.json"
     },
+    "providerDeliveryVerification": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "provider-delivery-verification-v1.schema.json"
+    },
     "detectorState": {
       "current": 4,
       "supported": [

@@ -40,6 +40,7 @@ const jsonFiles = [
   ".agents/plugins/marketplace.json",
   ".codex-plugin/plugin.json",
   ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
   "hooks/hooks.json",
   "hooks/claude-hooks.json",
 ];

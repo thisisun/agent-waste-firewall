@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kind": "provider_delivery_verification",
+  "provider": "claude",
+  "result": "unavailable",
+  "reason": "interrupted",
+  "waitedMs": 0,
+  "event": null
+}

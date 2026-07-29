@@ -24,13 +24,24 @@
   `integration status [--json]` CLI. `doctor` now separates `engineReady`, `providerInstalled`,
   and `monitoringActive`, and the dashboard shows provider installation/activity cards without
   treating an empty healthy spool as active monitoring.
+- Add the closed, raw-free `ProviderDeliveryVerificationV1` contract and bounded
+  `integration verify <codex|claude> --timeout 60 [--json]` watcher. It accepts only a fresh
+  post-baseline audited prompt event, never changes provider configuration, and is explicitly a
+  delivery witness rather than cryptographic provider attestation.
+- Keep JSON stdout to one final verification record and emit a fixed, raw-free `AWF_READY` line on
+  stderr only after the audited baseline is established.
 - Detect provider state without modifying global configuration. Installation, enablement, hook
   review, and trust remain user-controlled. Current activity requires a new audited event after
   dashboard startup and expires after five minutes; retained spool and trace events do not count.
 - Add an isolated `npm run acceptance:codex` gate for temporary marketplace add, plugin
   install/list, direct installed prompt/pre-tool/post-tool hook execution, closed-event production,
-  prefix/suffix raw-canary scanning, and cleanup. It deliberately does not claim user-owned
-  `/hooks` trust or live provider delivery.
+  prefix/suffix raw-canary scanning, and cleanup. This worker direct-execution check deliberately
+  does not claim provider-driven registration, user-owned `/hooks` trust, or live provider
+  delivery.
+- Add a repository-root Claude Code marketplace entry and source provenance for the plugin
+  manifest. Document Claude's source-trust/load boundary, read-only `/hooks` view,
+  `/reload-plugins`, and session-only `--plugin-dir` behavior separately from Codex hook-hash
+  trust.
 - Restrict provider probe environments to a closed configuration-discovery allowlist and make the
   acceptance runner delete only a fresh child it owns beneath the validated system temp tree.
 - Run the shipped CLI and dashboard provider probes concurrently, give each provider one shared

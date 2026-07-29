@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/provider-delivery-verification-v1.schema.json",
+  "title": "ProviderDeliveryVerificationV1",
+  "description": "Closed, raw-free evidence from a bounded provider hook-delivery check.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "kind",
+    "provider",
+    "result",
+    "reason",
+    "waitedMs",
+    "event"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "kind": {
+      "const": "provider_delivery_verification"
+    },
+    "provider": {
+      "enum": [
+        "codex",
+        "claude"
+      ]
+    },
+    "result": {
+      "enum": [
+        "observed",
+        "timed_out",
+        "cancelled",
+        "unavailable"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "fresh_prompt_event",
+        "deadline_elapsed",
+        "interrupted",
+        "live_spool_unavailable",
+        "stream_reset"
+      ]
+    },
+    "waitedMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 300000
+    },
+    "event": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/promptEventEvidence"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "observed"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "fresh_prompt_event"
+          },
+          "event": {
+            "$ref": "#/$defs/promptEventEvidence"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "timed_out"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "deadline_elapsed"
+          },
+          "event": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "cancelled"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "interrupted"
+          },
+          "event": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "unavailable"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "live_spool_unavailable",
+              "stream_reset"
+            ]
+          },
+          "event": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "promptEventEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "family",
+        "operation",
+        "outcome"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "prompt",
+            "incident"
+          ]
+        },
+        "family": {
+          "const": "prompt"
+        },
+        "operation": {
+          "const": "prompt"
+        },
+        "outcome": {
+          "enum": [
+            "allowed",
+            "warned",
+            "blocked",
+            "observed"
+          ]
+        }
+      }
+    }
+  }
+}

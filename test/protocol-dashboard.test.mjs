@@ -9,6 +9,9 @@ import { validateDashboardStatus } from "../src/dashboard-status-schema.mjs";
 import {
   validateProviderIntegrationStatus,
 } from "../src/provider-integration-status.mjs";
+import {
+  validateProviderDeliveryVerification,
+} from "../src/provider-delivery-verification.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const protocolRoot = path.join(root, "protocol");
@@ -46,6 +49,13 @@ for (const contract of [
     schema: "provider-integration-status-v1.schema.json",
     fixtures: "provider-integration-status-v1",
     validate: validateProviderIntegrationStatus,
+  },
+  {
+    name: "provider delivery verification",
+    registryKey: "providerDeliveryVerification",
+    schema: "provider-delivery-verification-v1.schema.json",
+    fixtures: "provider-delivery-verification-v1",
+    validate: validateProviderDeliveryVerification,
   },
 ]) {
   test(`${contract.name} public schema matches its runtime version`, () => {

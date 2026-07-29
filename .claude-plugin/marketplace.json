@@ -1,0 +1,14 @@
+{
+  "name": "agent-waste-firewall",
+  "owner": {
+    "name": "AWF contributors",
+    "url": "https://github.com/thisisun/agent-waste-firewall"
+  },
+  "description": "Local-first monitoring and no-progress guardrails for coding agents.",
+  "plugins": [
+    {
+      "name": "agent-waste-firewall",
+      "source": "./"
+    }
+  ]
+}

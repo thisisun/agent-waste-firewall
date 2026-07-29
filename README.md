@@ -45,6 +45,9 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Reports a closed, raw-free integration status for Codex and Claude Code. The CLI and dashboard
   distinguish an engine that is ready to run from a provider whose AWF hook activity has actually
   been observed recently; an empty healthy spool is not presented as active monitoring.
+- Provides a bounded, read-only `integration verify` witness that starts from a live-spool
+  baseline and accepts only a fresh audited prompt event for the selected provider. It does not
+  install, enable, launch, or configure either provider.
 - Reads live generations without taking the publisher lock, validates only committed semantic
   records during steady-state polling, and periodically re-audits the complete bounded generation.
   Rotation emits an atomic reset, sequence gaps or dropped publications show incomplete coverage,
@@ -117,7 +120,31 @@ and plugin-list steps share one three-second probe budget and resolve to a close
 on timeout instead of holding the dashboard open indefinitely. Process startup and other CLI work
 sit outside that provider-probe budget.
 
-Contributors with the Codex plugin CLI can run the isolated acceptance gate:
+To check live hook delivery after loading the plugin, start this command in a normal terminal:
+
+```bash
+node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
+node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
+```
+
+While it is waiting, submit a new, harmless short prompt in a separate conversation of the selected
+provider. The verifier ignores retained events and accepts only a post-baseline audited event whose
+closed semantic fields identify a prompt from that provider. `observed` is evidence that the local
+AWF hook path produced that event. `timed_out` means only that no qualifying event arrived within
+the deadline; it is not proof that the provider or hook is broken. The result contains no prompt,
+command, output, transcript, path, or provider CLI text.
+
+With `--json`, stdout stays reserved for the one final closed result. After the baseline is ready,
+stderr emits one fixed line such as `AWF_READY provider=claude timeoutSeconds=60`; submit the new
+prompt only after that line appears.
+
+This is a delivery witness, not provider attestation. It does not cryptographically prove the
+identity of the process that wrote the local semantic event. It also never installs, enables,
+launches, repairs, or configures Codex or Claude Code. Provider status and this delivery witness
+are separate read-only checks.
+
+Contributors with the Codex plugin CLI can run the isolated worker direct-execution acceptance
+gate:
 
 ```bash
 npm run acceptance:codex
@@ -131,7 +158,9 @@ placed at both ends of raw prompt/session/turn/workspace/tool-ID/input/output va
 only the fresh child directory it created under the validated system temp tree. A regression
 fixture confirms that persisting only an initial raw fragment still fails the gate. It does not
 invoke Codex `/hooks`, modify the user's provider configuration, approve hook trust, or prove
-delivery from a real user-owned Codex session.
+delivery from a real user-owned Codex session. In other words, this checks packaging and the
+privacy boundary by invoking the installed worker directly; it is not provider-driven registration
+or live-delivery proof.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
@@ -185,14 +214,31 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 The plugin packages use the standard `.codex-plugin/plugin.json`,
 `.claude-plugin/plugin.json`, and `hooks/hooks.json` locations. During development:
 
-- Claude Code can load the checkout with `claude --plugin-dir /absolute/path/to/agent-waste-firewall`.
-- Codex requires hook review and trust after the plugin is connected through a local marketplace.
-  Follow the official [Codex plugin development guide](https://learn.chatgpt.com/docs/build-plugins)
-  until the repository has a published marketplace entry.
+- Codex: connect the marketplace, install and enable AWF, then open `/hooks`. Review the AWF
+  commands and explicitly trust the exact hook configuration hash before running
+  `integration verify codex`. A hook change after an upgrade can produce a new hash and require
+  another review. Follow the official
+  [Codex plugin development guide](https://learn.chatgpt.com/docs/build-plugins).
+- Claude Code marketplace install: run
+  `claude plugin marketplace add thisisun/agent-waste-firewall`, then
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`, and run `/reload-plugins` in
+  an active session. Claude's trust boundary is the plugin source at load/install time; `/hooks`
+  is a read-only inspection view, not a second hook-approval step.
+- Claude Code checkout: run
+  `claude --plugin-dir /absolute/path/to/agent-waste-firewall`. This trusts and loads that checkout
+  for the new session only; it does not create a global installation and is not expected to appear
+  in the global `claude plugin list`. Run `/reload-plugins` after changing plugin hooks.
 
-Installing a plugin is not the same as reviewing and trusting its hooks. AWF does not bypass that
-provider-controlled step. No installer edits a user's global configuration in this MVP; global
+The provider trust boundaries differ, and AWF does not bypass either one. Codex uses an explicit
+hook-hash review after installation, while Claude Code relies on source trust at plugin load or
+installation. No AWF command edits a user's global provider configuration in this MVP; global
 installation, enablement, hook review, and trust remain explicit user actions.
+
+If a fresh prompt is not observed, confirm that the plugin is enabled and reload or restart the
+provider. In Codex, re-open `/hooks` and check whether the current hash still needs trust. In
+Claude Code, use `/hooks` to inspect the loaded command and check whether `disableAllHooks` or the
+enterprise `allowManagedHooksOnly` policy excludes plugin hooks. Managed provider settings can
+prevent a local plugin from running even when its files are present.
 
 On the validation Mac used for this repository, the shell-inherited CLI probe detects Codex
 `0.146.0` with state `needs_install`; Claude Code is `not_detected` on that shell `PATH`. The
