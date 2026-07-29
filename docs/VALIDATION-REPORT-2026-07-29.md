@@ -378,6 +378,11 @@ The 100 ms product p95 gate passed. This measurement includes the inner provider
 native helper process, real Node process, detector/state work, semantic trace, and live spool. It
 does not include Codex/Claude dispatch or Codex's outer login-shell evaluation.
 
+The first shared GitHub macOS runner measured the same Debug path at 223.980 ms p95. All 55
+warmup/measured events were committed correctly; only the original 200 ms CI threshold failed.
+The workflow therefore keeps the 100 ms local product target and uses a separate 350 ms
+shared-runner regression budget.
+
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
 

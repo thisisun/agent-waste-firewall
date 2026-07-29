@@ -173,8 +173,10 @@ temporary-data launch
 remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
 and removed its Node child on normal quit.
 
-The current PR head passes the configured GitHub Node matrix, dashboard benchmark jobs, and
-unsigned native build/unit job. The UI target compiles, but the local Xcode 26.6 UI runner did not
+The configured GitHub jobs cover the Node matrix, dashboard benchmarks, unsigned native
+build/unit target, and a real native hook-path benchmark. The native CI benchmark uses a 350 ms
+shared-runner regression budget while the local product target remains 100 ms p95. The UI target
+compiles, but the local Xcode 26.6 UI runner did not
 materialize its worker or launch the target app during a 74-second attempt, so that run was
 interrupted and is not counted as a UI pass or product failure. No signed clean-machine launch
 matrix has run.

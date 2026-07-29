@@ -694,8 +694,9 @@ Current and recommended GitHub Actions jobs:
 
 1. Node checks and tests on macOS and Linux with the minimum and current supported Node versions.
 2. Privacy/schema adversarial suite on every pull request.
-3. Unsigned Xcode build and `AWFTests` on the macOS runner. The same commands pass locally; the
-   first branch result must still be observed before calling the CI gate validated.
+3. Unsigned Xcode build, `AWFTests`, and the native hook benchmark on the macOS runner. The local
+   product target remains 100 ms p95; the shared runner uses a separate 350 ms multi-process
+   startup regression budget.
 4. UI smoke tests on protected branches or nightly runs.
 5. Unsigned reproducible artifact assembly for pull requests.
 6. Signed/notarized release only from a protected tag environment.
