@@ -58,8 +58,6 @@ jobs:
   native-macos:
     runs-on: macos-latest
     timeout-minutes: 15
-    env:
-      AWF_DERIVED_DATA: ${{ runner.temp }}/awf-derived-data
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -80,7 +78,7 @@ jobs:
             -scheme AWF \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$AWF_DERIVED_DATA" \
+            -derivedDataPath "$RUNNER_TEMP/awf-derived-data" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM= \
@@ -93,7 +91,7 @@ jobs:
             -scheme AWF \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$AWF_DERIVED_DATA" \
+            -derivedDataPath "$RUNNER_TEMP/awf-derived-data" \
             -only-testing:AWFTests \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
