@@ -83,11 +83,21 @@ function allFileBytes(directory) {
   return Buffer.concat(buffers);
 }
 
-function runPublisher(root, workspace, index) {
+function runPublisher(
+  root,
+  workspace,
+  index,
+  { maxEvents, lockTimeoutMs } = {},
+) {
+  const args = [publisherFixture, root, workspace, String(index)];
+  if (maxEvents !== undefined || lockTimeoutMs !== undefined) {
+    args.push(String(maxEvents ?? 4096));
+    args.push(String(lockTimeoutMs ?? 50));
+  }
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [publisherFixture, root, workspace, String(index)],
+      args,
       { stdio: ["ignore", "pipe", "pipe"] },
     );
     let stdout = "";
@@ -262,6 +272,34 @@ test("does not reuse a sequence when control is lost after an empty rotation", (
   assert.equal(recovered.event.seq, 2);
 });
 
+test("keeps an empty failed reservation as incomplete coverage", (context) => {
+  const { store } = setup(context);
+  const control = store.status();
+  fs.writeFileSync(
+    store.controlPath,
+    `${JSON.stringify({
+      v: 1,
+      generation: control.generation,
+      nextSeq: 2,
+      pendingSeq: 1,
+      committedSeq: 0,
+      eventCount: 0,
+      totalBytes: 0,
+      oldestSeq: 1,
+      lastElapsedMs: 0,
+      incidentCount: 0,
+      avoidableCallCount: 0,
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  store.status();
+  const window = store.readWindow();
+  assert.deepEqual(window.events, []);
+  assert.equal(window.status.gapCount, 1);
+  assert.equal(window.status.publicationDropped, 0);
+});
+
 test("maintenance recovers corrupt control and a partial temporary file", (context) => {
   const { workspace, store } = setup(context);
   assert.equal(publish(store, workspace, 1).published, true);
@@ -317,6 +355,26 @@ test("rejects a corrupt event without copying its contents into an error", (cont
   );
 });
 
+test("maintenance never reuses the sequence of a removed corrupt event", (context) => {
+  const { workspace, store } = setup(context);
+  publish(store, workspace, 1);
+  const second = publish(store, workspace, 2);
+  fs.writeFileSync(
+    store.eventPath(second.generation, second.event.seq),
+    '{"raw":"SECRET-CORRUPT-HIGH-WATER"}\n',
+    { mode: 0o600 },
+  );
+  fs.writeFileSync(store.controlPath, '{"corrupt":true}\n', {
+    mode: 0o600,
+  });
+
+  const repaired = store.status();
+  assert.equal(repaired.nextSeq, 3);
+  const third = publish(store, workspace, 3);
+  assert.equal(third.event.seq, 3);
+  assert.deepEqual(store.readEvents().map((event) => event.seq), [1, 3]);
+});
+
 test("fails open when the spool is busy or unavailable", (context) => {
   const { root, workspace, store } = setup(context, { lockTimeoutMs: 0 });
   store.status();
@@ -325,6 +383,8 @@ test("fails open when the spool is busy or unavailable", (context) => {
   fs.rmdirSync(store.lockPath);
   assert.deepEqual(busy, { published: false, reason: "busy" });
   assert.equal(store.readEvents().length, 0);
+  const droppedWindow = store.readWindow();
+  assert.equal(droppedWindow.status.publicationDropped, 1);
 
   const unavailableRoot = path.join(root, "not-a-directory");
   fs.writeFileSync(unavailableRoot, "x", { mode: 0o600 });
@@ -371,6 +431,64 @@ test("serializes concurrent hook publishers without duplicate sequences", async 
   assert.equal(events.length, 10);
   assert.equal(new Set(sequences).size, 10);
   assert.deepEqual(sequences, [...sequences].sort((left, right) => left - right));
+});
+
+test("keeps bounded-time concurrent publishers through repeated rotations", async (context) => {
+  const { root, workspace, store } = setup(context, { maxEvents: 2 });
+  publish(store, workspace, 1);
+  publish(store, workspace, 2);
+
+  const publications = await Promise.all(
+    Array.from({ length: 10 }, (_, index) =>
+      runPublisher(root, workspace, index + 3, {
+        maxEvents: 2,
+        // Coverage instrumentation can make ten process-level publishers hold
+        // the synthetic two-event rotation lock longer than the production
+        // hot-path timeout. This test verifies serialization and sequence
+        // integrity; the default 50 ms fail-open budget is covered by the
+        // live-spool and live-dashboard benchmarks.
+        lockTimeoutMs: 1000,
+      }),
+    ),
+  );
+  const sequences = publications.map(
+    (publication) => publication.event?.seq,
+  );
+  assert.equal(
+    publications.every((publication) => publication.published),
+    true,
+  );
+  assert.equal(new Set(sequences).size, 10);
+  assert.deepEqual(
+    [...sequences].sort((left, right) => left - right),
+    Array.from({ length: 10 }, (_, index) => index + 3),
+  );
+  assert.equal(store.status().nextSeq, 13);
+});
+
+test("removes a retired generation that contains a coverage marker", (context) => {
+  const { workspace, store } = setup(context, {
+    maxEvents: 2,
+    lockTimeoutMs: 0,
+  });
+  store.status();
+  fs.mkdirSync(store.lockPath, { mode: 0o700 });
+  assert.deepEqual(publish(store, workspace, 1), {
+    published: false,
+    reason: "busy",
+  });
+  fs.rmdirSync(store.lockPath);
+  publish(store, workspace, 1);
+  publish(store, workspace, 2);
+  publish(store, workspace, 3);
+
+  store.cleanupRetiredGenerations(4096);
+  assert.deepEqual(
+    fs.readdirSync(store.generationsDir).filter((name) =>
+      name.startsWith(".retired-"),
+    ),
+    [],
+  );
 });
 
 test("purges the bounded live spool without touching its parent", (context) => {

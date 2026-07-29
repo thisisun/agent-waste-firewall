@@ -50,9 +50,9 @@ Goal: create a stable boundary that the native app can consume without raw data.
 
 Implementation status: the dependency-free `LiveEventV1` schema, detector-result projection,
 bounded private store, always-on hook publication, numeric decision latency, privacy fixtures,
-concurrent-writer coverage, and fail-open behavior are implemented. The current browser dashboard
-still consumes an explicit trace. A live-spool reader and shared dashboard projection are the next
-PR and must land before M1 presentation work depends on this transport.
+concurrent-writer coverage, fail-open behavior, generation-aware live reader, and shared dashboard
+projection are implemented. The no-argument dashboard consumes the bounded spool without an active
+export recording; an explicit trace ID selects historical trace presentation.
 
 Deliverables:
 
@@ -75,7 +75,7 @@ Acceptance:
 - concurrent hook processes do not corrupt the spool;
 - an unavailable spool does not change the hook response;
 - event creation plus persistence remains below 100 ms at p95;
-- the next dashboard consumer can run without an active export recording.
+- the dashboard runs without an active export recording.
 
 ### M1 — Native read-only shell
 
@@ -257,12 +257,18 @@ removes the old events and key. Keep explicit trace recording unchanged: the liv
 short-lived operational UI transport, while a trace is an opt-in audit/export/replay artifact with
 a separate key lifecycle.
 
-### Step 3: connect the dashboard projection — next PR
+### Step 3: connect the dashboard projection — implemented
 
-Add a validated live-spool cursor and make semantic-event-to-dashboard projection a pure tested
-module. The existing SSE/status server currently reads only an explicitly started trace; the new
-consumer must make the dashboard useful without `record start`. The macOS shell should then consume
-the same projection.
+The validated live-spool cursor and pure semantic-event-to-dashboard projection are implemented.
+The no-argument SSE/status server consumes the live spool without `record start`;
+`dashboard <trace-id>` retains the historical audited-trace path. Status and replay use one atomic
+cursor frame. Generation changes emit a snapshot reset, and health distinguishes empty, stale,
+degraded, and incomplete-coverage states without exposing an unaudited event.
+
+Steady-state reads validate only appended events and do not take the publish lock. A complete
+bounded-generation audit runs every 30 seconds, while retention-only maintenance runs every second
+while the dashboard is open. Tests cover concurrent publication/tailing, rotation, resume IDs,
+sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical expiry cleanup.
 
 Do not let Swift invent detector meaning. Swift receives typed IDs and numbers, then maps IDs to
 localized copy and visual state.
@@ -428,6 +434,7 @@ npm test
 npm run test:coverage
 npm run benchmark:hook
 npm run benchmark:live-spool
+npm run benchmark:live-dashboard
 npm run benchmark:dashboard
 ```
 
@@ -510,6 +517,7 @@ The beta is done when a non-technical user can:
 8. purge local data and uninstall the integration;
 9. reproduce the published evaluation on anonymized semantic fixtures.
 
-The `LiveEventV1` schema, privacy validator, bounded spool, and fixture-driven publication tests are
-implemented. The next implementation PR should add only the validated live-spool consumer and
-shared dashboard projection. Do not start the native UI until that read path is stable.
+The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
+dashboard projection, and fixture-driven publication tests are implemented. The next implementation
+work is the native read-only shell; it must consume this contract without reading detector state or
+inventing detector meaning.

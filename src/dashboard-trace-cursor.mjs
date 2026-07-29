@@ -119,6 +119,23 @@ export class DashboardTraceCursor {
 
   readWindowAfter(sequence) {
     const events = this.readEvents();
+    return this.windowFromEvents(events, sequence);
+  }
+
+  readFrameAfter(sequence) {
+    const events = this.readEvents();
+    return {
+      allEvents: events,
+      snapshot: {
+        events,
+        generation: this.generation,
+        health: this.health,
+      },
+      window: this.windowFromEvents(events, sequence),
+    };
+  }
+
+  windowFromEvents(events, sequence) {
     let low = 0;
     let high = events.length;
     while (low < high) {

@@ -810,3 +810,175 @@ test("historical SSE events render without double-counting status metrics", asyn
     "incident deltas outside the closed 0/1 allowlist must be rejected",
   );
 });
+
+test("live snapshots reset projection state and composite IDs deduplicate reconnects", async () => {
+  const harness = dashboardHarness();
+  await new Promise((resolve) => setImmediate(resolve));
+  const stream = FakeEventSource.instances[0];
+  const firstAlias = `generation_${"1".repeat(32)}`;
+  const secondAlias = `generation_${"2".repeat(32)}`;
+  const sessionAlias = `session_${"3".repeat(32)}`;
+
+  stream.emit(
+    {
+      kind: "status",
+      status: {
+        v: 1,
+        connected: true,
+        source: "live",
+        sourceState: "active",
+        streamHealth: "healthy",
+        coverage: "complete",
+        generation: 1,
+        streamAlias: firstAlias,
+        mode: "warn",
+        traceAlias: sessionAlias,
+        metrics: {
+          events: 2,
+          incidents: 1,
+          avoidableCalls: 1,
+          elapsedMs: 2000,
+        },
+        lastSequence: 2,
+        currentWarning: {
+          ruleId: "exact_tool_repeat",
+          severity: "high",
+          attribution: "agent",
+          occurrences: 3,
+          issueIds: [],
+        },
+        promptCoach: { issueIds: ["verify"] },
+      },
+    },
+    "status",
+  );
+  const event = {
+    kind: "tool",
+    family: "shell",
+    operation: "inspect",
+    outcome: "started",
+    ruleId: null,
+    severity: "none",
+    attribution: null,
+    alias: sessionAlias,
+    elapsedMs: 1000,
+    issueIds: [],
+    occurrences: 1,
+    incidentCountDelta: 0,
+    avoidableCallsDelta: 0,
+  };
+  stream.emit(event, "message", `${firstAlias}:1`);
+  stream.emit(event, "message", `${firstAlias}:2`);
+  stream.emit(event, "message", `${firstAlias}:2`);
+  assert.equal(harness.ids.get("timeline-list").children.length, 2);
+  assert.equal(harness.document.documentElement.dataset.signal, "critical");
+
+  stream.emit(
+    {
+      kind: "snapshot",
+      reset: true,
+      status: {
+        v: 1,
+        connected: true,
+        source: "live",
+        sourceState: "active",
+        streamHealth: "healthy",
+        coverage: "complete",
+        generation: 2,
+        streamAlias: secondAlias,
+        mode: "warn",
+        traceAlias: sessionAlias,
+        metrics: {
+          events: 1,
+          incidents: 0,
+          avoidableCalls: 0,
+          elapsedMs: 3000,
+        },
+        lastSequence: 1_000_000_001,
+        currentWarning: null,
+        promptCoach: { issueIds: [] },
+      },
+    },
+    "snapshot",
+  );
+  assert.equal(harness.ids.get("metric-events").textContent, "1");
+  assert.equal(harness.ids.get("metric-incidents").textContent, "0");
+  assert.equal(harness.ids.get("timeline-list").children.length, 1);
+  assert.equal(harness.document.documentElement.dataset.signal, "clear");
+  assert.doesNotMatch(
+    harness.ids.get("coach-status").textContent,
+    /Items to improve/u,
+  );
+
+  stream.emit(
+    {
+      ...event,
+      elapsedMs: 3000,
+    },
+    "message",
+    `${secondAlias}:1000000001`,
+  );
+  stream.emit(
+    {
+      ...event,
+      elapsedMs: 3000,
+    },
+    "message",
+    `${secondAlias}:1000000001`,
+  );
+  assert.equal(harness.ids.get("timeline-list").children.length, 1);
+  assert.equal(
+    harness.ids.get("metric-events").textContent,
+    "1",
+    "historical replay after reset must not double-count metrics",
+  );
+
+  const beforeRejectedFrames =
+    harness.ids.get("timeline-list").children.length;
+  stream.emit(event, "message", "");
+  stream.emit(event, "message", `${firstAlias}:1000000002`);
+  assert.equal(
+    harness.ids.get("timeline-list").children.length,
+    beforeRejectedFrames,
+    "missing and prior-generation live IDs must be rejected",
+  );
+
+  stream.emit(
+    {
+      kind: "status",
+      status: {
+        v: 1,
+        connected: true,
+        source: "live",
+        sourceState: "active",
+        streamHealth: "healthy",
+        coverage: "complete",
+        generation: 1,
+        streamAlias: firstAlias,
+        mode: "warn",
+        metrics: {
+          events: 99,
+          incidents: 99,
+          avoidableCalls: 99,
+          elapsedMs: 9999,
+        },
+        lastSequence: 99,
+        currentWarning: {
+          ruleId: "exact_tool_repeat",
+          severity: "high",
+          attribution: "agent",
+          occurrences: 3,
+          issueIds: [],
+        },
+        promptCoach: { issueIds: [] },
+      },
+    },
+    "status",
+  );
+  assert.equal(harness.ids.get("metric-events").textContent, "1");
+  assert.equal(
+    harness.document.documentElement.dataset.signal,
+    "clear",
+    "a delayed older generation must not restore an obsolete warning",
+  );
+});

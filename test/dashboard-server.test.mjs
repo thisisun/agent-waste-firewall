@@ -591,3 +591,70 @@ test("accepts only complete audited appends and recovers from truncation", async
   assert.equal(resetStream.includes("cursor-session"), false);
   await reader.cancel();
 });
+
+test("never forwards tampered explicit-trace metadata to status or SSE", async (context) => {
+  const workspace = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-metadata-workspace-"),
+  );
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-metadata-data-"),
+  );
+  fs.mkdirSync(path.join(workspace, ".git"));
+  context.after(() =>
+    fs.rmSync(workspace, { recursive: true, force: true }),
+  );
+  context.after(() =>
+    fs.rmSync(dataDir, { recursive: true, force: true }),
+  );
+  const env = {
+    AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+    AGENT_WASTE_FIREWALL_MODE: "observe",
+    AGENT_WASTE_FIREWALL_PLATFORM: "codex",
+  };
+  const store = new TraceStore({ root: dataDir, env });
+  const trace = store.start({
+    workspace,
+    label: "metadata-audit",
+    mode: "observe",
+  });
+  const token = "6".repeat(48);
+  const dashboard = await startDashboard({
+    source: "trace",
+    store,
+    traceId: trace.traceId,
+    port: 0,
+    token,
+  });
+  context.after(() => dashboard.close());
+  const canary = "SECRET-TRACE-METADATA-CANARY";
+  const metadataPath = store.metadataPath(trace.traceId);
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+  fs.writeFileSync(
+    metadataPath,
+    `${JSON.stringify({
+      ...metadata,
+      traceId: canary,
+      mode: canary,
+      status: canary,
+    })}\n`,
+    { mode: 0o600 },
+  );
+  const origin = `http://127.0.0.1:${dashboard.port}`;
+
+  const statusText = await fetch(
+    `${origin}/api/status?token=${token}`,
+  ).then((response) => response.text());
+  assert.equal(statusText.includes(canary), false);
+  const status = JSON.parse(statusText);
+  assert.equal(status.connected, false);
+  assert.equal(status.streamHealth, "degraded");
+
+  const stream = await fetch(`${origin}/events?token=${token}`);
+  const reader = stream.body.getReader();
+  const streamText = await readStreamUntil(
+    reader,
+    '"streamHealth":"degraded"',
+  );
+  assert.equal(streamText.includes(canary), false);
+  await reader.cancel();
+});

@@ -236,13 +236,14 @@ The selected references avoid approximately three to five engineering weeks:
 - compatibility with CC Safety Net instead of a new destructive-command parser: roughly 2–4
   weeks of avoided scope.
 
-The estimate does not mean AWF is three to five weeks from release. Installed-provider
-acceptance tests, a signed native app, bounded always-on live transport, false-positive evaluation,
-and optional actual-usage adapters still require implementation.
+The estimate does not mean AWF is three to five weeks from release. Installed-provider acceptance
+tests, a signed native app, false-positive evaluation, and optional actual-usage adapters still
+require implementation. The bounded always-on transport and browser-side live consumer described
+below were implemented after this research snapshot.
 
-## Benchmark against the current repository
+## Repository baseline at the start of implementation
 
-The current local validation is recorded in
+The initial local validation snapshot is recorded in
 [`VALIDATION-REPORT-2026-07-29.md`](./VALIDATION-REPORT-2026-07-29.md):
 
 - dependency-free hook subprocess p95 remained below 48 ms in the tested cases;
@@ -262,6 +263,10 @@ shell:
 4. add multi-session, privacy, and long-trace regression/performance tests;
 5. then implement the bounded always-on `LiveEventV1` spool described in
    [`MACOS-ARCHITECTURE.md`](./MACOS-ARCHITECTURE.md).
+
+All five corrective steps and the generation-aware browser dashboard consumer are now implemented.
+The linked validation report carries the current measurements; the values above remain historical
+evidence for why the architecture changed.
 
 ## Go / no-go
 

@@ -385,8 +385,10 @@ async function commandDashboard(args, env = process.env) {
   const traceId = positionalArguments(args, ["--port"])[0] ?? null;
   const dashboard = await startDashboard({
     root: config.dataDir,
+    source: traceId ? "trace" : "live",
     traceId,
     port: argumentValue(args, "--port") ?? 4319,
+    mode: config.mode,
     env,
   });
   console.log(`AWF dashboard: ${dashboard.url}`);
@@ -444,6 +446,8 @@ async function commandDoctor(args, env = process.env) {
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
     "src/dashboard-server.mjs",
+    "src/dashboard-live-cursor.mjs",
+    "src/dashboard-projection.mjs",
     "src/dashboard-trace-cursor.mjs",
     "src/dashboard-assets.mjs",
   ];

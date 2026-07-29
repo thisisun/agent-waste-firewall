@@ -13,10 +13,13 @@ The current Node.js product path works as a research alpha:
 - Observe, warn, and block policies behave differently as designed.
 - Supported hook events now make a best-effort publication to a bounded, always-on `LiveEventV1`
   spool without requiring an explicit trace.
-- Multi-session semantic recording, audit, export, replay, and the loopback dashboard work.
+- The default loopback dashboard consumes that spool without `record start`; an explicit trace ID
+  selects the historical audited-trace view.
+- Multi-session semantic recording, audit, export, and replay work independently of the live UI.
 - The hook hot path is below the proposed 100 ms p95 target on this machine.
-- Warm dashboard status remains below the proposed 100 ms p95 target at 100,000 events on this
-  machine.
+- Warm live-dashboard status remains below the proposed 100 ms p95 target with its complete
+  4,096-event bounded generation, and the historical trace cursor remains below the target at
+  15,000 events on this machine.
 - Exported trace scans found none of the synthetic prompt, command, session, or workspace markers.
 
 It is not yet a distributable macOS application:
@@ -24,7 +27,6 @@ It is not yet a distributable macOS application:
 - there is no SwiftUI/AppKit target, menu-bar app, transparent `NSPanel`, signed helper, DMG,
   notarization, or one-click integration manager;
 - exact token usage is not measured;
-- the current dashboard still consumes an explicit trace rather than the new always-on spool;
 - actual Codex and Claude installations have not yet passed the provider acceptance matrix.
 
 ## Environment
@@ -40,19 +42,19 @@ marketplaces. Claude Code was not installed. Provider integration results below 
 real AWF hook executable with synthetic official-shape events, not an installed-provider
 smoke test.
 
-## Current M0 verification
+## Current portable verification
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 41 JavaScript files and 13 JSON files |
-| `npm test` | Pass: 128/128 |
-| Line coverage | 94.70% |
-| Branch coverage | 82.32% |
-| Function coverage | 95.07% |
-| `src/cli.mjs` line coverage | 63.09% |
-| `npm pack --dry-run --json` | Pass: 65 files, 1,746,640 bytes packed |
+| `npm run check` | Pass: 46 JavaScript files and 13 JSON files |
+| `npm test` | Pass: 146/146 |
+| Line coverage | 95.24% |
+| Branch coverage | 83.24% |
+| Function coverage | 94.82% |
+| `src/cli.mjs` line coverage | 63.02% |
+| `npm pack --dry-run --json` | Pass: 68 files, 1,757,124 bytes packed |
 | `npm audit --omit=dev --ignore-scripts` | Pass: 0 known vulnerabilities |
-| `doctor --json` | Pass: all 17 current checks, including live-spool readiness |
+| `doctor --json` | Pass: all 19 current checks, including live cursor/projection and spool readiness |
 
 The doctor command currently proves repository files, data-directory access, live-spool
 initialization/maintenance, and the Node version. It does not prove that Codex or Claude has loaded
@@ -103,8 +105,20 @@ The same eight-event synthetic fixture produced:
 The real dashboard CLI was started on a random loopback port and random access token.
 
 - authorized document, status, and SSE requests succeeded;
-- the status projection reported 3 events, 2 incidents, and 1 avoidable-call candidate;
-- SSE emitted prompt, tool, and incident events with semantic aliases only;
+- the no-argument dashboard started with an empty-but-connected live spool and required no
+  recording;
+- real hook publications appeared through status and SSE as prompt, tool, and incident events with
+  semantic aliases only;
+- source, empty/active state, stream health, coverage, and generation identity were represented by
+  closed status fields;
+- a rotation and reconnect emitted one generation-aware snapshot reset, and composite resume IDs
+  prevented duplicate delivery;
+- a forced busy publication changed coverage to incomplete even without a later event;
+- writer races retained the last audited snapshot as stale, while corruption and invalid UTF-8
+  produced degraded state without forwarding rejected bytes;
+- expired events and their generation alias key were hidden and physically removed by dashboard
+  maintenance;
+- `dashboard <trace-id>` still served a separately audited historical trace;
 - the page rendered meaningful content with no console errors or framework error overlay;
 - signal state changed to `warn` and the tab title showed review state;
 - compact sentinel mode opened and expanded again;
@@ -165,21 +179,32 @@ with both the always-on spool and an active explicit semantic trace:
 
 | Condition | Samples | p50 | p95 | p99 | Max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Always-on spool + active semantic recording | 200 | 39.24 ms | 41.10 ms | 41.91 ms | 42.37 ms |
+| Always-on spool + active semantic recording | 100 | 39.58 ms | 41.24 ms | 41.71 ms | 41.76 ms |
 
-Twenty excluded warmups plus 200 measured calls committed sequence `220` with no missing live
-event.
+Ten excluded warmups plus 100 measured calls committed sequence `110` with no missing live event.
 
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
 
 | Condition | p50 | p95 | p99 | Max / rotation |
 | --- | ---: | ---: | ---: | ---: |
-| Semantic publish before rotation | 0.74 ms | 1.08 ms | 1.35 ms | 3.95 ms |
-| Replace a full generation | — | — | — | 272.53 ms |
+| Semantic publish before rotation | 0.77 ms | 1.02 ms | 1.17 ms | 9.86 ms |
+| Replace a full generation | — | — | — | 8.99 ms |
 
 The steady-state gate is 100 ms p95 and the full-generation rotation gate is 1,000 ms. Both passed
 on this machine.
+
+The checked-in `npm run benchmark:live-dashboard` saturated the full 4,096-event generation,
+started the real loopback server, read status 100 times, forced rotation, observed the SSE reset,
+and published 100 more events:
+
+| Cold audit | Warm status p95 | Concurrent publish p95 | Rotation | SSE reset visible | Drops |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 134.57 ms | 0.98 ms | 9.62 ms | 10.10 ms | 477.01 ms | 0 |
+
+The SSE visibility number includes the dashboard's bounded polling interval; it is not hook-path
+latency. Cold audit, warm status, concurrent publication, and rotation all passed their checked-in
+limits.
 
 The product target remains 100 ms p95. GitHub Actions enforces that budget on Ubuntu; the shared
 macOS runner uses a separate 150 ms CI budget because cold Node process creation showed materially
@@ -187,8 +212,7 @@ higher runner variance. Local macOS performance is reported against the 100 ms p
 
 Not yet covered:
 
-- concurrent live-spool lock latency under a long-running workload (concurrent correctness has a
-  regression fixture);
+- multi-hour concurrent live-spool lock latency under a real provider workload;
 - large post-tool outputs;
 - file-content hash work;
 - slow or nearly full disks;
@@ -250,13 +274,12 @@ reproduction. A same-machine post-fix run produced:
 
 | Events before append | Cold startup | Warm `/api/status` p95 | One-event append visible |
 | ---: | ---: | ---: | ---: |
-| 15,000 | 69.37 ms | 1.47 ms | 1.64 ms |
+| 15,000 | 53.84 ms | 1.33 ms | 0.93 ms |
 | 100,000 | 322.95 ms | 4.09 ms | 3.27 ms |
 
 The cold audit intentionally remains proportional to trace size; steady-state polling no longer
-rereads or reparses the whole file. The bounded `LiveEventV1` transport is now implemented, but
-this dashboard measurement still covers the explicit-trace cursor. A generation-aware live-spool
-consumer is the next presentation PR.
+rereads or reparses the whole file. This table remains the historical explicit-trace baseline.
+The default dashboard now uses the separately measured bounded live-spool cursor described above.
 
 Malformed loopback request targets now return a closed `400` response, active SSE connections no
 longer prevent shutdown, trace rotation resets existing streams, and an invalid complete append
@@ -299,7 +322,7 @@ prose are excluded. Regression coverage includes raw canaries, injected unknown 
 state replacement, session-scoped aliases, an edit-revert positive fixture, and a productive
 `A → B → C` counterexample.
 
-### Resolved M0 transport gap — No bounded always-on semantic spool
+### Resolved transport and presentation gaps
 
 Each supported hook now projects its detector result directly into the exact `LiveEventV1` shape
 and attempts publication even when no trace recording is active. The private store uses
@@ -310,9 +333,12 @@ recovery for interrupted temporary or pending publication. It rotates the whole 
 the 24-hour age trigger is observed on next access. Busy or unavailable publication is fail-open
 and cannot change the already-computed hook decision.
 
-This closes the transport-write gap, not the presentation-read gap. Explicit traces remain the
-only format with user-invoked trace audit, export, and replay commands, and the current dashboard
-still requires one. The next PR must consume the live spool without weakening its closed schema.
+The presentation-read gap is now also closed. The default dashboard consumes only audited
+`LiveEventV1` windows, while explicit traces remain the only format with user-invoked trace audit,
+export, and replay commands. They can still be opened intentionally with
+`dashboard <trace-id>`. The live reader uses stable control/event/control snapshots, no-following
+private file reads, generation-scoped SSE identities, incremental validation plus a 30-second full
+audit, and a one-second retention-only maintenance loop. It never takes the publish lock.
 
 ## Recommended next implementation order
 
@@ -320,7 +346,7 @@ still requires one. The next PR must consume the live spool without weakening it
 2. ~~Implement an incrementally audited cursor and session-aware dashboard projection.~~ Completed.
 3. ~~Implement `LiveEventV1`, a bounded always-on spool independent of explicit recording.~~
    Completed.
-4. Connect the current dashboard projection to a generation-aware live-spool cursor.
+4. ~~Connect the current dashboard projection to a generation-aware live-spool cursor.~~ Completed.
 5. Run the configured hook/dashboard checks on macOS and Linux CI after the repository is
    published.
 6. Add real Codex and Claude install/trust smoke tests.

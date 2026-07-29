@@ -1,10 +1,23 @@
 import { LiveEventStore } from "../src/live-event-store.mjs";
 
-const [root, workspace, indexText] = process.argv.slice(2);
+const [
+  root,
+  workspace,
+  indexText,
+  maxEventsText,
+  lockTimeoutText,
+] = process.argv.slice(2);
 const index = Number.parseInt(indexText, 10);
 const store = new LiveEventStore({
   root,
-  lockTimeoutMs: 1000,
+  maxEvents:
+    maxEventsText === undefined
+      ? undefined
+      : Number.parseInt(maxEventsText, 10),
+  lockTimeoutMs:
+    lockTimeoutText === undefined
+      ? 1000
+      : Number.parseInt(lockTimeoutText, 10),
 });
 const published = store.publish(
   {

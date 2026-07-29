@@ -22,20 +22,20 @@ Codex / Claude hook payload (raw in memory only)
             │
             ├──► LiveEventV1 allowlist ─► bounded always-on private spool
             │                                      │
-            │                                      └──► next live dashboard/native consumer
+            │                                      └──► current loopback live dashboard
             └──► explicit recording? ─► trace-scoped semantic JSONL
                                               │
-                                              └──► current loopback dashboard + prompt coach
+                                              └──► historical dashboard / audit / export / replay
 
 semantic JSONL ─► schema/privacy audit ─► export ─► repository-free replay
 ```
 
 Both serializers construct new objects from closed allowlists; neither saves raw JSON for later
-redaction. The current dashboard still consumes the explicit trace path. Connecting its projection
-to the always-on spool is the next presentation change. The dashboard never receives the hook
-payload, detector prose, command, output, path, or source content. The HTTP server binds only to
-loopback and requires a random token in the local URL. Browser assets have no external dependencies
-or outbound requests.
+redaction. The dashboard consumes the always-on spool by default; passing an explicit trace ID
+selects the historical trace cursor instead. Both inputs are projected through the same closed
+dashboard model. The dashboard never receives the hook payload, detector prose, command, output,
+path, or source content. The HTTP server binds only to loopback and requires a random token in the
+local URL. Browser assets have no external dependencies or outbound requests.
 
 ## Portable decision model
 
@@ -103,15 +103,36 @@ a command, output, source content, or a raw provider/model/session/tool identifi
 `LiveEventStore` publishes one private JSON event file by atomic rename under a short global lock.
 The spool uses private directories and files, recovers interrupted pending writes, and revalidates
 every event on read. One generation has hard ceilings of 4,096 events and 8 MiB. A 24-hour age
-trigger is enforced lazily on the next publish, read, or maintenance access because M0 has no
-background daemon. Configuration may lower but not raise any limit. Triggering rotation creates
-a new generation and removes the previous generation. Each generation
-has its own random 256-bit HMAC key, so session aliases are comparable only inside that bounded
-window. Busy or unavailable publication fails open: presentation may miss an event, but the hook
-decision is unchanged.
+trigger is enforced on the next publish, read, or maintenance access; the open dashboard runs
+retention-only maintenance once per second. Configuration may lower but not raise any limit.
+Triggering rotation atomically switches control to a new generation and retires old events and
+their alias key outside the publish lock. Each generation has its own random 256-bit HMAC key, so
+session aliases are comparable only inside that bounded window. Busy or unavailable publication
+fails open: presentation may miss an event, but the hook decision is unchanged.
 
-The live spool is operational UI transport, not an export artifact. The current browser dashboard
-still reads an explicitly started trace; a direct spool reader/projection is the next PR.
+The live dashboard cursor does not take the publisher lock. It reads control, generation
+metadata, committed event files, and control again, then accepts the window only when both control
+snapshots agree. It reads private files through no-following file descriptors, validates exact
+metadata and event invariants, and retries bounded writer races. Normal polling validates only new
+committed events; a complete bounded-generation audit runs every 30 seconds to detect mutation of
+already cached events. A race yields `stale`, corruption yields `degraded`, and either condition
+retains the last fully audited snapshot.
+
+Status separates four independent facts:
+
+- `source`: live spool or explicit trace;
+- `sourceState`: empty or active;
+- `streamHealth`: healthy, stale, or degraded;
+- `coverage`: complete, incomplete, or unknown.
+
+A reserved sequence gap or persisted publication-drop marker keeps coverage incomplete for that
+generation. The marker is also best-effort: a storage failure may prevent both the event and its
+marker from being written. SSE uses a per-generation HMAC stream alias plus sequence ID. Rotation
+or an invalid resume ID sends one atomic snapshot reset before replay, and status and replay are
+derived from the same cursor frame.
+
+The live spool is operational UI transport, not an export artifact. Explicit traces retain their
+separate audit, export, replay, and historical-dashboard lifecycle.
 
 ## Semantic trace model
 
