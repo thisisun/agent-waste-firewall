@@ -825,3 +825,45 @@ test("never forwards tampered explicit-trace metadata to status or SSE", async (
   assert.equal(streamText.includes(canary), false);
   await reader.cancel();
 });
+
+test("runs bounded state retention beside monitoring and closes it exactly once", async (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-state-janitor-"),
+  );
+  context.after(() =>
+    fs.rmSync(dataDir, { recursive: true, force: true }),
+  );
+  let ticks = 0;
+  let closes = 0;
+  const stateJanitor = {
+    tick() {
+      ticks += 1;
+      if (ticks === 1) throw new Error("closed-test-error");
+    },
+    close() {
+      closes += 1;
+    },
+  };
+  const token = "7".repeat(48);
+  const dashboard = await startDashboard({
+    root: dataDir,
+    source: "live",
+    port: 0,
+    token,
+    maintenanceIntervalMs: 25,
+    stateJanitor,
+  });
+
+  await waitUntil(
+    () => ticks >= 2,
+    500,
+    "state retention did not run with dashboard maintenance",
+  );
+  const response = await fetch(
+    `http://127.0.0.1:${dashboard.port}/api/status?token=${token}`,
+  );
+  assert.equal(response.status, 200);
+  await dashboard.close();
+  await dashboard.close();
+  assert.equal(closes, 1);
+});

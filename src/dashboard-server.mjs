@@ -456,6 +456,14 @@ export async function startDashboard(options = {}) {
   if (source !== "live" && source !== "trace") {
     throw new Error("Dashboard source must be live or trace.");
   }
+  const stateJanitor = options.stateJanitor ?? null;
+  if (
+    stateJanitor !== null &&
+    (typeof stateJanitor.tick !== "function" ||
+      typeof stateJanitor.close !== "function")
+  ) {
+    throw new TypeError("Dashboard state janitor is invalid.");
+  }
   let store;
   let traceId = null;
   let cursor;
@@ -730,7 +738,10 @@ export async function startDashboard(options = {}) {
   });
   const address = server.address();
   actualPort = typeof address === "object" && address ? address.port : port;
-  if (source === "live" && typeof store.maintain === "function") {
+  if (
+    (source === "live" && typeof store.maintain === "function") ||
+    stateJanitor
+  ) {
     const requestedInterval = Number(options.maintenanceIntervalMs);
     const maintenanceIntervalMs =
       Number.isSafeInteger(requestedInterval) &&
@@ -739,6 +750,16 @@ export async function startDashboard(options = {}) {
         : 1000;
     maintenanceInterval = setInterval(
       () => {
+        if (stateJanitor) {
+          try {
+            stateJanitor.tick();
+          } catch {
+            // State retention is observation-only and must not stop monitoring.
+          }
+        }
+        if (source !== "live" || typeof store.maintain !== "function") {
+          return;
+        }
         try {
           store.maintain();
           const events = cursor.readEvents();
@@ -764,6 +785,13 @@ export async function startDashboard(options = {}) {
     if (maintenanceInterval) {
       clearInterval(maintenanceInterval);
       maintenanceInterval = null;
+    }
+    if (stateJanitor) {
+      try {
+        stateJanitor.close();
+      } catch {
+        // Closing state retention must not strand dashboard sockets.
+      }
     }
     closePromise = new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));

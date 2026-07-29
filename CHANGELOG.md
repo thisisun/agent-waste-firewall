@@ -25,6 +25,9 @@
 - Scope live session aliases to a fresh per-generation HMAC key and restrict persisted events to a
   closed enum, bounded-number, rule/issue-ID, and alias allowlist.
 - Add local redacted state, 30-day retention, reporting, purging, and JSONL replay.
+- Move session retention out of the hook hot path into a dashboard-owned incremental janitor with
+  a 64-entry/soft-8-ms tick budget, private-storage identity checks, conservative active-lock
+  handling, and hard ceilings for persisted tool events, incidents, and file aliases.
 - Add observe, warn, and high-confidence block modes.
 - Add workspace-scoped live recording with a per-trace HMAC key and strict semantic JSONL schema.
 - Add privacy audit, safe export, and repository-free semantic replay across all three modes.

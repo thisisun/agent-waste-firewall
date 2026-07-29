@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -9,6 +10,17 @@ const MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const MAINTENANCE_CLOCK_SKEW_MS = 60 * 1000;
 const MAINTENANCE_LOCK_STALE_MS = 10 * 60 * 1000;
 const MAINTENANCE_MARKER_MAX_BYTES = 128;
+const STATE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+const MAX_STATE_TOOL_EVENTS = 512;
+const MAX_STATE_INCIDENTS = 256;
+const MAX_STATE_FILE_ALIASES = 512;
+const SESSION_KEY = /^[a-f0-9]{16}-[a-f0-9]{10}$/u;
+const SESSION_STATE_FILE =
+  /^([a-f0-9]{16}-[a-f0-9]{10})\.json$/u;
+const SESSION_LOCK_DIRECTORY =
+  /^([a-f0-9]{16}-[a-f0-9]{10})\.lock$/u;
+const SESSION_TEMPORARY_FILE =
+  /^([a-f0-9]{16}-[a-f0-9]{10})\.json\.(\d+)\.([a-f0-9]+)\.tmp$/u;
 const PLATFORMS = new Set(["unknown", "codex", "claude"]);
 const LOCALES = new Set(["en", "ko"]);
 const PROMPT_SEVERITIES = new Set(["none", "low", "medium", "high"]);
@@ -161,7 +173,9 @@ function sanitizeFiles(value, fallbackTime) {
     return {};
   }
   const files = {};
-  for (const [pathAlias, entry] of Object.entries(value)) {
+  for (const [pathAlias, entry] of Object.entries(value).slice(
+    -MAX_STATE_FILE_ALIASES,
+  )) {
     if (!PATH_ALIAS.test(pathAlias) || !entry || typeof entry !== "object") {
       continue;
     }
@@ -294,6 +308,7 @@ function projectState(value, fallback) {
     prompt: sanitizePrompt(source.prompt, updatedAt),
     toolEvents: Array.isArray(source.toolEvents)
       ? source.toolEvents
+          .slice(-MAX_STATE_TOOL_EVENTS)
           .map((current) => sanitizeToolEvent(current, updatedAt))
           .filter(Boolean)
       : [],
@@ -305,6 +320,7 @@ function projectState(value, fallback) {
     files: sanitizeFiles(source.files, updatedAt),
     incidents: Array.isArray(source.incidents)
       ? source.incidents
+          .slice(-MAX_STATE_INCIDENTS)
           .map((current) => sanitizeIncident(current, updatedAt))
           .filter(Boolean)
       : [],
@@ -360,9 +376,16 @@ function initialState(payload, now) {
 }
 
 function prune(state, config) {
-  state.toolEvents = state.toolEvents.slice(-config.maxToolEvents);
+  state.toolEvents = state.toolEvents.slice(
+    -Math.min(config.maxToolEvents, MAX_STATE_TOOL_EVENTS),
+  );
   state.failures = state.failures.slice(-80);
-  state.incidents = state.incidents.slice(-config.maxIncidents);
+  state.incidents = state.incidents.slice(
+    -Math.min(config.maxIncidents, MAX_STATE_INCIDENTS),
+  );
+  state.files = Object.fromEntries(
+    Object.entries(state.files).slice(-MAX_STATE_FILE_ALIASES),
+  );
   for (const file of Object.values(state.files)) {
     file.hashes = file.hashes.slice(-8);
   }
@@ -374,18 +397,156 @@ function emptyPurgeResult() {
     temporaryFilesRemoved: 0,
     staleLocksRemoved: 0,
     activeFilesSkipped: 0,
+    unsafeFilesSkipped: 0,
   };
+}
+
+export class UnsafeStateStorageError extends Error {
+  constructor() {
+    super("Unsafe state storage boundary.");
+    this.code = "UNSAFE_STATE_STORAGE";
+  }
+}
+
+export class UnsafeStateEntryError extends Error {
+  constructor() {
+    super("Unsafe state entry.");
+    this.code = "UNSAFE_STATE_ENTRY";
+  }
+}
+
+function ownerUid() {
+  return typeof process.getuid === "function" ? BigInt(process.getuid()) : null;
+}
+
+function privateDirectorySnapshot(stat) {
+  const uid = ownerUid();
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    (uid !== null && stat.uid !== uid) ||
+    (stat.mode & 0o077n) !== 0n
+  ) {
+    throw new UnsafeStateStorageError();
+  }
+  return { dev: stat.dev, ino: stat.ino };
+}
+
+function inspectPrivateDirectory(directory) {
+  return privateDirectorySnapshot(
+    fs.lstatSync(directory, { bigint: true }),
+  );
+}
+
+function sameDirectory(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function assertTrustedAncestorStat(stat, { symbolicLink = false } = {}) {
+  const uid = ownerUid();
+  const trustedOwner =
+    uid === null || stat.uid === uid || stat.uid === 0n;
+  if (!trustedOwner) throw new UnsafeStateStorageError();
+  if (symbolicLink) {
+    if (!stat.isSymbolicLink()) throw new UnsafeStateStorageError();
+    return;
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new UnsafeStateStorageError();
+  }
+  const writableByOthers = (stat.mode & 0o022n) !== 0n;
+  const sticky = (stat.mode & 0o1000n) !== 0n;
+  if (writableByOthers && !sticky) {
+    throw new UnsafeStateStorageError();
+  }
+}
+
+function assertTrustedAncestorPath(directory) {
+  const absolute = path.resolve(directory);
+  const parsed = path.parse(absolute);
+  let current = parsed.root;
+  assertTrustedAncestorStat(fs.lstatSync(current, { bigint: true }));
+  for (const component of absolute
+    .slice(parsed.root.length)
+    .split(path.sep)
+    .filter(Boolean)) {
+    current = path.join(current, component);
+    const stat = fs.lstatSync(current, { bigint: true });
+    assertTrustedAncestorStat(stat, {
+      symbolicLink: stat.isSymbolicLink(),
+    });
+  }
+}
+
+function privateFileSnapshot(filename, maximumBytes = STATE_FILE_MAX_BYTES) {
+  const stat = fs.lstatSync(filename, { bigint: true });
+  const uid = ownerUid();
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.size > BigInt(maximumBytes) ||
+    (uid !== null && stat.uid !== uid) ||
+    (stat.mode & 0o077n) !== 0n
+  ) {
+    throw new UnsafeStateStorageError();
+  }
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtimeNs: stat.mtimeNs,
+    ctimeNs: stat.ctimeNs,
+    mtimeMs: Number(stat.mtimeNs / 1_000_000n),
+  };
+}
+
+function retentionFileSnapshot(filename) {
+  try {
+    return privateFileSnapshot(filename);
+  } catch (error) {
+    if (error.code === "ENOENT") throw error;
+    if (error.code === "UNSAFE_STATE_STORAGE") {
+      throw new UnsafeStateEntryError();
+    }
+    throw error;
+  }
+}
+
+function sameFile(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  );
+}
+
+function parseRetentionEntry(filename) {
+  for (const [kind, pattern] of [
+    ["state", SESSION_STATE_FILE],
+    ["temporary", SESSION_TEMPORARY_FILE],
+    ["lock", SESSION_LOCK_DIRECTORY],
+  ]) {
+    const match = pattern.exec(filename);
+    if (match) return { kind, key: match[1] };
+  }
+  return null;
+}
+
+function addPurgeResult(target, current) {
+  for (const key of Object.keys(target)) {
+    target[key] += current[key] ?? 0;
+  }
 }
 
 export class StateStore {
   constructor({
     root,
     clock = () => new Date(),
-    maintenanceClock = () => Date.now(),
   }) {
     this.root = path.resolve(root);
     this.clock = clock;
-    this.maintenanceClock = maintenanceClock;
     this.sessionsDir = path.join(this.root, "sessions");
     this.maintenanceMarkerPath = path.join(
       this.root,
@@ -412,128 +573,270 @@ export class StateStore {
   }
 
   statePath(key) {
+    if (!SESSION_KEY.test(key)) throw new UnsafeStateStorageError();
     return path.join(this.sessionsDir, `${key}.json`);
   }
 
-  acquireLock(key) {
-    fs.mkdirSync(this.sessionsDir, { recursive: true, mode: 0o700 });
-    const lockPath = path.join(this.sessionsDir, `${key}.lock`);
+  assertSafeRootParent({ deep = false } = {}) {
+    const requestedParent = path.dirname(this.root);
+    const parent = fs.realpathSync(requestedParent);
+    assertTrustedAncestorStat(
+      fs.lstatSync(parent, { bigint: true }),
+    );
+    if (deep) {
+      assertTrustedAncestorPath(requestedParent);
+      if (parent !== path.resolve(requestedParent)) {
+        assertTrustedAncestorPath(parent);
+      }
+    }
+  }
 
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+  ensureRootStorage({ deep = false } = {}) {
+    this.assertSafeRootParent({ deep });
+    fs.mkdirSync(this.root, { recursive: true, mode: 0o700 });
+    return inspectPrivateDirectory(this.root);
+  }
+
+  ensureSessionStorage() {
+    const root = this.ensureRootStorage({ deep: true });
+    fs.mkdirSync(this.sessionsDir, { recursive: true, mode: 0o700 });
+    const sessions = inspectPrivateDirectory(this.sessionsDir);
+    const verifiedRoot = inspectPrivateDirectory(this.root);
+    if (!sameDirectory(root, verifiedRoot)) {
+      throw new UnsafeStateStorageError();
+    }
+    return { root: verifiedRoot, sessions };
+  }
+
+  retentionStorageIdentity({ createSessions = false } = {}) {
+    const root = this.ensureRootStorage({ deep: true });
+    let sessions = null;
+    try {
+      sessions = inspectPrivateDirectory(this.sessionsDir);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      if (createSessions) {
+        fs.mkdirSync(this.sessionsDir, { recursive: true, mode: 0o700 });
+        sessions = inspectPrivateDirectory(this.sessionsDir);
+      }
+    }
+    const verifiedRoot = inspectPrivateDirectory(this.root);
+    if (!sameDirectory(root, verifiedRoot)) {
+      throw new UnsafeStateStorageError();
+    }
+    return { root: verifiedRoot, sessions };
+  }
+
+  assertRetentionStorageIdentity(identity, { sessions = true } = {}) {
+    const root = inspectPrivateDirectory(this.root);
+    if (!sameDirectory(root, identity.root)) {
+      throw new UnsafeStateStorageError();
+    }
+    if (sessions) {
+      if (!identity.sessions) throw new UnsafeStateStorageError();
+      const currentSessions = inspectPrivateDirectory(this.sessionsDir);
+      if (!sameDirectory(currentSessions, identity.sessions)) {
+        throw new UnsafeStateStorageError();
+      }
+    }
+    return identity;
+  }
+
+  lockSnapshot(lockPath) {
+    return inspectPrivateDirectory(lockPath);
+  }
+
+  sameOwnedLock(token) {
+    try {
+      this.assertRetentionStorageIdentity(token.storage);
+      return sameDirectory(this.lockSnapshot(token.path), token.lock);
+    } catch {
+      return false;
+    }
+  }
+
+  releaseOwnedLock(token) {
+    if (!token || !this.sameOwnedLock(token)) return false;
+    try {
+      fs.rmdirSync(token.path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  tryAcquireSessionLock(
+    key,
+    now = Date.now(),
+    { reclaimStale = true } = {},
+  ) {
+    if (!SESSION_KEY.test(key)) throw new UnsafeStateStorageError();
+    const storage = this.ensureSessionStorage();
+    const lockPath = path.join(this.sessionsDir, `${key}.lock`);
+    let staleLocksRemoved = 0;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         fs.mkdirSync(lockPath, { mode: 0o700 });
-        return lockPath;
+        const lock = this.lockSnapshot(lockPath);
+        this.assertRetentionStorageIdentity(storage);
+        return {
+          active: false,
+          staleLocksRemoved,
+          token: { key, path: lockPath, lock, storage },
+        };
       } catch (error) {
         if (error.code !== "EEXIST") {
           throw error;
         }
+        if (!reclaimStale) {
+          return { active: true, staleLocksRemoved, token: null };
+        }
         try {
-          const age = Date.now() - fs.statSync(lockPath).mtimeMs;
+          const before = this.lockSnapshot(lockPath);
+          const age =
+            Math.trunc(Number(now)) -
+            Number(fs.lstatSync(lockPath, { bigint: true }).mtimeMs);
           if (age > STALE_LOCK_MS) {
+            this.assertRetentionStorageIdentity(storage);
+            const after = this.lockSnapshot(lockPath);
+            if (!sameDirectory(before, after)) {
+              throw new UnsafeStateStorageError();
+            }
             fs.rmdirSync(lockPath);
+            staleLocksRemoved += 1;
             continue;
           }
-        } catch {
-          continue;
+        } catch (nestedError) {
+          if (nestedError.code === "ENOENT") continue;
+          throw nestedError;
         }
-        sleepSync(10);
+        return { active: true, staleLocksRemoved, token: null };
       }
     }
 
+    return { active: true, staleLocksRemoved, token: null };
+  }
+
+  acquireLock(key) {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const acquired = this.tryAcquireSessionLock(key);
+      if (acquired.token) return acquired.token;
+      sleepSync(10);
+    }
     throw new Error(`Timed out waiting for state lock: ${key}`);
   }
 
-  inspectLock(key, now) {
-    const lockPath = path.join(this.sessionsDir, `${key}.lock`);
-    if (!fs.existsSync(lockPath)) {
-      return { active: false, staleRemoved: false };
+  purgeRetentionEntry(
+    filename,
+    {
+      all = false,
+      cutoff,
+      excludedKey = null,
+      now = Date.now(),
+      reclaimStaleLocks = false,
+      storage,
+    },
+  ) {
+    const result = emptyPurgeResult();
+    const entry = parseRetentionEntry(filename);
+    if (!entry || entry.key === excludedKey) return result;
+    this.assertRetentionStorageIdentity(storage);
+    const target = path.join(this.sessionsDir, filename);
+
+    if (entry.kind === "lock") {
+      const acquired = this.tryAcquireSessionLock(entry.key, now, {
+        reclaimStale: reclaimStaleLocks,
+      });
+      result.staleLocksRemoved += acquired.staleLocksRemoved;
+      if (acquired.token) this.releaseOwnedLock(acquired.token);
+      return result;
+    }
+
+    let before;
+    try {
+      before = retentionFileSnapshot(target);
+    } catch (error) {
+      if (error.code === "ENOENT") return result;
+      throw error;
+    }
+    if (entry.kind === "state" && !all && before.mtimeMs >= cutoff) {
+      return result;
+    }
+
+    const acquired = this.tryAcquireSessionLock(entry.key, now, {
+      reclaimStale: reclaimStaleLocks,
+    });
+    result.staleLocksRemoved += acquired.staleLocksRemoved;
+    if (!acquired.token) {
+      result.activeFilesSkipped += 1;
+      return result;
     }
     try {
-      const age = now - fs.statSync(lockPath).mtimeMs;
-      if (age > STALE_LOCK_MS) {
-        fs.rmdirSync(lockPath);
-        return { active: false, staleRemoved: true };
+      this.assertRetentionStorageIdentity(storage);
+      let after;
+      try {
+        after = retentionFileSnapshot(target);
+      } catch (error) {
+        if (error.code === "ENOENT") return result;
+        throw error;
       }
-      return { active: true, staleRemoved: false };
-    } catch {
-      return {
-        active: fs.existsSync(lockPath),
-        staleRemoved: false,
-      };
+      if (!sameFile(before, after)) {
+        throw new UnsafeStateStorageError();
+      }
+      if (entry.kind === "state" && !all && after.mtimeMs >= cutoff) {
+        return result;
+      }
+      this.assertRetentionStorageIdentity(storage);
+      fs.unlinkSync(target);
+      this.assertRetentionStorageIdentity(storage);
+      if (entry.kind === "state") result.stateFilesRemoved += 1;
+      else result.temporaryFilesRemoved += 1;
+      return result;
+    } finally {
+      this.releaseOwnedLock(acquired.token);
     }
   }
 
   purge({ all = false, retentionDays = 30, excludedKey = null, now = Date.now() }) {
     const result = emptyPurgeResult();
-    if (!fs.existsSync(this.sessionsDir)) {
-      return result;
+    const cleanupNow = Math.trunc(Number(now));
+    if (!Number.isSafeInteger(cleanupNow) || cleanupNow < 0) {
+      throw new TypeError("Invalid state cleanup clock.");
     }
-    const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-    const lockStates = new Map();
-    const lockFor = (key) => {
-      if (!lockStates.has(key)) {
-        const status = this.inspectLock(key, now);
-        lockStates.set(key, status);
-        if (status.staleRemoved) {
-          result.staleLocksRemoved += 1;
-        }
-      }
-      return lockStates.get(key);
-    };
-
+    if (
+      !Number.isSafeInteger(retentionDays) ||
+      retentionDays < 1 ||
+      retentionDays > 3650
+    ) {
+      throw new TypeError("Invalid state retention period.");
+    }
+    let storage;
+    try {
+      storage = this.retentionStorageIdentity();
+    } catch (error) {
+      if (error.code === "ENOENT") return result;
+      throw error;
+    }
+    if (!storage.sessions) return result;
+    const cutoff =
+      cleanupNow - retentionDays * 24 * 60 * 60 * 1000;
     for (const filename of fs.readdirSync(this.sessionsDir)) {
-      if (!filename.endsWith(".json")) {
-        continue;
-      }
-      const key = filename.slice(0, -5);
-      if (key === excludedKey) {
-        continue;
-      }
-      const stateFile = path.join(this.sessionsDir, filename);
       try {
-        if (!all && fs.statSync(stateFile).mtimeMs >= cutoff) {
-          continue;
-        }
-        if (lockFor(key).active) {
-          result.activeFilesSkipped += 1;
-          continue;
-        }
-        fs.unlinkSync(stateFile);
-        result.stateFilesRemoved += 1;
-      } catch {
-        // Concurrent cleanup or an unreadable stale entry should not break hooks.
-      }
-    }
-
-    for (const filename of fs.readdirSync(this.sessionsDir)) {
-      const marker = ".json.";
-      const markerIndex = filename.indexOf(marker);
-      if (!filename.endsWith(".tmp") || markerIndex <= 0) {
-        continue;
-      }
-      const key = filename.slice(0, markerIndex);
-      if (key === excludedKey) {
-        continue;
-      }
-      if (lockFor(key).active) {
-        result.activeFilesSkipped += 1;
-        continue;
-      }
-      try {
-        fs.unlinkSync(path.join(this.sessionsDir, filename));
-        result.temporaryFilesRemoved += 1;
-      } catch {
-        // Concurrent cleanup is harmless.
-      }
-    }
-
-    for (const filename of fs.readdirSync(this.sessionsDir)) {
-      if (!filename.endsWith(".lock")) {
-        continue;
-      }
-      const key = filename.slice(0, -5);
-      if (key !== excludedKey) {
-        lockFor(key);
+        addPurgeResult(
+          result,
+          this.purgeRetentionEntry(filename, {
+            all,
+            cutoff,
+            excludedKey,
+            now: cleanupNow,
+            reclaimStaleLocks: false,
+            storage,
+          }),
+        );
+      } catch (error) {
+        if (error.code !== "UNSAFE_STATE_ENTRY") throw error;
+        result.unsafeFilesSkipped += 1;
       }
     }
     return result;
@@ -545,18 +848,18 @@ export class StateStore {
 
   retentionMaintenanceDue(now) {
     try {
-      const stat = fs.lstatSync(this.maintenanceMarkerPath);
-      const uid = typeof process.getuid === "function" ? process.getuid() : null;
-      if (
-        !stat.isFile() ||
-        stat.isSymbolicLink() ||
-        stat.size > MAINTENANCE_MARKER_MAX_BYTES ||
-        (uid !== null && stat.uid !== uid) ||
-        (stat.mode & 0o077) !== 0
-      ) {
+      const before = privateFileSnapshot(
+        this.maintenanceMarkerPath,
+        MAINTENANCE_MARKER_MAX_BYTES,
+      );
+      const source = fs.readFileSync(this.maintenanceMarkerPath, "utf8");
+      const after = privateFileSnapshot(
+        this.maintenanceMarkerPath,
+        MAINTENANCE_MARKER_MAX_BYTES,
+      );
+      if (!sameFile(before, after) || Buffer.byteLength(source) !== Number(after.size)) {
         return true;
       }
-      const source = fs.readFileSync(this.maintenanceMarkerPath, "utf8");
       const marker = JSON.parse(source);
       const canonical =
         `{"v":1,"nextSweepAt":${marker?.nextSweepAt}}\n`;
@@ -572,33 +875,126 @@ export class StateStore {
     }
   }
 
-  acquireMaintenanceLock(now) {
-    fs.mkdirSync(this.root, { recursive: true, mode: 0o700 });
+  assertMaintenanceControlSafe(storage) {
+    this.assertRetentionStorageIdentity(storage, { sessions: false });
     try {
-      fs.mkdirSync(this.maintenanceLockPath, { mode: 0o700 });
-      return true;
+      const before = privateFileSnapshot(
+        this.maintenanceMarkerPath,
+        MAINTENANCE_MARKER_MAX_BYTES,
+      );
+      const source = fs.readFileSync(this.maintenanceMarkerPath, "utf8");
+      const after = privateFileSnapshot(
+        this.maintenanceMarkerPath,
+        MAINTENANCE_MARKER_MAX_BYTES,
+      );
+      if (
+        !sameFile(before, after) ||
+        Buffer.byteLength(source) !== Number(after.size)
+      ) {
+        throw new UnsafeStateStorageError();
+      }
+      const marker = JSON.parse(source);
+      const canonical = `{"v":1,"nextSweepAt":${marker?.nextSweepAt}}\n`;
+      if (
+        source !== canonical ||
+        !Number.isSafeInteger(marker.nextSweepAt) ||
+        marker.nextSweepAt < 0
+      ) {
+        throw new UnsafeStateStorageError();
+      }
     } catch (error) {
-      if (error.code !== "EEXIST") {
-        return false;
-      }
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+
+  acquireMaintenanceLock(now) {
+    const storage = {
+      root: this.ensureRootStorage({ deep: true }),
+      sessions: null,
+    };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const age = now - fs.statSync(this.maintenanceLockPath).mtimeMs;
-        if (age > MAINTENANCE_LOCK_STALE_MS) {
-          fs.rmdirSync(this.maintenanceLockPath);
-          fs.mkdirSync(this.maintenanceLockPath, { mode: 0o700 });
-          return true;
+        fs.mkdirSync(this.maintenanceLockPath, { mode: 0o700 });
+        const lock = this.lockSnapshot(this.maintenanceLockPath);
+        this.assertRetentionStorageIdentity(storage, { sessions: false });
+        return {
+          path: this.maintenanceLockPath,
+          lock,
+          storage,
+        };
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        try {
+          const before = this.lockSnapshot(this.maintenanceLockPath);
+          const age =
+            Math.trunc(Number(now)) -
+            Number(
+              fs.lstatSync(this.maintenanceLockPath, {
+                bigint: true,
+              }).mtimeMs,
+            );
+          if (age > MAINTENANCE_LOCK_STALE_MS) {
+            this.assertRetentionStorageIdentity(storage, {
+              sessions: false,
+            });
+            const after = this.lockSnapshot(this.maintenanceLockPath);
+            if (!sameDirectory(before, after)) {
+              throw new UnsafeStateStorageError();
+            }
+            fs.rmdirSync(this.maintenanceLockPath);
+            continue;
+          }
+        } catch (nestedError) {
+          if (nestedError.code === "ENOENT") continue;
+          throw nestedError;
         }
-      } catch {
-        // A racing janitor may have released or replaced the lock.
+        return null;
       }
+    }
+    return null;
+  }
+
+  sameOwnedMaintenanceLock(token) {
+    if (!token) return false;
+    try {
+      this.assertRetentionStorageIdentity(token.storage, {
+        sessions: false,
+      });
+      return sameDirectory(this.lockSnapshot(token.path), token.lock);
+    } catch {
       return false;
     }
   }
 
-  writeMaintenanceMarker(nextSweepAt) {
+  refreshMaintenanceLock(token, now) {
+    if (!this.sameOwnedMaintenanceLock(token)) {
+      throw new UnsafeStateStorageError();
+    }
+    const timestamp = new Date(Math.trunc(Number(now)));
+    fs.utimesSync(token.path, timestamp, timestamp);
+    if (!this.sameOwnedMaintenanceLock(token)) {
+      throw new UnsafeStateStorageError();
+    }
+  }
+
+  releaseMaintenanceLock(token) {
+    if (!this.sameOwnedMaintenanceLock(token)) return false;
+    try {
+      fs.rmdirSync(token.path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  writeMaintenanceMarker(nextSweepAt, storage) {
+    if (!Number.isSafeInteger(nextSweepAt) || nextSweepAt < 0) {
+      throw new TypeError("Invalid state maintenance marker.");
+    }
+    this.assertMaintenanceControlSafe(storage);
     const temporary =
       `${this.maintenanceMarkerPath}.${process.pid}.` +
-      `${Math.random().toString(16).slice(2)}.tmp`;
+      `${crypto.randomBytes(8).toString("hex")}.tmp`;
     try {
       fs.writeFileSync(
         temporary,
@@ -608,8 +1004,13 @@ export class StateStore {
           flag: "wx",
         },
       );
+      this.assertMaintenanceControlSafe(storage);
       fs.renameSync(temporary, this.maintenanceMarkerPath);
-      fs.chmodSync(this.maintenanceMarkerPath, 0o600);
+      privateFileSnapshot(
+        this.maintenanceMarkerPath,
+        MAINTENANCE_MARKER_MAX_BYTES,
+      );
+      this.assertRetentionStorageIdentity(storage, { sessions: false });
     } catch (error) {
       try {
         fs.unlinkSync(temporary);
@@ -620,30 +1021,8 @@ export class StateStore {
     }
   }
 
-  maintainRetention(retentionDays, excludedKey) {
-    const now = Math.trunc(Number(this.maintenanceClock()));
-    if (!Number.isSafeInteger(now) || now < 0) {
-      return;
-    }
-    if (!this.retentionMaintenanceDue(now)) {
-      return;
-    }
-    if (!this.acquireMaintenanceLock(now)) {
-      return;
-    }
-    try {
-      if (!this.retentionMaintenanceDue(now)) {
-        return;
-      }
-      this.purgeExpired(retentionDays, excludedKey, now);
-      this.writeMaintenanceMarker(now + MAINTENANCE_INTERVAL_MS);
-    } finally {
-      try {
-        fs.rmdirSync(this.maintenanceLockPath);
-      } catch {
-        // A stale-lock cleanup in another process is harmless.
-      }
-    }
+  nextMaintenanceAt(now) {
+    return Math.trunc(Number(now)) + MAINTENANCE_INTERVAL_MS;
   }
 
   purgeAll(now = Date.now()) {
@@ -652,12 +1031,7 @@ export class StateStore {
 
   mutate(payload, config, mutator) {
     const key = this.keyFor(payload);
-    try {
-      this.maintainRetention(config.retentionDays, key);
-    } catch {
-      // Optional retention cleanup must never disable the guard decision.
-    }
-    const lockPath = this.acquireLock(key);
+    const lock = this.acquireLock(key);
     try {
       const stateFile = this.statePath(key);
       const now = this.now();
@@ -680,31 +1054,45 @@ export class StateStore {
       prune(state, config);
       const persisted = projectState(state, fresh);
 
-      const temporary = `${stateFile}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+      const temporary =
+        `${stateFile}.${process.pid}.` +
+        `${crypto.randomBytes(8).toString("hex")}.tmp`;
       fs.writeFileSync(temporary, `${JSON.stringify(persisted, null, 2)}\n`, {
         mode: 0o600,
+        flag: "wx",
       });
+      if (!this.sameOwnedLock(lock)) {
+        try {
+          fs.unlinkSync(temporary);
+        } catch {
+          // The state write is abandoned when ownership cannot be proven.
+        }
+        throw new UnsafeStateStorageError();
+      }
       fs.renameSync(temporary, stateFile);
       return result;
     } finally {
-      try {
-        fs.rmdirSync(lockPath);
-      } catch {
-        // A stale-lock cleanup in another process is harmless.
-      }
+      this.releaseOwnedLock(lock);
     }
   }
 
   listStates() {
-    if (!fs.existsSync(this.sessionsDir)) {
-      return [];
+    let storage;
+    try {
+      storage = this.retentionStorageIdentity();
+    } catch (error) {
+      if (error.code === "ENOENT") return [];
+      throw error;
     }
+    if (!storage.sessions) return [];
 
     return fs
       .readdirSync(this.sessionsDir)
-      .filter((filename) => filename.endsWith(".json"))
+      .filter((filename) => SESSION_STATE_FILE.test(filename))
       .flatMap((filename) => {
         try {
+          this.assertRetentionStorageIdentity(storage);
+          privateFileSnapshot(path.join(this.sessionsDir, filename));
           const parsed = JSON.parse(
             fs.readFileSync(path.join(this.sessionsDir, filename), "utf8"),
           );

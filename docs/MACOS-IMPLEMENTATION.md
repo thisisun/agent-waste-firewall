@@ -34,8 +34,19 @@ The M0 live transport and browser-side presentation consumer are implemented:
   publication drops are shown as incomplete coverage instead of a misleading clear state.
 - The dashboard distinguishes source, empty/active state, healthy/stale/degraded stream health, and
   complete/incomplete/unknown coverage.
-- Retention-only maintenance runs once per second while the dashboard is open, physically removing
-  expired events and per-generation alias keys.
+- Live-spool retention-only maintenance runs once per second while the dashboard is open,
+  physically removing expired events and per-generation alias keys.
+- Hook state mutation performs no session-retention scan. The dashboard-owned session janitor
+  visits at most 64 directory entries or uses a soft 8 ms budget per maintenance tick, reads
+  metadata rather than session-file content, and exposes only closed status values and numeric
+  counters without paths or entry names.
+- The session janitor records the next hourly run only after reaching directory EOF. Dashboard
+  close or cleanup failure abandons the cursor without a completion marker, allowing the next
+  monitor process to restart the sweep. Explicit `agent-waste-firewall purge` still performs an
+  immediate full scan.
+- Automatic session cleanup is delayed when neither the GUI app monitor nor a dashboard process is
+  running. An OS-supervised trigger and hard lifecycle and workload caps remain public-beta work;
+  the current 8 ms tick budget is not a hard deadline.
 
 Live events contain no prompt or recommendation text, command, argument, output, error text, path,
 file name, source content, wall-clock timestamp, model name, or raw session/turn/tool identifier.

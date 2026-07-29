@@ -397,6 +397,10 @@ State files do not contain:
 - detector prose or recommendations;
 - source-file content.
 
+Each state file is hard-bounded to at most 512 recent tool events, 256 incidents, 512 file aliases,
+and eight hashes per file alias. These are safety ceilings; lower configured history limits still
+apply.
+
 Separately, every supported hook makes a best-effort publication to the private `LiveEventV1`
 spool. Each event is constructed from a closed allowlist of enums, bounded numeric counters and
 durations, issue/rule IDs, and one `session_<HMAC>` alias. It contains no free text, path, file name,
@@ -421,18 +425,28 @@ guarantee of anonymity: a distinctive event sequence can still reveal facts abou
 Hashes are pseudonymous detector identifiers, not encryption. Protect the local data directory as
 you would other developer-tool metadata.
 
-Session state older than 30 days is deleted by best-effort maintenance during normal hook activity,
-with at most one full retention sweep per hour. Cleanup failure or a busy maintenance lock never
-blocks the current detector decision. Change the period with
-`AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
-`agent-waste-firewall purge`, or remove all inactive session state with
+Hook state mutation performs no session-retention directory scan. While the dashboard process or
+macOS app monitor is running, a best-effort incremental janitor removes session state older than
+30 days. Each maintenance tick visits at most 64 directory entries and uses a soft 8 ms work
+budget; one filesystem operation can still exceed that soft budget. The next hourly marker is
+written only after the directory cursor reaches EOF. Closing the monitor or encountering an error
+closes the cursor without writing that completion marker, so a later monitor starts the sweep
+again. The janitor reads filesystem metadata rather than session-file content and reports only a
+closed status and numeric counters, without paths or entry names.
+
+Change the period with `AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
+the full `agent-waste-firewall purge` scan, or remove all inactive session state with
 `agent-waste-firewall purge --all`. The same command removes expired or inactive semantic traces
 and orphan trace keys; `purge --all` also removes the live spool. Active hook state and an active
 trace are skipped and reported; run the command again after the coding-agent session stops. Live
-spool rotation removes its previous generation, key, and events. Stale locks and orphan
-atomic-write files are cleaned automatically. An unsupported detector-state schema is replaced
-when that session next produces a hook event, so older path-bearing state is not carried into the
-new schema.
+spool rotation removes its previous generation, key, and events. Session locks are always treated
+as active by both the janitor and explicit purge—even when their timestamps are old—because age
+alone cannot prove that a writer has stopped. Unlocked orphan atomic-write files are removed. If
+neither the GUI/app monitor nor a dashboard process is running, automatic session cleanup is
+delayed; use the explicit purge for immediate removal. A public beta still needs an OS-supervised
+cleanup trigger, proven orphan-lock recovery, and hard lifecycle and workload caps for unattended
+cleanup. An unsupported detector-state schema is replaced when that session next produces a hook
+event, so older path-bearing state is not carried into the new schema.
 
 Override the directory with `AGENT_WASTE_FIREWALL_DATA_DIR`. The implementation uses user-only
 directory and file permissions where the operating system supports them.
@@ -455,7 +469,7 @@ All configuration is optional:
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_EVENTS` | `4096` | Maximum events in the current live-spool generation |
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_BYTES` | `8388608` | Maximum serialized bytes in the current live-spool generation |
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_AGE_MINUTES` | `1440` | Maximum age of one live-spool generation |
-| `AGENT_WASTE_FIREWALL_RETENTION_DAYS` | `30` | Local session-state retention period |
+| `AGENT_WASTE_FIREWALL_RETENTION_DAYS` | `30` | Local session-state retention period (1–3650 days) |
 
 ## Architecture
 

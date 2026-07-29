@@ -246,10 +246,26 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 
 로컬 탐지 상태에도 작업공간 이름, 파일명·경로, provider 도구명은 남기지 않습니다.
 프롬프트·호출·결과·파일·작업공간은 세션 범위의 키 기반 별칭으로만 연결합니다.
-30일이 지난 세션 상태는 정상 훅 활동 중 최대 한 시간에 한 번 실행되는 best-effort
-유지보수로 정리합니다. 정리 오류나 사용 중인 유지보수 lock은 현재 탐지 결정을 막지
-않습니다. 즉시 정리하려면 `agent-waste-firewall purge`를 사용하고, 보존 기간은
-`AGENT_WASTE_FIREWALL_RETENTION_DAYS`로 바꿀 수 있습니다.
+각 상태 파일은 최근 tool event 512개, incident 256개, 파일 별칭 512개, 별칭당 hash
+8개를 넘지 않는 hard ceiling을 적용합니다.
+훅의 상태 변경 경로에서는 세션 보존 기간을 확인하기 위한 디렉터리 scan을 전혀 하지
+않습니다. 대시보드 프로세스나 macOS 앱 monitor가 실행 중일 때 별도의 best-effort
+janitor가 30일이 지난 세션 상태를 점진적으로 정리합니다. 한 tick은 디렉터리 항목을
+최대 64개만 확인하고 8 ms의 soft 작업 예산을 사용합니다. 단일 파일시스템 작업이 이
+soft 예산을 넘을 수 있으므로 hard deadline을 뜻하지 않습니다. 디렉터리 cursor가
+EOF에 도달했을 때만 다음 한 시간 marker를 기록합니다. monitor가 닫히거나 오류가 나면
+완료 marker를 남기지 않고 cursor를 닫기 때문에, 다음 실행에서 sweep을 처음부터 다시
+시작합니다. 이 경로는 세션 파일 내용을 읽지 않고 파일시스템 metadata만 사용하며,
+경로나 항목 이름 없이 닫힌 상태와 숫자 counter만 반환합니다.
+
+즉시 정리하려면 전체 scan을 실행하는 `agent-waste-firewall purge`를 사용하고, 비활성
+세션 상태를 모두 지우려면 `agent-waste-firewall purge --all`을 사용하세요. 보존 기간은
+`AGENT_WASTE_FIREWALL_RETENTION_DAYS`로 바꿀 수 있습니다. GUI·앱 monitor와 대시보드
+프로세스가 모두 실행되지 않으면 자동 세션 정리는 다음 monitor 실행까지 지연됩니다.
+janitor와 명시적 purge는 오래된 timestamp만으로 writer 종료를 단정하지 않고 모든 세션
+lock을 활성 상태로 취급합니다. lock이 없는 고아 atomic-write 파일만 제거합니다. 공개
+beta 전에는 무인 정리를 위한 OS 관리 trigger, 검증 가능한 고아 lock 복구,
+lifecycle·작업량의 hard cap이 추가로 필요합니다.
 
 상시 `LiveEventV1` 저장소에는 허용된 열거형, 제한된 숫자·시간값, 규칙·문제 ID와
 `session_<HMAC>` 별칭만 들어갑니다. 원문, 경로, 파일명, 벽시계 시각, provider 원본 ID는

@@ -39,8 +39,18 @@ export function configFromEnv(env = process.env) {
       env.AGENT_WASTE_FIREWALL_FAILED_ATTEMPTS_BEFORE_BLOCK,
       2,
     ),
-    maxToolEvents: integer(env.AGENT_WASTE_FIREWALL_MAX_TOOL_EVENTS, 160, 20),
-    maxIncidents: integer(env.AGENT_WASTE_FIREWALL_MAX_INCIDENTS, 100, 10),
+    maxToolEvents: integer(
+      env.AGENT_WASTE_FIREWALL_MAX_TOOL_EVENTS,
+      160,
+      20,
+      512,
+    ),
+    maxIncidents: integer(
+      env.AGENT_WASTE_FIREWALL_MAX_INCIDENTS,
+      100,
+      10,
+      256,
+    ),
     liveMaxEvents: integer(
       env.AGENT_WASTE_FIREWALL_LIVE_MAX_EVENTS,
       4096,
@@ -59,6 +69,11 @@ export function configFromEnv(env = process.env) {
       1,
       24 * 60,
     ),
-    retentionDays: integer(env.AGENT_WASTE_FIREWALL_RETENTION_DAYS, 30),
+    retentionDays: integer(
+      env.AGENT_WASTE_FIREWALL_RETENTION_DAYS,
+      30,
+      1,
+      3650,
+    ),
   };
 }

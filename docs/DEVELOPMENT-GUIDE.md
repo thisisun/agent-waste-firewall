@@ -400,9 +400,24 @@ cursor frame. Generation changes emit a snapshot reset, and health distinguishes
 degraded, and incomplete-coverage states without exposing an unaudited event.
 
 Steady-state reads validate only appended events and do not take the publish lock. A complete
-bounded-generation audit runs every 30 seconds, while retention-only maintenance runs every second
-while the dashboard is open. Tests cover concurrent publication/tailing, rotation, resume IDs,
-sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical expiry cleanup.
+bounded-generation audit runs every 30 seconds, while live-spool retention-only maintenance runs
+every second while the dashboard is open. Tests cover concurrent publication/tailing, rotation,
+resume IDs, sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical expiry
+cleanup.
+
+Session-state retention is separate from live-spool rotation. Hook mutation performs no session
+retention scan. A dashboard-owned janitor keeps one directory cursor open across ticks and visits
+at most 64 entries or uses a soft 8 ms work budget per tick. It must use non-blocking per-session
+locks, revalidate the private storage identity, avoid reading session-file content, and return only
+closed status values and numeric counters without paths or entry names. Only EOF may publish the
+next hourly marker. Close or error must close the cursor and release owned locks without writing
+that marker, so a later monitor restarts the sweep. The explicit `purge` command remains an
+immediate full scan.
+
+The soft time budget is not a hard deadline because one filesystem operation may overrun it. When
+the GUI app monitor and dashboard process are both absent, automatic session cleanup is delayed.
+Before public beta, add an OS-supervised unattended trigger and hard lifecycle and workload caps
+without putting a directory scan back into the hook path.
 
 Do not let Swift invent detector meaning. Swift receives typed IDs and numbers, then maps IDs to
 localized copy and visual state.

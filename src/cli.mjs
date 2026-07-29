@@ -18,6 +18,7 @@ import {
 } from "./provider-delivery-verification.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
+import { StateRetentionJanitor } from "./state-retention-janitor.mjs";
 import { TraceStore } from "./trace-store.mjs";
 import { runHookStdio } from "./hook-stdio.mjs";
 
@@ -613,6 +614,10 @@ async function commandDashboard(args, env = process.env) {
   const config = configFromEnv(env);
   const json = args.includes("--json");
   const traceId = positionalArguments(args, ["--port"])[0] ?? null;
+  const stateJanitor = new StateRetentionJanitor({
+    store: new StateStore({ root: config.dataDir }),
+    retentionDays: config.retentionDays,
+  });
   const dashboard = await startDashboard({
     root: config.dataDir,
     source: traceId ? "trace" : "live",
@@ -620,6 +625,7 @@ async function commandDashboard(args, env = process.env) {
     port: argumentValue(args, "--port") ?? 4319,
     mode: config.mode,
     env,
+    stateJanitor,
   });
   if (json) {
     console.log(
@@ -832,6 +838,11 @@ async function commandPurge(args, env = process.env) {
     if (result.activeFilesSkipped > 0) {
       console.log(
         `Skipped ${result.activeFilesSkipped} active file(s); run purge again after the coding-agent session stops.`,
+      );
+    }
+    if (result.unsafeFilesSkipped > 0) {
+      console.log(
+        `Skipped ${result.unsafeFilesSkipped} unsafe state file(s); inspect the private data directory before removing them manually.`,
       );
     }
     if (result.activeTracesSkipped > 0) {

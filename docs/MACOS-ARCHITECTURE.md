@@ -159,8 +159,19 @@ The worker must:
 
 The dedicated stdio entry imports trace persistence only when an active trace marker exists. It
 reuses the single validated active-trace lookup for the append, while the append lock rechecks that
-the recording was not stopped or switched before publication. Optional telemetry and retention
-maintenance never control whether the detector response is produced.
+the recording was not stopped or switched before publication. Hook state mutation performs no
+session-retention directory scan. While the dashboard process or app monitor is running, its
+separate janitor advances one directory cursor by at most 64 entries or a soft 8 ms budget per
+tick. It reads safe filesystem metadata rather than session-file content and returns only closed
+status values and numeric counters without paths or entry names. The next hourly marker is written
+only at EOF; close or error abandons the cursor without recording completion so a later monitor
+restarts the sweep. Optional telemetry and retention maintenance never control whether the
+detector response is produced.
+
+With no GUI app monitor or dashboard process running, automatic session cleanup is delayed.
+`agent-waste-firewall purge` remains the immediate full-scan path. Before a public beta,
+unattended cleanup needs an OS-supervised trigger and hard lifecycle and workload caps; the
+current 8 ms budget is soft because one filesystem operation can exceed it.
 
 Blocking belongs only in `PreToolUse` or a deliberately configured prompt preflight, and only when
 evidence is high confidence. Post-tool warnings cannot undo a side effect.

@@ -11,9 +11,20 @@ Raw session IDs, provider tool names, workspace basenames, file names, and absol
 paths are not persisted. Prompt, call, result, file-content, file-identity, and workspace
 identifiers use session-scoped keyed aliases. These aliases are pseudonyms rather than encryption.
 Detector state keeps rule IDs and typed evidence rather than detector prose or recommendations.
-State older than 30 days is removed during hook activity by default, and users can run
-`agent-waste-firewall purge --all` at any time. An unsupported detector-state schema is replaced
-when that session next produces a hook event.
+Hook state mutation performs no retention directory scan. While the dashboard or macOS monitor is
+open, a metadata-only janitor removes state older than 30 days in batches of at most 64 entries
+under a soft 8 ms tick budget. It validates user-private root/session identities, never follows a
+`sessions` symlink, acquires each session lock non-blockingly, and returns only closed status values
+and numeric counters. A completion marker is written only at directory EOF. Without an open
+monitor, automatic cleanup is delayed until the next monitor run; users can run
+`agent-waste-firewall purge` or `purge --all` for an immediate full scan.
+
+The janitor and explicit purge conservatively treat every existing session lock as active,
+regardless of its timestamp. Age alone cannot prove that a paused writer has exited, so these
+cleanup paths do not reclaim locks or delete their state. Unlocked orphan atomic-write files may be
+removed. An unsupported detector-state schema is replaced when that session next produces a hook
+event. Public beta still requires an OS-supervised cleanup trigger, proven orphan-lock recovery,
+and hard lifecycle and workload caps.
 
 Every supported hook also attempts to publish one event to the bounded, always-on `LiveEventV1`
 spool. This path constructs a new object from a closed allowlist; it does not persist the provider

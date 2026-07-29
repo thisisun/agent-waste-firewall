@@ -38,13 +38,13 @@ tool output, transcript, source-file content, or provider hook JSON was persiste
 
 | Gate | Result |
 | --- | --- |
-| `npm run check` | Pass: 64 JavaScript files and 47 JSON files |
-| `npm test` | Pass: 299/299; 0 failures, skips, or cancellations |
-| `npm run test:coverage` | Pass: 299/299; line 94.51%, branch 82.41%, functions 94.94% |
+| `npm run check` | Pass: 67 JavaScript files and 47 JSON files |
+| `npm test` | Pass: 312/312; 0 failures, skips, or cancellations |
+| `npm run test:coverage` | Pass: 312/312; line 94.50%, branch 82.03%, functions 95.13% |
 | Native `AWFTests` | Pass: 92/92; 0 failures, skips, or expected failures |
 | `git diff --check` | Pass |
 | Plist/localization lint | Pass: runtime entitlement, Info.plist, English, and Korean resources |
-| `npm pack --dry-run --json` | Pass: 119 entries; exact native-source/runtime exclusion checks passed |
+| `npm pack --dry-run --json` | Pass: 121 entries, including the janitor; exact native-source/runtime exclusion checks passed |
 
 The npm package contains only the runtime manifest and entitlement from `runtime/`. It does not
 contain `macos/`, `awf-node`, a prepared payload, or generated app artifacts.
@@ -152,12 +152,38 @@ target.
 The dedicated hook entry adds a bounded one-megabyte input reader, lazy trace loading, and one
 reused active-trace lookup, but the loaded-host A/B does not support a latency-improvement claim.
 
-The scheduled state-retention path replaces three directory scans and 1,000 state-file `stat`
-calls in the measured prior path with one private marker check when maintenance is not due.
-However, maintenance becomes due every 60 minutes and still calls the full `purgeExpired` scan,
-which is `O(N)` in the number of session-directory entries. The due path and its worst-case latency
-were not measured here. This result therefore applies only to steady not-due hooks; it is not a
-bounded maximum-latency result.
+That intermediate scheduled-retention implementation was subsequently replaced. Hook mutation now
+performs no retention marker read or directory scan. A dashboard-owned janitor holds one directory
+cursor and visits at most 64 entries or uses a soft 8 ms work budget per tick. It writes the next
+hourly marker only at EOF and abandons an incomplete cursor without a marker on close or error.
+
+### Incremental session-retention follow-up
+
+The local `benchmark:state-retention` fixture measured both the state mutation path and a complete
+incremental cleanup. Times are loaded-host diagnostics, while the entry count is the deterministic
+gate:
+
+| Fixture | Hook mutation, 30 samples | Janitor result |
+| --- | ---: | ---: |
+| 1,000 expired session files | p50 0.400 ms; p95 0.628 ms; max 0.706 ms | 1,000 removed in 28 ticks over 223.550 ms; max 43 entries/tick; p95 tick 8.226 ms; max tick 8.622 ms |
+| 10,000 expired session files | p50 0.433 ms; p95 0.570 ms; max 0.577 ms | 10,000 removed in 499 ticks over 4,171.917 ms; max 35 entries/tick; p95 tick 8.730 ms; max tick 21.482 ms |
+
+Both cases stayed below the fixed 64-entry limit and reached EOF. The wall-clock tick values confirm
+that 8 ms is cooperative rather than a hard deadline: an individual filesystem operation can
+overrun it. The 10x larger directory did not introduce an `O(N)` scan into state mutation.
+
+A same-host external-launcher A/B recorded p95 142.968 ms on this worktree and p95 160.126 ms on a
+detached unchanged `fa2a85b` baseline immediately afterward. A later final-code diagnostic under
+greater host load recorded p95 226.157 ms. All failed the 100 ms product target, so these loaded-host
+measurements support neither an improvement nor a regression claim. The final-code native-helper
+diagnostic recorded p95 247.886 ms and passed its separate 350 ms CI budget. The supported-Mac
+product-path rerun remains open.
+
+Security regression fixtures also verify that a symlinked `sessions` directory cannot delete an
+external victim, malformed maintenance control triggers no deletion, an old but held session lock
+is never reclaimed by automatic or explicit cleanup, only one janitor owns the global lock, and a
+mid-sweep close writes no completion marker. Cleanup reads file metadata, not detector-state
+content, and exposes no path or file name.
 
 ### Storage and dashboards
 
@@ -192,7 +218,7 @@ tests passed, but interactive UI automation remains a separate release gate.
 | --- | --- |
 | Hook latency below 100 ms p95 on supported Macs | Open |
 | Current-head full product-path latency rerun after hot-path changes | Open |
-| Bounded state-retention due path at large session counts | Open: hourly sweep remains `O(N)` |
+| Bounded state-retention due path at large session counts | Local logical gate passed at 1,000 and 10,000 entries; unattended OS trigger and hard lifecycle/workload caps remain open |
 | Developer ID identity and inside-out signing | Open |
 | Notarization, stapling, and Gatekeeper | Open |
 | Intel/x64 execution | Open |
