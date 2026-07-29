@@ -7,7 +7,15 @@ import {
   DASHBOARD_HTML,
   DASHBOARD_JS,
 } from "./dashboard-assets.mjs";
+import { DashboardLiveCursor } from "./dashboard-live-cursor.mjs";
+import {
+  projectLiveDashboardEvent,
+  projectLiveDashboardStatus,
+  projectTraceDashboardEvent,
+  projectTraceDashboardStatus,
+} from "./dashboard-projection.mjs";
 import { DashboardTraceCursor } from "./dashboard-trace-cursor.mjs";
+import { LiveEventStore } from "./live-event-store.mjs";
 import { TraceStore } from "./trace-store.mjs";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -27,14 +35,6 @@ const SENTINEL_EYE_WARN = fs.readFileSync(
 const SENTINEL_EYE_CRITICAL = fs.readFileSync(
   new URL("../assets/sentinel-eye-critical.webp", import.meta.url),
 );
-const AVOIDABLE_RULES = new Set([
-  "exact_tool_repeat",
-  "unchanged_reread",
-  "retry_after_same_failure",
-  "repeated_failure_result",
-  "status_polling_loop",
-  "edit_revert_oscillation",
-]);
 
 function json(response, status, value) {
   const body = `${JSON.stringify(value)}\n`;
@@ -144,165 +144,45 @@ function authorized(requestUrl, token) {
   );
 }
 
-const SEVERITY_RANK = {
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
-function currentIncidentEvent(events) {
-  const sessions = new Map();
-  for (const event of events) {
-    const current = sessions.get(event.sessionAlias);
-    if (!current || event.progressVersion > current.progressVersion) {
-      sessions.set(event.sessionAlias, {
-        progressVersion: event.progressVersion,
-        incidentEvent: event.incident ? event : null,
-      });
-      continue;
-    }
-    if (event.progressVersion === current.progressVersion && event.incident) {
-      current.incidentEvent = event;
-      continue;
-    }
-    if (
-      event.progressVersion === current.progressVersion &&
-      event.kind === "prompt" &&
-      event.shouldWarn === false &&
-      current.incidentEvent?.incident?.ruleId === "prompt_contract"
-    ) {
-      current.incidentEvent = null;
-    }
-  }
-
-  let selected = null;
-  for (const session of sessions.values()) {
-    const candidate = session.incidentEvent;
-    if (!candidate) continue;
-    const candidateRank = SEVERITY_RANK[candidate.incident.severity] ?? 0;
-    const selectedRank = selected
-      ? (SEVERITY_RANK[selected.incident.severity] ?? 0)
-      : -1;
-    if (
-      !selected ||
-      candidateRank > selectedRank ||
-      (candidateRank === selectedRank && candidate.seq > selected.seq)
-    ) {
-      selected = candidate;
-    }
-  }
-  return selected;
+function traceStatusPayload(store, traceId, cursor, snapshot = null) {
+  const events = snapshot?.events ?? cursor.readEvents();
+  return projectTraceDashboardStatus({
+    storeStatus: store.status(traceId),
+    events,
+    health: snapshot?.health ?? cursor.health,
+    generation: snapshot?.generation ?? cursor.generation,
+  });
 }
 
-function statusPayload(store, traceId, cursor) {
-  const status = store.status(traceId);
-  if (!status) {
+function liveStatusPayload(cursor, snapshot = null) {
+  return projectLiveDashboardStatus(snapshot ?? cursor.readSnapshot());
+}
+
+function parseResumeCursor(value, source) {
+  const text = String(value ?? "");
+  if (text === "") {
     return {
-      connected: false,
-      mode: "observe",
-      state: "idle",
-      traceHealth: "healthy",
-      traceId: null,
-      label: null,
-      metrics: {
-        events: 0,
-        incidents: 0,
-        avoidableCalls: 0,
-        elapsedMs: 0,
-      },
+      invalid: false,
+      sequence: 0,
+      streamAlias: null,
     };
   }
-  const events = cursor.readEvents();
-  const latestIncidentEvent = currentIncidentEvent(events);
-  const latestIncident = latestIncidentEvent?.incident ?? null;
-  const latestPrompt = events.findLast((event) => event.kind === "prompt") ?? null;
+  if (source === "live") {
+    const match = /^(generation_[0-9a-f]{32}):([1-9][0-9]*)$/u.exec(text);
+    const sequence = match ? Number.parseInt(match[2], 10) : Number.NaN;
+    return {
+      invalid: !match || !Number.isSafeInteger(sequence),
+      sequence: Number.isSafeInteger(sequence) ? sequence : 0,
+      streamAlias: match?.[1] ?? null,
+    };
+  }
+  const sequence = Number.parseInt(text, 10);
   return {
-    connected: true,
-    mode: status.mode,
-    state: status.status,
-    traceHealth: cursor.health,
-    traceId: status.traceId,
-    traceAlias: status.traceId,
-    metrics: {
-      events: status.eventCount,
-      incidents: status.incidentCount,
-      avoidableCalls: status.avoidableCallCount,
-      elapsedMs: status.elapsedMs,
-    },
-    lastSequence: events.at(-1)?.seq ?? 0,
-    currentWarning: latestIncident
-      ? {
-          ruleId: latestIncident.ruleId,
-          severity: latestIncident.severity,
-          attribution: latestIncident.attribution,
-          occurrences: latestIncident.repeatCount,
-          issueIds:
-            latestIncidentEvent?.kind === "prompt" &&
-            latestIncident.ruleId === "prompt_contract"
-              ? latestIncidentEvent.issueIds
-              : [],
-        }
-      : null,
-    promptCoach: {
-      issueIds: latestPrompt?.issueIds ?? [],
-    },
-  };
-}
-
-function dashboardEvent(event) {
-  const incident = event.incident;
-  const kind = incident
-    ? "incident"
-    : event.madeProgress === true
-      ? "progress"
-    : event.kind === "prompt"
-      ? "prompt"
-      : event.kind === "stop"
-        ? "system"
-        : "tool";
-  const outcome =
-    event.kind === "tool_pre"
-      ? "started"
-      : event.kind === "tool_post"
-        ? event.outcome === "failure"
-          ? "failed"
-          : event.outcome === "interrupted"
-            ? "interrupted"
-            : event.outcome === "success"
-              ? "succeeded"
-              : "observed"
-        : event.decision === "block"
-          ? "blocked"
-          : event.decision === "warn"
-            ? "warned"
-            : event.decision === "observe"
-              ? "observed"
-              : "allowed";
-  return {
-    kind,
-    family:
-      event.kind === "prompt"
-        ? "prompt"
-        : event.kind === "stop"
-          ? "system"
-          : event.family,
-    operation:
-      event.kind === "prompt"
-        ? "prompt"
-        : event.kind === "stop"
-          ? "progress"
-          : event.operation,
-    outcome,
-    ruleId: incident?.ruleId ?? null,
-    severity: incident?.severity ?? "none",
-    attribution: incident?.attribution ?? null,
-    alias: event.callAlias ?? event.sessionAlias,
-    elapsedMs: event.elapsedMs,
-    issueIds: event.kind === "prompt" ? event.issueIds : [],
-    occurrences: incident?.repeatCount ?? 1,
-    incidentCountDelta: incident?.notified === true ? 1 : 0,
-    avoidableCallsDelta:
-      incident?.notified && AVOIDABLE_RULES.has(incident.ruleId) ? 1 : 0,
+    invalid:
+      !/^(?:0|[1-9][0-9]*)$/u.test(text) ||
+      !Number.isSafeInteger(sequence),
+    sequence: Number.isSafeInteger(sequence) ? sequence : 0,
+    streamAlias: null,
   };
 }
 
@@ -310,7 +190,12 @@ function serveEventStream(
   request,
   response,
   cursor,
-  { activeStreams, snapshotStatus },
+  {
+    activeStreams,
+    projectEvent,
+    snapshotStatus,
+    source,
+  },
 ) {
   response.writeHead(200, {
     "cache-control": "no-cache, no-store",
@@ -322,16 +207,15 @@ function serveEventStream(
   response.write("retry: 1000\n\n");
   activeStreams.add(response);
 
-  const headerSequence = Number.parseInt(
-    String(request.headers["last-event-id"] ?? "0"),
-    10,
+  const resume = parseResumeCursor(
+    request.headers["last-event-id"],
+    source,
   );
-  let lastSequence =
-    Number.isSafeInteger(headerSequence) && headerSequence >= 0
-      ? headerSequence
-      : 0;
-  let streamGeneration = null;
-  let streamHealth = null;
+  let lastSequence = resume.sequence;
+  let streamIdentity =
+    source === "live" ? resume.streamAlias : null;
+  let forceReset = resume.invalid;
+  let lastStatusText = null;
   let interval = null;
   let heartbeat = null;
   let cleaned = false;
@@ -350,34 +234,70 @@ function serveEventStream(
       return;
     }
     try {
-      let window = cursor.readWindowAfter(lastSequence);
-      if (streamHealth !== null && window.health !== streamHealth) {
-        response.write("event: status\n");
-        response.write(
-          `data: ${JSON.stringify({ kind: "status", status: snapshotStatus() })}\n\n`,
-        );
-      }
-      streamHealth = window.health;
+      const frame =
+        typeof cursor.readFrameAfter === "function"
+          ? cursor.readFrameAfter(lastSequence)
+          : {
+              allEvents: null,
+              snapshot: null,
+              window: cursor.readWindowAfter(lastSequence),
+            };
+      let window = frame.window;
+      const status = snapshotStatus(frame.snapshot);
+      const statusText = JSON.stringify({
+        kind: "status",
+        status,
+      });
+      const windowIdentity =
+        source === "live" ? window.streamAlias : window.generation;
       const reset =
-        (streamGeneration !== null &&
-          window.generation !== streamGeneration) ||
+        forceReset ||
+        (streamIdentity !== null &&
+          windowIdentity !== streamIdentity) ||
         lastSequence > window.lastSequence;
-      streamGeneration = window.generation;
+      streamIdentity = windowIdentity;
       if (reset) {
+        forceReset = false;
         lastSequence = 0;
         response.write("id:\n");
         response.write("event: snapshot\n");
         response.write(
-          `data: ${JSON.stringify({ reset: true, status: snapshotStatus() })}\n\n`,
+          `data: ${JSON.stringify({
+            kind: "snapshot",
+            reset: true,
+            status,
+          })}\n\n`,
         );
-        window = cursor.readWindowAfter(lastSequence);
-        streamGeneration = window.generation;
-        streamHealth = window.health;
+        window =
+          frame.allEvents === null
+            ? cursor.readWindowAfter(lastSequence)
+            : {
+                ...window,
+                events: frame.allEvents,
+              };
+        streamIdentity =
+          source === "live" ? window.streamAlias : window.generation;
+        lastStatusText = statusText;
+      } else if (lastStatusText !== statusText) {
+        response.write("event: status\n");
+        response.write(`data: ${statusText}\n\n`);
+        lastStatusText = statusText;
       }
       for (const event of window.events) {
-        response.write(`id: ${event.seq}\n`);
-        response.write(`data: ${JSON.stringify(dashboardEvent(event))}\n\n`);
+        const eventId =
+          source === "live"
+            ? `${window.streamAlias}:${event.seq}`
+            : String(event.seq);
+        response.write(`id: ${eventId}\n`);
+        response.write(
+          `data: ${JSON.stringify(projectEvent(event))}\n\n`,
+        );
         lastSequence = event.seq;
+      }
+      if (window.events.length > 0) {
+        response.write("event: status\n");
+        response.write(`data: ${statusText}\n\n`);
+        lastStatusText = statusText;
       }
     } catch {
       cleanup();
@@ -403,25 +323,62 @@ export async function startDashboard(options = {}) {
     throw new Error("The dashboard may only bind to a loopback address.");
   }
   const port = safePort(options.port);
-  const store =
-    options.store ??
-    new TraceStore({
-      root: options.root,
-      clock: options.clock,
-      env: options.env,
-    });
-  const status = store.status(options.traceId ?? null);
-  if (!status) {
-    throw new Error("No trace is available. Start a recording first.");
-  }
-  const traceId = status.traceId;
   const token = safeToken(options.token);
-  const cursor = new DashboardTraceCursor(store, traceId);
-  cursor.readEvents();
+  const inferredSource =
+    options.store instanceof LiveEventStore
+      ? "live"
+      : options.traceId || options.store
+        ? "trace"
+        : "live";
+  const source = String(options.source ?? inferredSource);
+  if (source !== "live" && source !== "trace") {
+    throw new Error("Dashboard source must be live or trace.");
+  }
+  let store;
+  let traceId = null;
+  let cursor;
+  let projectEvent;
+  let snapshotStatus;
+  if (source === "live") {
+    store =
+      options.store ??
+      new LiveEventStore({
+        root: options.root,
+        clock: options.clock,
+        env: options.env,
+      });
+    cursor = new DashboardLiveCursor(store, {
+      mode: options.mode ?? options.env?.AGENT_WASTE_FIREWALL_MODE,
+      clock: options.clock,
+    });
+    cursor.readEvents();
+    projectEvent = projectLiveDashboardEvent;
+    snapshotStatus = (snapshot) =>
+      liveStatusPayload(cursor, snapshot);
+  } else {
+    store =
+      options.store ??
+      new TraceStore({
+        root: options.root,
+        clock: options.clock,
+        env: options.env,
+      });
+    const status = store.status(options.traceId ?? null);
+    if (!status) {
+      throw new Error("No trace is available. Start a recording first.");
+    }
+    traceId = status.traceId;
+    cursor = new DashboardTraceCursor(store, traceId);
+    cursor.readEvents();
+    projectEvent = projectTraceDashboardEvent;
+    snapshotStatus = (snapshot) =>
+      traceStatusPayload(store, traceId, cursor, snapshot);
+  }
   let actualPort = port;
   const urlHost = host === "::1" ? "[::1]" : host;
   const activeStreams = new Set();
   const activeSockets = new Set();
+  let maintenanceInterval = null;
 
   const server = http.createServer((request, response) => {
     try {
@@ -479,13 +436,15 @@ export async function startDashboard(options = {}) {
         return;
       }
       if (requestUrl.pathname === "/api/status") {
-        json(response, 200, statusPayload(store, traceId, cursor));
+        json(response, 200, snapshotStatus());
         return;
       }
       if (requestUrl.pathname === "/events") {
         serveEventStream(request, response, cursor, {
           activeStreams,
-          snapshotStatus: () => statusPayload(store, traceId, cursor),
+          projectEvent,
+          snapshotStatus,
+          source,
         });
         return;
       }
@@ -509,10 +468,27 @@ export async function startDashboard(options = {}) {
   });
   const address = server.address();
   actualPort = typeof address === "object" && address ? address.port : port;
+  if (source === "live" && typeof store.maintain === "function") {
+    const requestedInterval = Number(options.maintenanceIntervalMs);
+    const maintenanceIntervalMs =
+      Number.isSafeInteger(requestedInterval) &&
+      requestedInterval >= 25
+        ? requestedInterval
+        : 1000;
+    maintenanceInterval = setInterval(
+      () => store.maintain(),
+      maintenanceIntervalMs,
+    );
+    maintenanceInterval.unref?.();
+  }
   const url = `http://${urlHost}:${actualPort}/?token=${token}`;
   let closePromise = null;
   const close = () => {
     if (closePromise) return closePromise;
+    if (maintenanceInterval) {
+      clearInterval(maintenanceInterval);
+      maintenanceInterval = null;
+    }
     closePromise = new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
       for (const response of activeStreams) {
@@ -528,6 +504,7 @@ export async function startDashboard(options = {}) {
     server,
     host,
     port: actualPort,
+    source,
     traceId,
     token,
     url,

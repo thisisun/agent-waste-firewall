@@ -184,8 +184,11 @@ Use a small disk-backed semantic spool as the primary transport for the first be
 
 The implemented worker publishes each event under a short global lock as a private temporary file
 followed by an atomic rename. It bounds each generation by event count, bytes, and age, validates
-events again on read, and recovers interrupted pending publications. The app-side watcher and
-dashboard projection remain the next implementation step.
+events again on read, and recovers interrupted pending publications. The implemented browser-side
+cursor reads stable control/event/control windows without taking that lock, incrementally validates
+committed appends, periodically re-audits the bounded generation, and projects source, health,
+coverage, and generation reset states through the loopback dashboard. A native Swift watcher still
+remains future work; it should consume the same contract rather than read detector state.
 
 A Unix domain socket can later reduce display latency, but it is an optimization. If added, the
 same event must be validated before sending, the hook must use a very short non-blocking timeout,
@@ -346,7 +349,7 @@ milestone.
 
 1. ~~Define and validate the documented `LiveEventV1` schema.~~ Completed.
 2. ~~Add a bounded semantic spool and tests while retaining the explicit trace path.~~ Completed.
-3. Connect a generation-aware live-spool cursor to the shared dashboard projection.
+3. ~~Connect a generation-aware live-spool cursor to the shared dashboard projection.~~ Completed.
 4. Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.
 5. Add explicit install/repair/uninstall flows for each provider.
 6. Bundle and sign the worker runtime; add protocol compatibility checks.
@@ -357,9 +360,6 @@ milestone.
 Current migration debt to address explicitly:
 
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
-- the live dashboard currently depends on one active recording;
-- status and SSE follow an incremental trace cursor but do not yet consume the always-on live
-  generation;
 - the browser dashboard is a large combined asset module;
 - current manifests invoke `node` from the user's environment;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those

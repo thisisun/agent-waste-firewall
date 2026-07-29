@@ -27,11 +27,18 @@
 - Support concurrent pseudonymous sessions in one explicitly scoped workspace trace.
 - Add an incrementally audited dashboard cursor, session-aware warning projection, and a checked-in
   long-trace benchmark.
+- Add a lock-free, generation-aware live-spool cursor and make the bounded `LiveEventV1` stream the
+  default dashboard source without requiring `record start`.
+- Preserve explicit `dashboard <trace-id>` access for historical audited traces while projecting
+  live and trace inputs through one closed, pure dashboard model.
+- Add atomic generation snapshot resets, composite SSE resume IDs, incomplete-coverage signaling
+  for sequence gaps and known publication drops, stale/degraded health states, and retention-only
+  dashboard maintenance.
+- Add a reproducible saturated-spool benchmark covering cold audit, warm status, concurrent hook
+  publication, rotation, and SSE visibility.
 - Add reproducible hook and dashboard latency gates for macOS and Linux CI.
 - Reject non-loopback `Host` and cross-origin dashboard requests and compare access tokens with a
   fixed-length constant-time operation.
 - Handle malformed local request targets without crashing, close active SSE connections on
   shutdown, recover streams after trace rotation, and display audited-trace failures as a red
   degraded state.
-- Keep the current dashboard on the explicit-trace cursor; direct consumption of the always-on live
-  spool is reserved for the next presentation PR.

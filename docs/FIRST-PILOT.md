@@ -43,13 +43,15 @@ agent-waste-firewall dashboard
 ```
 
 Load the AWF — Agent Waste Firewall plugin in Codex or Claude Code and run the scoped task in the same
-workspace. Keep the dashboard visible beside the coding-agent window.
+workspace. Keep the dashboard visible beside the coding-agent window. This no-argument command is
+the always-on live view; it does not make the research trace exportable.
 
 When the task reaches the boundary:
 
 ```bash
 agent-waste-firewall record stop
 agent-waste-firewall trace audit <trace-id>
+agent-waste-firewall dashboard <trace-id>
 agent-waste-firewall trace export <trace-id> --output semantic-trace.jsonl
 ```
 

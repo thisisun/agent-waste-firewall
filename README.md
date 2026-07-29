@@ -6,11 +6,11 @@ Local-first live monitoring, prompt coaching, and no-progress circuit breakers f
 Claude Code.
 
 > Status: `0.1.0` research alpha. The live hook path, bounded always-on `LiveEventV1` spool,
-> anonymized recorder, replay, and local dashboard work and are tested. The current dashboard still
-> consumes an explicit trace recording; consuming the always-on spool is the next presentation PR.
-> Exact token accounting and one-command installation are not implemented yet. Provider-shaped
-> events pass the real hook executable, but installed Codex and Claude Code acceptance tests are
-> still pending.
+> generation-aware dashboard, anonymized recorder, and replay work and are tested. The dashboard
+> consumes the live spool by default without `record start`; an explicit trace ID opens historical
+> audited data. Exact token accounting, a native macOS shell, and one-command installation are not
+> implemented yet. Provider-shaped events pass the real hook executable, but installed Codex and
+> Claude Code acceptance tests are still pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -38,14 +38,16 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Records explicitly scoped workspace activity, including concurrent pseudonymous sessions, as a
   strict semantic JSONL trace using a fresh per-trace HMAC key. The key is removed when recording
   stops.
-- Serves a token-protected, loopback-only live dashboard with an English-default incident timeline,
-  a Korean language option, a prompt-contract coach, and a one-click compact sentinel. The
-  sentinel, tab title, and favicon move from green to yellow to red; repeated high-severity
-  signals also turn the compact background deep red.
-- Performs one strict dashboard trace audit at startup, then validates only complete appended
-  semantic JSONL records. Concurrent pseudonymous sessions keep independent progress and warning
-  state. A failed append audit changes the sentinel to a red `DEGRADED` state while retaining only
-  the last verified projection.
+- Serves a token-protected, loopback-only dashboard from the bounded live spool by default, with an
+  English-default incident timeline, Korean localization, a prompt-contract coach, and a one-click
+  compact sentinel. `dashboard <trace-id>` remains available for explicit historical traces.
+- Reads live generations without taking the publisher lock, validates only committed semantic
+  records during steady-state polling, and periodically re-audits the complete bounded generation.
+  Rotation emits an atomic reset, sequence gaps or dropped publications show incomplete coverage,
+  and corruption retains the last verified projection in a red `DEGRADED` state.
+- Keeps warning state independent for concurrent pseudonymous sessions. The sentinel, tab title,
+  and favicon move from green to yellow to red; repeated high-severity signals also turn the
+  compact background deep red.
 - Audits every semantic event against a closed schema before export and rejects unknown fields,
   free text, paths, URLs, emails, and common secret formats.
 - Fails open if its hook cannot run, but shows a rate-limited warning instead of silently disabling
@@ -66,9 +68,24 @@ node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
 node bin/agent-waste-firewall.mjs report
 ```
 
-The hook now maintains the bounded raw-free live spool automatically whenever the plugin runs.
-The current web dashboard has not switched to that spool yet. To use the dashboard and create an
-exportable research trace today, start an explicit recording for one repository:
+The hook maintains the bounded raw-free live spool automatically whenever the plugin runs. Start
+the live dashboard directly; no explicit recording is required:
+
+```bash
+node bin/agent-waste-firewall.mjs dashboard
+```
+
+Open the printed `127.0.0.1` URL in a browser. The URL contains a random local access token. Start
+Codex or Claude Code with this plugin loaded. An empty but healthy spool is shown as connected and
+waiting; live events appear as the hooks publish them.
+
+Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
+dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
+web alpha also mirrors the state in the tab title and favicon. A future desktop shell can reuse the
+same audited semantic state for a menu-bar or tray indicator.
+
+An explicit research trace is still opt-in and is the only source that can be audited, exported,
+or replayed. To capture one workspace:
 
 ```bash
 node bin/agent-waste-firewall.mjs record start \
@@ -76,24 +93,11 @@ node bin/agent-waste-firewall.mjs record start \
   --label first-pilot \
   --mode observe
 
-node bin/agent-waste-firewall.mjs dashboard
-```
-
-Open the printed `127.0.0.1` URL in a browser. The URL contains a random local access token. Start
-Codex or Claude Code in the recorded workspace with this plugin loaded. The active recording mode
-applies only to that workspace and overrides the default mode while the trace is active.
-
-Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
-dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
-web alpha also mirrors the state in the tab title and favicon. A future desktop shell can reuse the
-same audited semantic state for a menu-bar or tray indicator.
-
-When the task reaches its declared stop boundary:
-
-```bash
+# Run Codex or Claude Code until the declared stop boundary.
 node bin/agent-waste-firewall.mjs record stop
 node bin/agent-waste-firewall.mjs trace list
 node bin/agent-waste-firewall.mjs trace audit <trace-id>
+node bin/agent-waste-firewall.mjs dashboard <trace-id>
 node bin/agent-waste-firewall.mjs trace export <trace-id> \
   --output ./public-semantic-trace.jsonl
 node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
@@ -111,8 +115,9 @@ The plugin packages use the standard `.codex-plugin/plugin.json`,
 No installer edits a user's global configuration in this MVP.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
-outbound requests, and receives semantic events rather than raw hook payloads. In this release its
-SSE/status path still reads the explicit trace; a direct `LiveEventV1` consumer is the next PR.
+outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE
+endpoints share one audited cursor snapshot so a generation change cannot mix old status with new
+events.
 
 ## Modes
 
@@ -173,9 +178,10 @@ durations, issue/rule IDs, and one `session_<HMAC>` alias. It contains no free t
 wall-clock timestamp, raw provider ID, prompt, command, output, or source content. A fresh random
 256-bit HMAC key is used for each spool generation, so aliases are not linkable after rotation.
 The generation is replaced when it reaches the hard 4,096-event or 8 MiB ceiling. A 24-hour age
-trigger is enforced on the next publish, read, or `doctor` access; without a background daemon,
-an idle machine cannot delete files exactly at the deadline. Configuration can only lower these
-limits. This spool is short-lived presentation transport and has no export command.
+trigger is enforced by the dashboard's maintenance loop while it is open, or on the next publish,
+read, or `doctor` access otherwise; an entirely idle machine cannot delete files exactly at the
+deadline. Configuration can only lower these limits. This spool is short-lived presentation
+transport and has no export command.
 
 An exported semantic trace is stricter than local detector state. It contains only closed enums,
 numbers, booleans, relative elapsed time, and trace-scoped aliases for prompts, calls, results, and
@@ -242,8 +248,8 @@ Codex / Claude hook event
           ▼
  strict semantic serializer
           │
-          ├──► bounded always-on LiveEventV1 spool ─► next live consumer
-          └──► explicit trace ─► current loopback dashboard / audit / export / replay
+          ├──► bounded always-on LiveEventV1 spool ─► default loopback dashboard
+          └──► explicit trace ─► historical dashboard / audit / export / replay
 ```
 
 Hooks are the enforcement path. OpenTelemetry will be the measurement path. This separation keeps
@@ -267,6 +273,9 @@ See [core architecture](docs/ARCHITECTURE.md),
   signal until a later observation exposes the change.
 - Codex hosted tools such as web search may not emit local pre/post tool hooks.
 - Hook coverage is a useful guardrail, not a complete security boundary.
+- A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
+  known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
+  the marker itself from being written.
 - Windows hook loading has not been tested in this repository yet.
 - Cross-session semantic duplicate-task detection is not implemented.
 
@@ -276,7 +285,7 @@ See [core architecture](docs/ARCHITECTURE.md),
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.
-4. Switch the dashboard projection to the bounded live spool, then package it with the
+4. Package the working live projection with the
    [documented native macOS shell](docs/MACOS-ARCHITECTURE.md).
 5. Add one-command installation only after safe upgrade/uninstall behavior is tested.
 

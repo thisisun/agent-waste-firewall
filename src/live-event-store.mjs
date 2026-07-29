@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { TextDecoder } from "node:util";
 
 import { projectLiveEvent } from "./live-event-projection.mjs";
 import {
@@ -31,15 +32,31 @@ const GENERATION_KEYS = [
   "lastElapsedMs",
 ];
 const GENERATION_DIRECTORY = /^\d{8}$/u;
+const RETIRED_GENERATION_DIRECTORY =
+  /^\.retired-\d{8}-[0-9a-f]{8}$/u;
 const EVENT_FILE = /^(\d{16})\.json$/u;
 const LOCK_RETRY_MS = 2;
 const LOCK_STALE_MS = 30_000;
-const DEFAULT_LOCK_TIMEOUT_MS = 8;
+const DEFAULT_LOCK_TIMEOUT_MS = 50;
 const DEFAULT_MAX_EVENTS = 4096;
 const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_CONTROL_BYTES = 16 * 1024;
+const STABLE_READ_ATTEMPTS = 3;
+const RETIRED_CLEANUP_BATCH = 64;
+const MAINTENANCE_CLEANUP_BATCH = 256;
+const COVERAGE_MARKER_TEXT =
+  '{"coverage":"incomplete","v":1}\n';
 
 const sleepBuffer = new Int32Array(new SharedArrayBuffer(4));
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
+class LiveWindowRaceError extends Error {
+  constructor() {
+    super("Live spool changed during an audited read.");
+    this.code = "LIVE_WINDOW_RACE";
+  }
+}
 
 function sleepSync(milliseconds) {
   Atomics.wait(sleepBuffer, 0, 0, milliseconds);
@@ -68,6 +85,104 @@ function ensurePrivateDirectory(directory) {
   if ((stat.mode & 0o077) !== 0) fs.chmodSync(directory, 0o700);
 }
 
+function assertPrivateDirectory(directory) {
+  const stat = fs.lstatSync(directory);
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (
+    !stat.isDirectory() ||
+    stat.isSymbolicLink() ||
+    (uid !== null && stat.uid !== uid) ||
+    (stat.mode & 0o077) !== 0
+  ) {
+    throw new Error("Unsafe live spool directory.");
+  }
+  return stat;
+}
+
+function snapshotFromPrivateStat(stat, maximumBytes) {
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.size > BigInt(maximumBytes) ||
+    (uid !== null && stat.uid !== BigInt(uid)) ||
+    (stat.mode & 0o077n) !== 0n
+  ) {
+    throw new Error("Unsafe live spool file.");
+  }
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: Number(stat.size),
+    mtimeNs: stat.mtimeNs,
+    ctimeNs: stat.ctimeNs,
+  };
+}
+
+function privateFileSnapshot(filename, maximumBytes) {
+  return snapshotFromPrivateStat(
+    fs.lstatSync(filename, { bigint: true }),
+    maximumBytes,
+  );
+}
+
+function sameFileSnapshot(left, right) {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeNs === right.mtimeNs &&
+    left.ctimeNs === right.ctimeNs
+  );
+}
+
+function sameOptionalFile(left, right) {
+  if (left.present !== right.present) return false;
+  if (!left.present) return true;
+  return (
+    left.text === right.text &&
+    sameFileSnapshot(left.snapshot, right.snapshot)
+  );
+}
+
+function readPrivateText(filename, maximumBytes) {
+  const current = readPrivateBuffer(filename, maximumBytes);
+  let text;
+  try {
+    text = utf8Decoder.decode(current.buffer);
+  } catch {
+    throw new Error("Live spool file failed its UTF-8 audit.");
+  }
+  return { text, snapshot: current.snapshot };
+}
+
+function readPrivateBuffer(filename, maximumBytes) {
+  const descriptor = fs.openSync(
+    filename,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const before = snapshotFromPrivateStat(
+      fs.fstatSync(descriptor, { bigint: true }),
+      maximumBytes,
+    );
+    const buffer = fs.readFileSync(descriptor);
+    const after = snapshotFromPrivateStat(
+      fs.fstatSync(descriptor, { bigint: true }),
+      maximumBytes,
+    );
+    if (
+      !sameFileSnapshot(before, after) ||
+      buffer.length !== after.size
+    ) {
+      throw new LiveWindowRaceError();
+    }
+    return { buffer, snapshot: after };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 function writePrivateAtomic(filename, value) {
   ensurePrivateDirectory(path.dirname(filename));
   const temporary = `${filename}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
@@ -90,18 +205,19 @@ function writePrivateAtomic(filename, value) {
 }
 
 function privateKey(filename) {
-  const stat = fs.lstatSync(filename);
-  const uid = typeof process.getuid === "function" ? process.getuid() : null;
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.size !== 32 ||
-    (uid !== null && stat.uid !== uid) ||
-    (stat.mode & 0o077) !== 0
-  ) {
+  const current = readPrivateBuffer(filename, 32);
+  if (current.buffer.length !== 32) {
     throw new Error("Unsafe live alias key.");
   }
-  return fs.readFileSync(filename);
+  return current.buffer;
+}
+
+function generationAlias(key) {
+  return `generation_${crypto
+    .createHmac("sha256", key)
+    .update("awf-live-v1\0generation\0")
+    .digest("hex")
+    .slice(0, 32)}`;
 }
 
 function safeBound(value, fallback, minimum, maximum, label) {
@@ -212,6 +328,24 @@ function emptyControl(generation, nextSeq = 1, lastElapsedMs = 0) {
   };
 }
 
+function statusFromControl(control, store) {
+  return {
+    v: 1,
+    generation: control.generation,
+    nextSeq: control.nextSeq,
+    eventCount: control.eventCount,
+    totalBytes: control.totalBytes,
+    oldestSeq: control.oldestSeq,
+    committedSeq: control.committedSeq,
+    lastElapsedMs: control.lastElapsedMs,
+    incidentCount: control.incidentCount,
+    avoidableCallCount: control.avoidableCallCount,
+    maxEvents: store.maxEvents,
+    maxBytes: store.maxBytes,
+    maxAgeMs: store.maxAgeMs,
+  };
+}
+
 export class LiveEventStore {
   constructor({
     root,
@@ -273,6 +407,10 @@ export class LiveEventStore {
 
   generationMetadataPath(generation) {
     return path.join(this.generationDir(generation), "generation.json");
+  }
+
+  coverageMarkerPath(generation) {
+    return path.join(this.generationDir(generation), "coverage.json");
   }
 
   eventPath(generation, sequence) {
@@ -357,7 +495,11 @@ export class LiveEventStore {
   }
 
   cleanTemporaryFiles(generation) {
-    const directories = [this.liveDir, this.eventsDir(generation)];
+    const directories = [
+      this.liveDir,
+      this.generationDir(generation),
+      this.eventsDir(generation),
+    ];
     for (const directory of directories) {
       if (!fs.existsSync(directory)) continue;
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -384,8 +526,143 @@ export class LiveEventStore {
       .sort((left, right) => left.sequence - right.sequence);
   }
 
+  stableEventFiles(generation) {
+    const directory = this.eventsDir(generation);
+    assertPrivateDirectory(directory);
+    const files = [];
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isFile() && /^\..+\.tmp$/u.test(entry.name)) continue;
+      const match = entry.isFile() ? EVENT_FILE.exec(entry.name) : null;
+      if (!match) {
+        throw new Error("Live spool contained an unaudited event entry.");
+      }
+      const sequence = Number.parseInt(match[1], 10);
+      if (!Number.isSafeInteger(sequence)) {
+        throw new Error("Live spool contained an invalid event sequence.");
+      }
+      const filename = path.join(directory, entry.name);
+      privateFileSnapshot(filename, LIVE_EVENT_MAX_BYTES);
+      files.push({ sequence, filename });
+    }
+    return files.sort((left, right) => left.sequence - right.sequence);
+  }
+
+  readControlSnapshot() {
+    const current = readPrivateText(this.controlPath, MAX_CONTROL_BYTES);
+    let control;
+    try {
+      control = JSON.parse(current.text);
+    } catch {
+      throw new Error("Live spool control failed its closed-schema audit.");
+    }
+    if (!validControl(control)) {
+      throw new Error("Live spool control failed its closed-schema audit.");
+    }
+    return { ...current, control };
+  }
+
+  readGenerationMetadata(generation) {
+    const current = readPrivateText(
+      this.generationMetadataPath(generation),
+      MAX_CONTROL_BYTES,
+    );
+    let metadata;
+    try {
+      metadata = JSON.parse(current.text);
+    } catch {
+      throw new Error("Live generation failed its closed-schema audit.");
+    }
+    if (!validGenerationMetadata(metadata, generation)) {
+      throw new Error("Live generation failed its closed-schema audit.");
+    }
+    return metadata;
+  }
+
+  readCoverageMarker(generation) {
+    const filename = this.coverageMarkerPath(generation);
+    if (!fs.existsSync(filename)) {
+      return { present: false, text: null, snapshot: null };
+    }
+    try {
+      const current = readPrivateText(filename, 1024);
+      const value = JSON.parse(current.text);
+      if (
+        current.text !== COVERAGE_MARKER_TEXT ||
+        !isRecord(value) ||
+        Object.keys(value).length !== 2 ||
+        value.v !== 1 ||
+        value.coverage !== "incomplete"
+      ) {
+        throw new Error("Live coverage marker failed its audit.");
+      }
+      return { present: true, ...current };
+    } catch (error) {
+      if (error.code === "ENOENT") throw new LiveWindowRaceError();
+      throw error;
+    }
+  }
+
+  markCoverageIncomplete() {
+    try {
+      for (
+        let attempt = 0;
+        attempt < STABLE_READ_ATTEMPTS;
+        attempt += 1
+      ) {
+        const before = this.readControlSnapshot();
+        const generation = before.control.generation;
+        assertPrivateDirectory(this.generationDir(generation));
+        writePrivateAtomic(
+          this.coverageMarkerPath(generation),
+          COVERAGE_MARKER_TEXT,
+        );
+        const after = this.readControlSnapshot();
+        if (
+          before.text === after.text &&
+          sameFileSnapshot(before.snapshot, after.snapshot)
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // A degraded optional publication must not affect the hook response.
+    }
+    return false;
+  }
+
+  emptyReadWindow(checkpoint = {}, { freshness = "current" } = {}) {
+    return {
+      v: 1,
+      generation: 0,
+      streamAlias: null,
+      freshness,
+      reset: checkpoint.streamAlias !== null && checkpoint.streamAlias !== undefined,
+      events: [],
+      status: {
+        v: 1,
+        generation: 0,
+        nextSeq: 1,
+        eventCount: 0,
+        totalBytes: 0,
+        oldestSeq: 1,
+        committedSeq: 0,
+        lastElapsedMs: 0,
+        incidentCount: 0,
+        avoidableCallCount: 0,
+        generationFirstSeq: 1,
+        gapCount: 0,
+        publicationDropped: 0,
+        maxEvents: this.maxEvents,
+        maxBytes: this.maxBytes,
+        maxAgeMs: this.maxAgeMs,
+      },
+    };
+  }
+
   rebuildControl(generation, metadata = this.generationMetadata(generation)) {
     const files = this.eventFiles(generation);
+    const highestObservedSequence =
+      files.at(-1)?.sequence ?? metadata.firstSeq - 1;
     let totalBytes = 0;
     let incidentCount = 0;
     let avoidableCallCount = 0;
@@ -414,7 +691,10 @@ export class LiveEventStore {
     return {
       v: 1,
       generation,
-      nextSeq: Math.max(metadata.firstSeq, last + 1),
+      nextSeq: Math.max(
+        metadata.firstSeq,
+        highestObservedSequence + 1,
+      ),
       pendingSeq: null,
       committedSeq: last,
       eventCount: valid.length,
@@ -426,7 +706,7 @@ export class LiveEventStore {
     };
   }
 
-  removeOtherGenerations(generation) {
+  retireOtherGenerations(generation) {
     if (!fs.existsSync(this.generationsDir)) return;
     for (const entry of fs.readdirSync(this.generationsDir, {
       withFileTypes: true,
@@ -436,11 +716,87 @@ export class LiveEventStore {
         GENERATION_DIRECTORY.test(entry.name) &&
         entry.name !== generationName(generation)
       ) {
-        fs.rmSync(path.join(this.generationsDir, entry.name), {
-          recursive: true,
-          force: true,
-        });
+        fs.renameSync(
+          path.join(this.generationsDir, entry.name),
+          path.join(
+            this.generationsDir,
+            `.retired-${entry.name}-${crypto
+              .randomBytes(4)
+              .toString("hex")}`,
+          ),
+        );
       }
+    }
+  }
+
+  cleanupRetiredGenerations(limit = RETIRED_CLEANUP_BATCH) {
+    let remaining = limit;
+    try {
+      if (!fs.existsSync(this.generationsDir)) return;
+      for (const entry of fs.readdirSync(this.generationsDir, {
+        withFileTypes: true,
+      })) {
+        if (
+          remaining <= 0 ||
+          !entry.isDirectory() ||
+          !RETIRED_GENERATION_DIRECTORY.test(entry.name)
+        ) {
+          continue;
+        }
+        const retired = path.join(this.generationsDir, entry.name);
+        const events = path.join(retired, "events");
+        try {
+          assertPrivateDirectory(retired);
+          if (fs.existsSync(events)) {
+            assertPrivateDirectory(events);
+            for (const event of fs.readdirSync(events, {
+              withFileTypes: true,
+            })) {
+              if (remaining <= 0) break;
+              if (!event.isFile() && !event.isSymbolicLink()) continue;
+              fs.unlinkSync(path.join(events, event.name));
+              remaining -= 1;
+            }
+            if (fs.readdirSync(events).length === 0) {
+              fs.rmdirSync(events);
+            }
+          }
+          if (!fs.existsSync(events)) {
+            for (const temporary of fs.readdirSync(retired, {
+              withFileTypes: true,
+            })) {
+              if (
+                remaining <= 0 ||
+                (!temporary.isFile() &&
+                  !temporary.isSymbolicLink()) ||
+                !temporary.name.endsWith(".tmp")
+              ) {
+                continue;
+              }
+              fs.unlinkSync(path.join(retired, temporary.name));
+              remaining -= 1;
+            }
+            for (const filename of [
+              "alias.key",
+              "coverage.json",
+              "generation.json",
+            ]) {
+              try {
+                fs.unlinkSync(path.join(retired, filename));
+              } catch (error) {
+                if (error.code !== "ENOENT") throw error;
+              }
+            }
+            if (fs.readdirSync(retired).length === 0) {
+              fs.rmdirSync(retired);
+            }
+          }
+        } catch {
+          // Retired cleanup is best-effort and never affects hook decisions.
+        }
+      }
+    } catch {
+      // The live spool may be concurrently purged or rotated.
     }
   }
 
@@ -498,7 +854,7 @@ export class LiveEventStore {
     if (maintenance || hadPending) {
       this.cleanTemporaryFiles(control.generation);
     }
-    this.removeOtherGenerations(control.generation);
+    this.retireOtherGenerations(control.generation);
     return control;
   }
 
@@ -565,7 +921,7 @@ export class LiveEventStore {
       this.controlPath,
       `${JSON.stringify(nextControl, null, 2)}\n`,
     );
-    this.removeOtherGenerations(generation);
+    this.retireOtherGenerations(generation);
     return {
       control: nextControl,
       key: privateKey(this.keyPath(generation)),
@@ -698,12 +1054,322 @@ export class LiveEventStore {
           generation: committed.generation,
         };
       });
-      return locked.locked
-        ? locked.value
-        : { published: false, reason: "busy" };
+      if (locked.locked) this.cleanupRetiredGenerations();
+      if (!locked.locked) {
+        this.markCoverageIncomplete();
+        return { published: false, reason: "busy" };
+      }
+      return locked.value;
     } catch {
+      this.markCoverageIncomplete();
       return { published: false, reason: "unavailable" };
     }
+  }
+
+  auditEventFiles(
+    files,
+    { previousSeq = 0, previousElapsedMs = 0 } = {},
+  ) {
+    const events = [];
+    let totalBytes = 0;
+    let incidentCount = 0;
+    let avoidableCallCount = 0;
+    let lastSeq = previousSeq;
+    let lastElapsedMs = previousElapsedMs;
+    for (const current of files) {
+      const stable = readPrivateText(
+        current.filename,
+        LIVE_EVENT_MAX_BYTES,
+      );
+      const parsed = parseEventText(stable.text);
+      if (
+        parsed.event.seq !== current.sequence ||
+        parsed.event.seq <= lastSeq ||
+        parsed.event.elapsedMs < lastElapsedMs
+      ) {
+        throw new Error("Live event window failed its closed-schema audit.");
+      }
+      events.push(parsed.event);
+      totalBytes += parsed.bytes;
+      incidentCount += parsed.event.incidentCountDelta;
+      avoidableCallCount += parsed.event.avoidableCallsDelta;
+      lastSeq = parsed.event.seq;
+      lastElapsedMs = parsed.event.elapsedMs;
+    }
+    return {
+      events,
+      totalBytes,
+      incidentCount,
+      avoidableCallCount,
+    };
+  }
+
+  readWindow(checkpoint = {}) {
+    const forceFull = checkpoint.forceFull === true;
+    const requestedStreamAlias =
+      typeof checkpoint.streamAlias === "string" &&
+      /^generation_[0-9a-f]{32}$/u.test(checkpoint.streamAlias)
+        ? checkpoint.streamAlias
+        : null;
+    const afterSeq =
+      Number.isSafeInteger(checkpoint.afterSeq) && checkpoint.afterSeq >= 0
+        ? checkpoint.afterSeq
+        : 0;
+    const previousElapsedMs =
+      Number.isSafeInteger(checkpoint.lastElapsedMs) &&
+      checkpoint.lastElapsedMs >= 0
+        ? checkpoint.lastElapsedMs
+        : 0;
+    const seenEventCount =
+      Number.isSafeInteger(checkpoint.eventCount) &&
+      checkpoint.eventCount >= 0
+        ? checkpoint.eventCount
+        : 0;
+    const seenTotalBytes =
+      Number.isSafeInteger(checkpoint.totalBytes) &&
+      checkpoint.totalBytes >= 0
+        ? checkpoint.totalBytes
+        : 0;
+    const seenIncidentCount =
+      Number.isSafeInteger(checkpoint.incidentCount) &&
+      checkpoint.incidentCount >= 0
+        ? checkpoint.incidentCount
+        : 0;
+    const seenAvoidableCallCount =
+      Number.isSafeInteger(checkpoint.avoidableCallCount) &&
+      checkpoint.avoidableCallCount >= 0
+        ? checkpoint.avoidableCallCount
+        : 0;
+    for (let attempt = 0; attempt < STABLE_READ_ATTEMPTS; attempt += 1) {
+      let before = null;
+      try {
+        if (!fs.existsSync(this.controlPath)) {
+          if (fs.existsSync(this.lockPath)) throw new LiveWindowRaceError();
+          if (fs.existsSync(this.liveDir)) {
+            assertPrivateDirectory(this.liveDir);
+          }
+          if (fs.existsSync(this.generationsDir)) {
+            assertPrivateDirectory(this.generationsDir);
+          }
+          const generationEntries = fs.existsSync(this.generationsDir)
+            ? fs.readdirSync(this.generationsDir, {
+                withFileTypes: true,
+              })
+            : [];
+          if (
+            generationEntries.some(
+              (entry) =>
+                !(
+                  entry.isDirectory() &&
+                  (GENERATION_DIRECTORY.test(entry.name) ||
+                    RETIRED_GENERATION_DIRECTORY.test(entry.name))
+                ),
+            )
+          ) {
+            throw new Error("Live spool contained an unknown entry.");
+          }
+          const generations = generationEntries.some((entry) =>
+            GENERATION_DIRECTORY.test(entry.name),
+          );
+          if (generations) {
+            throw new Error("Live spool control is unavailable.");
+          }
+          return this.emptyReadWindow(checkpoint);
+        }
+
+        before = this.readControlSnapshot();
+        const control = before.control;
+        if (control.pendingSeq !== null) throw new LiveWindowRaceError();
+        assertPrivateDirectory(this.liveDir);
+        assertPrivateDirectory(this.generationsDir);
+        assertPrivateDirectory(this.generationDir(control.generation));
+        assertPrivateDirectory(this.eventsDir(control.generation));
+        const key = privateKey(this.keyPath(control.generation));
+        const streamAlias = generationAlias(key);
+        const metadata = this.readGenerationMetadata(control.generation);
+        const coverageBefore = this.readCoverageMarker(
+          control.generation,
+        );
+        const gapCount =
+          control.nextSeq - metadata.firstSeq - control.eventCount;
+        if (
+          metadata.firstSeq > control.nextSeq ||
+          gapCount < 0 ||
+          (control.eventCount === 0 &&
+            (control.oldestSeq !== metadata.firstSeq ||
+              control.committedSeq !== metadata.firstSeq - 1 ||
+              control.totalBytes !== 0 ||
+              control.incidentCount !== 0 ||
+              control.avoidableCallCount !== 0 ||
+              control.lastElapsedMs !== metadata.lastElapsedMs)) ||
+          (control.eventCount > 0 &&
+            (control.oldestSeq < metadata.firstSeq ||
+              control.committedSeq < control.oldestSeq))
+        ) {
+          throw new Error("Live spool control is inconsistent.");
+        }
+
+        if (this.generationExpired(control, nowMs(this.clock))) {
+          const after = this.readControlSnapshot();
+          const coverageAfter = this.readCoverageMarker(
+            control.generation,
+          );
+          if (
+            before.text !== after.text ||
+            !sameFileSnapshot(before.snapshot, after.snapshot) ||
+            !sameOptionalFile(coverageBefore, coverageAfter)
+          ) {
+            throw new LiveWindowRaceError();
+          }
+          return this.emptyReadWindow(checkpoint, {
+            freshness: "expired",
+          });
+        }
+
+        const sameGeneration = requestedStreamAlias === streamAlias;
+        const status = {
+          ...statusFromControl(control, this),
+          generationFirstSeq: metadata.firstSeq,
+          gapCount,
+          publicationDropped: coverageBefore.present ? 1 : 0,
+        };
+        const unchanged =
+          !forceFull &&
+          sameGeneration &&
+          seenEventCount === control.eventCount &&
+          seenTotalBytes === control.totalBytes &&
+          seenIncidentCount === control.incidentCount &&
+          seenAvoidableCallCount === control.avoidableCallCount &&
+          (control.eventCount === 0 ||
+            afterSeq === control.committedSeq);
+        if (unchanged) {
+          const after = this.readControlSnapshot();
+          const coverageAfter = this.readCoverageMarker(
+            control.generation,
+          );
+          if (
+            before.text !== after.text ||
+            !sameFileSnapshot(before.snapshot, after.snapshot) ||
+            !sameOptionalFile(coverageBefore, coverageAfter)
+          ) {
+            throw new LiveWindowRaceError();
+          }
+          return {
+            v: 1,
+            generation: control.generation,
+            streamAlias,
+            freshness: "current",
+            reset: false,
+            events: [],
+            status,
+          };
+        }
+
+        const files = this.stableEventFiles(control.generation);
+        if (
+          files.length !== control.eventCount ||
+          files.some((current) => current.sequence > control.committedSeq)
+        ) {
+          throw new Error("Live spool failed its closed-schema audit.");
+        }
+
+        const canAppend =
+          !forceFull &&
+          sameGeneration &&
+          seenEventCount <= control.eventCount &&
+          seenTotalBytes <= control.totalBytes &&
+          seenIncidentCount <= control.incidentCount &&
+          seenAvoidableCallCount <= control.avoidableCallCount &&
+          (seenEventCount === 0 || afterSeq >= control.oldestSeq) &&
+          afterSeq <= control.committedSeq;
+        const reset = !canAppend;
+        const selectedFiles = reset
+          ? files
+          : files.filter((current) => current.sequence > afterSeq);
+        const audited = this.auditEventFiles(selectedFiles, {
+          previousSeq: reset ? 0 : afterSeq,
+          previousElapsedMs: reset
+            ? metadata.lastElapsedMs
+            : previousElapsedMs,
+        });
+
+        if (reset) {
+          const first = audited.events[0];
+          const last = audited.events.at(-1);
+          if (
+            audited.events.length !== control.eventCount ||
+            audited.totalBytes !== control.totalBytes ||
+            audited.incidentCount !== control.incidentCount ||
+            audited.avoidableCallCount !== control.avoidableCallCount ||
+            (first && first.seq !== control.oldestSeq) ||
+            (last && last.seq !== control.committedSeq) ||
+            (last && last.elapsedMs !== control.lastElapsedMs) ||
+            (!first &&
+              (control.totalBytes !== 0 ||
+                control.incidentCount !== 0 ||
+                control.avoidableCallCount !== 0))
+          ) {
+            throw new Error("Live spool failed its closed-schema audit.");
+          }
+        } else if (
+          audited.events.length !== control.eventCount - seenEventCount ||
+          audited.totalBytes !== control.totalBytes - seenTotalBytes ||
+          audited.incidentCount !==
+            control.incidentCount - seenIncidentCount ||
+          audited.avoidableCallCount !==
+            control.avoidableCallCount - seenAvoidableCallCount ||
+          (audited.events.length > 0 &&
+            audited.events.at(-1).elapsedMs !== control.lastElapsedMs)
+        ) {
+          throw new Error("Live spool append failed its closed-schema audit.");
+        }
+
+        const after = this.readControlSnapshot();
+        const coverageAfter = this.readCoverageMarker(
+          control.generation,
+        );
+        if (
+          before.text !== after.text ||
+          !sameFileSnapshot(before.snapshot, after.snapshot) ||
+          !sameOptionalFile(coverageBefore, coverageAfter)
+        ) {
+          throw new LiveWindowRaceError();
+        }
+        return {
+          v: 1,
+          generation: control.generation,
+          streamAlias,
+          freshness: "current",
+          reset,
+          events: audited.events,
+          status,
+        };
+      } catch (error) {
+        if (error?.code === "LIVE_WINDOW_RACE") {
+          if (attempt + 1 < STABLE_READ_ATTEMPTS) continue;
+          throw error;
+        }
+        if (before) {
+          let changed = false;
+          try {
+            const after = this.readControlSnapshot();
+            changed =
+              before.text !== after.text ||
+              !sameFileSnapshot(before.snapshot, after.snapshot);
+          } catch (afterError) {
+            changed =
+              afterError?.code === "LIVE_WINDOW_RACE" ||
+              afterError?.code === "ENOENT";
+          }
+          if (changed) {
+            if (attempt + 1 < STABLE_READ_ATTEMPTS) continue;
+            throw new LiveWindowRaceError();
+          }
+        }
+        throw error;
+      }
+    }
+    throw new LiveWindowRaceError();
   }
 
   readEvents() {
@@ -732,6 +1398,7 @@ export class LiveEventStore {
         .map((line) => JSON.parse(line));
     });
     if (!locked.locked) throw new Error("Live spool is busy.");
+    this.cleanupRetiredGenerations();
     return locked.value;
   }
 
@@ -744,23 +1411,47 @@ export class LiveEventStore {
       if (this.generationExpired(control, nowMs(this.clock))) {
         control = this.rotate(control).control;
       }
-      return {
-        v: 1,
-        generation: control.generation,
-        nextSeq: control.nextSeq,
-        eventCount: control.eventCount,
-        totalBytes: control.totalBytes,
-        oldestSeq: control.oldestSeq,
-        committedSeq: control.committedSeq,
-        lastElapsedMs: control.lastElapsedMs,
-        incidentCount: control.incidentCount,
-        avoidableCallCount: control.avoidableCallCount,
-        maxEvents: this.maxEvents,
-        maxBytes: this.maxBytes,
-        maxAgeMs: this.maxAgeMs,
-      };
+      return statusFromControl(control, this);
     });
+    if (locked.locked) this.cleanupRetiredGenerations();
     return locked.locked ? locked.value : null;
+  }
+
+  maintain() {
+    if (!fs.existsSync(this.controlPath)) {
+      this.cleanupRetiredGenerations(MAINTENANCE_CLEANUP_BATCH);
+      return { maintained: false, rotated: false };
+    }
+    try {
+      const locked = this.withLock(() => {
+        let control = this.readControlSnapshot().control;
+        if (control.pendingSeq !== null) {
+          return {
+            maintained: false,
+            rotated: false,
+            generation: control.generation,
+          };
+        }
+        assertPrivateDirectory(this.generationDir(control.generation));
+        privateKey(this.keyPath(control.generation));
+        this.readGenerationMetadata(control.generation);
+        const previousGeneration = control.generation;
+        if (this.generationExpired(control, nowMs(this.clock))) {
+          control = this.rotate(control).control;
+        }
+        return {
+          maintained: true,
+          rotated: control.generation !== previousGeneration,
+          generation: control.generation,
+        };
+      });
+      this.cleanupRetiredGenerations(MAINTENANCE_CLEANUP_BATCH);
+      return locked.locked
+        ? locked.value
+        : { maintained: false, rotated: false };
+    } catch {
+      return { maintained: false, rotated: false };
+    }
   }
 
   purge() {

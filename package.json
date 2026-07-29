@@ -36,6 +36,7 @@
   "scripts": {
     "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
     "benchmark:hook": "node scripts/benchmark-hook.mjs",
+    "benchmark:live-dashboard": "node scripts/benchmark-live-dashboard.mjs",
     "benchmark:live-spool": "node scripts/benchmark-live-spool.mjs",
     "check": "node scripts/check.mjs",
     "prepublishOnly": "npm run check && npm test",

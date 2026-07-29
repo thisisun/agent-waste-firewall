@@ -34,6 +34,10 @@ agent-waste-firewall trace audit <trace-id>
 agent-waste-firewall trace export <trace-id> --output semantic-trace.jsonl
 ```
 
+The no-argument dashboard is the always-on live view; the recording remains a separate export
+artifact. To inspect the stopped recording instead, run
+`agent-waste-firewall dashboard <trace-id>`.
+
 Run the exported trace through all three policies:
 
 ```bash

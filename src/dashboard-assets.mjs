@@ -2426,7 +2426,24 @@ export const DASHBOARD_JS = String.raw`(() => {
 
   const TRACE_HEALTH = Object.freeze({
     healthy: true,
+    stale: true,
     degraded: true
+  });
+
+  const SOURCES = Object.freeze({
+    live: true,
+    trace: true
+  });
+
+  const SOURCE_STATES = Object.freeze({
+    empty: true,
+    active: true
+  });
+
+  const COVERAGE = Object.freeze({
+    complete: true,
+    incomplete: true,
+    unknown: true
   });
 
   const ATTRIBUTIONS = Object.freeze({
@@ -2998,6 +3015,7 @@ export const DASHBOARD_JS = String.raw`(() => {
   });
 
   const MAX_METRIC = 999999999;
+  const MAX_SAFE_SEQUENCE = Number.MAX_SAFE_INTEGER;
   const MAX_TIMELINE_ITEMS = 80;
   const ALIAS_PATTERN = /^(?:(?:session|turn|prompt|call|signature|path|content|result)_[a-f0-9]{32,64}|trace_[a-f0-9]{24})$/u;
 
@@ -3012,17 +3030,21 @@ export const DASHBOARD_JS = String.raw`(() => {
   function boundedInteger(value, maximum = MAX_METRIC) {
     return typeof value === "number" &&
       Number.isFinite(value) &&
+      Number.isSafeInteger(value) &&
       value >= 0 &&
       value <= maximum
-      ? Math.floor(value)
+      ? value
       : null;
   }
 
   function sequenceInteger(value) {
-    if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    if (typeof value !== "string") {
       return null;
     }
-    return boundedInteger(Number(value), MAX_METRIC);
+    const match =
+      /^(?:generation_[0-9a-f]{32}:)?(0|[1-9][0-9]*)$/u.exec(value);
+    if (!match) return null;
+    return boundedInteger(Number(match[1]), MAX_SAFE_SEQUENCE);
   }
 
   function safeAlias(value) {
@@ -3083,6 +3105,13 @@ export const DASHBOARD_JS = String.raw`(() => {
     signal: "clear",
     connection: "connecting",
     traceHealth: "healthy",
+    source: null,
+    sourceState: null,
+    coverage: null,
+    generation: null,
+    lastStatusSequence: 0,
+    streamIdentity: null,
+    streamAlias: null,
     mode: "observe",
     metrics: {
       events: 0,
@@ -3093,6 +3122,9 @@ export const DASHBOARD_JS = String.raw`(() => {
     issueIds: [],
     warning: null,
     timelineEntries: [],
+    seenEventIds: new Set(),
+    seenEventIdOrder: [],
+    timelineEmpty: byId("timeline-empty"),
     eventCount: 0,
     baselineSequence: 0
   };
@@ -3109,6 +3141,12 @@ export const DASHBOARD_JS = String.raw`(() => {
     if (
       state.connection === "connecting" ||
       state.connection === "reconnecting"
+    ) {
+      return "connecting";
+    }
+    if (
+      state.connection === "connected" &&
+      state.sourceState === "empty"
     ) {
       return "connecting";
     }
@@ -3301,7 +3339,7 @@ export const DASHBOARD_JS = String.raw`(() => {
       severity,
       attribution:
         enumValue(value.attribution ?? value.category, ATTRIBUTIONS) || "agent",
-      occurrences: boundedInteger(value.occurrences, 9999) || 1,
+      occurrences: boundedInteger(value.occurrences, 1000000) || 1,
       issueIds: safeIssueIds(value.issueIds ?? value.issue_ids)
     };
   }
@@ -3418,48 +3456,175 @@ export const DASHBOARD_JS = String.raw`(() => {
       source.currentWarning ?? source.current_warning ?? source.warning ?? null;
     const warning = normalizeWarning(warningSource);
     if (warningSource !== null && !warning) return null;
-    const rawTraceHealth = source.traceHealth ?? source.trace_health;
+    const rawTraceHealth =
+      source.streamHealth ??
+      source.stream_health ??
+      source.traceHealth ??
+      source.trace_health;
     const traceHealth =
       rawTraceHealth === undefined
         ? "healthy"
         : enumValue(rawTraceHealth, TRACE_HEALTH);
     if (!traceHealth) return null;
+    const dashboardSource =
+      source.source === undefined ? null : enumValue(source.source, SOURCES);
+    const sourceState =
+      source.sourceState === undefined
+        ? null
+        : enumValue(source.sourceState, SOURCE_STATES);
+    const coverage =
+      source.coverage === undefined
+        ? null
+        : enumValue(source.coverage, COVERAGE);
+    const generation =
+      source.generation === undefined
+        ? null
+        : boundedInteger(source.generation, MAX_SAFE_SEQUENCE);
+    const streamAlias =
+      source.streamAlias === null || source.streamAlias === undefined
+        ? null
+        : typeof source.streamAlias === "string" &&
+            /^generation_[0-9a-f]{32}$/u.test(source.streamAlias)
+          ? source.streamAlias
+          : undefined;
+    const metrics = normalizeMetrics(source.metrics);
+    const lastSequence = boundedInteger(
+      source.lastSequence ?? source.last_sequence,
+      MAX_SAFE_SEQUENCE
+    );
+    const strictStatus = source.source !== undefined;
+    if (
+      strictStatus &&
+      (source.v !== 1 ||
+        !dashboardSource ||
+        !sourceState ||
+        !coverage ||
+        !own(source, "streamHealth") ||
+        !enumValue(source.streamHealth, TRACE_HEALTH) ||
+        generation === null ||
+        streamAlias === undefined ||
+        typeof source.connected !== "boolean" ||
+        !enumValue(source.mode, MODES) ||
+        Object.values(metrics).some((value) => value === null) ||
+        lastSequence === null ||
+        !own(source, "currentWarning") ||
+        !source.promptCoach ||
+        typeof source.promptCoach !== "object" ||
+        !Array.isArray(source.promptCoach.issueIds) ||
+        (dashboardSource === "live" &&
+          ((generation === 0) !== (streamAlias === null) ||
+            (generation === 0 && sourceState !== "empty"))) ||
+        (dashboardSource === "trace" &&
+          (generation < 1 || streamAlias !== null)))
+    ) {
+      return null;
+    }
     return {
       connected:
         typeof source.connected === "boolean" ? source.connected : true,
       traceHealth,
+      source: dashboardSource,
+      sourceState,
+      coverage,
+      generation,
+      streamAlias,
       mode: enumValue(source.mode, MODES),
       alias: safeAlias(
         source.sessionAlias ?? source.session_alias ?? source.traceAlias
       ),
-      metrics: normalizeMetrics(source.metrics),
-      lastSequence: boundedInteger(
-        source.lastSequence ?? source.last_sequence,
-        MAX_METRIC
-      ),
+      metrics,
+      lastSequence,
       warning,
       issueIds: safeIssueIds(promptCoach.issueIds ?? promptCoach.issue_ids)
     };
   }
 
-  function renderStatus(payload) {
+  function resetProjection() {
+    state.metrics = {
+      events: 0,
+      incidents: 0,
+      avoidableCalls: 0,
+      elapsedMs: 0
+    };
+    state.issueIds = [];
+    state.warning = null;
+    state.timelineEntries = [];
+    state.seenEventIds = new Set();
+    state.seenEventIdOrder = [];
+    state.eventCount = 0;
+    state.baselineSequence = 0;
+    const list = byId("timeline-list");
+    const empty = state.timelineEmpty;
+    if (list) {
+      list.textContent = "";
+      if (empty) {
+        empty.hidden = false;
+        list.append(empty);
+      }
+    }
+    const alias = byId("session-alias");
+    if (alias) {
+      alias.textContent = "";
+      alias.hidden = true;
+    }
+    renderMetrics();
+    renderWarning(null);
+    updateCoach([]);
+  }
+
+  function renderStatus(payload, forceReset = false) {
     const status = normalizeStatus(payload);
     if (!status) return;
+    const nextIdentity = status.source
+      ? status.source + ":" +
+        (status.streamAlias || String(status.generation))
+      : null;
+    if (
+      !forceReset &&
+      status.source &&
+      state.source &&
+      (status.source !== state.source ||
+        status.generation < state.generation ||
+        (status.generation === state.generation &&
+          state.streamIdentity !== null &&
+          nextIdentity !== state.streamIdentity) ||
+        (status.generation === state.generation &&
+          status.lastSequence < state.lastStatusSequence))
+    ) {
+      return;
+    }
+    const identityChanged =
+      nextIdentity !== null &&
+      state.streamIdentity !== null &&
+      nextIdentity !== state.streamIdentity;
+    if (forceReset || identityChanged) resetProjection();
+    if (nextIdentity !== null) state.streamIdentity = nextIdentity;
+    if (status.source) state.streamAlias = status.streamAlias;
     state.traceHealth = status.traceHealth;
+    state.source = status.source;
+    state.sourceState = status.sourceState;
+    state.coverage = status.coverage;
+    if (status.source) {
+      state.generation = status.generation;
+      state.lastStatusSequence = status.lastSequence;
+    }
+    const degraded =
+      status.traceHealth !== "healthy" ||
+      (status.coverage !== null && status.coverage !== "complete");
     setConnection(
       !status.connected
         ? "offline"
-        : status.traceHealth === "degraded"
+        : degraded
           ? "degraded"
           : "connected"
     );
     if (status.mode) setMode(status.mode);
     applyMetrics(status.metrics);
     if (status.lastSequence !== null) {
-      state.baselineSequence = Math.max(
-        state.baselineSequence,
-        status.lastSequence
-      );
+      state.baselineSequence =
+        forceReset || identityChanged
+          ? status.lastSequence
+          : Math.max(state.baselineSequence, status.lastSequence);
     }
     renderWarning(status.warning);
     updateCoach(
@@ -3480,6 +3645,29 @@ export const DASHBOARD_JS = String.raw`(() => {
     }
     const kind = enumValue(payload.kind, KINDS);
     if (!kind) return null;
+    const strictEvent = state.source !== null;
+    const strictKeys = [
+      "kind",
+      "family",
+      "operation",
+      "outcome",
+      "ruleId",
+      "severity",
+      "attribution",
+      "alias",
+      "elapsedMs",
+      "issueIds",
+      "occurrences",
+      "incidentCountDelta",
+      "avoidableCallsDelta"
+    ];
+    if (
+      strictEvent &&
+      (Object.keys(payload).length !== strictKeys.length ||
+        Object.keys(payload).some((key) => !strictKeys.includes(key)))
+    ) {
+      return null;
+    }
     const ruleId = enumValue(payload.ruleId ?? payload.rule_id, RULES);
     if ((kind === "incident" || kind === "decision") && !ruleId) return null;
     const family = enumValue(payload.family, FAMILIES);
@@ -3502,6 +3690,54 @@ export const DASHBOARD_JS = String.raw`(() => {
     ) {
       return null;
     }
+    const avoidableCallsDelta =
+      payload.avoidableCallsDelta ?? payload.avoidable_calls_delta;
+    if (
+      avoidableCallsDelta !== undefined &&
+      avoidableCallsDelta !== 0 &&
+      avoidableCallsDelta !== 1
+    ) {
+      return null;
+    }
+    const attribution =
+      enumValue(payload.attribution ?? payload.category, ATTRIBUTIONS);
+    const alias = safeAlias(
+      payload.alias ?? payload.targetAlias ?? payload.target_alias
+    );
+    const elapsedMs = boundedInteger(
+      payload.elapsedMs ?? payload.elapsed_ms,
+      31536000000
+    );
+    const occurrenceValue = boundedInteger(
+      payload.occurrences,
+      1000000
+    );
+    const occurrences = occurrenceValue || 1;
+    if (
+      strictEvent &&
+      (!family ||
+        !operation ||
+        !outcome ||
+        !alias ||
+        elapsedMs === null ||
+        occurrenceValue === null ||
+        occurrenceValue < 1 ||
+        !Array.isArray(payload.issueIds) ||
+        (kind === "incident" &&
+          (!ruleId ||
+            !enumValue(severity, INCIDENT_SEVERITIES) ||
+            !attribution)) ||
+        (kind !== "incident" &&
+          (ruleId !== null ||
+            severity !== "none" ||
+            attribution !== null ||
+            occurrences !== 1 ||
+            incidentCountDelta === 1 ||
+            avoidableCallsDelta === 1)) ||
+        (avoidableCallsDelta === 1 && incidentCountDelta !== 1))
+    ) {
+      return null;
+    }
     return {
       kind,
       family,
@@ -3509,18 +3745,13 @@ export const DASHBOARD_JS = String.raw`(() => {
       outcome,
       ruleId,
       severity,
-      attribution:
-        enumValue(payload.attribution ?? payload.category, ATTRIBUTIONS),
-      alias: safeAlias(payload.alias ?? payload.targetAlias ?? payload.target_alias),
-      elapsedMs: boundedInteger(payload.elapsedMs ?? payload.elapsed_ms, 31536000000),
+      attribution,
+      alias,
+      elapsedMs,
       issueIds: safeIssueIds(payload.issueIds ?? payload.issue_ids),
-      occurrences: boundedInteger(payload.occurrences, 9999) || 1,
+      occurrences,
       incidentCountDelta: incidentCountDelta === 1 ? 1 : 0,
-      avoidableCallsDelta:
-        boundedInteger(
-          payload.avoidableCallsDelta ?? payload.avoidable_calls_delta,
-          1000
-        ) || 0
+      avoidableCallsDelta: avoidableCallsDelta === 1 ? 1 : 0
     };
   }
 
@@ -3608,16 +3839,24 @@ export const DASHBOARD_JS = String.raw`(() => {
     }
   }
 
-  function renderEvent(payload, sequence = null) {
+  function renderEvent(payload, sequence = null, eventId = null) {
     const event = normalizeEvent(payload);
     if (!event) return;
+    if (eventId && state.seenEventIds.has(eventId)) return;
     const list = byId("timeline-list");
     if (!list) return;
-    const empty = byId("timeline-empty");
+    const empty = state.timelineEmpty;
     if (empty) empty.remove();
 
     const item = createEventItem(event);
     list.prepend(item);
+    if (eventId) {
+      state.seenEventIds.add(eventId);
+      state.seenEventIdOrder.push(eventId);
+      while (state.seenEventIdOrder.length > MAX_TIMELINE_ITEMS * 2) {
+        state.seenEventIds.delete(state.seenEventIdOrder.shift());
+      }
+    }
     state.timelineEntries.unshift(event);
     if (state.timelineEntries.length > MAX_TIMELINE_ITEMS) {
       state.timelineEntries.length = MAX_TIMELINE_ITEMS;
@@ -3654,7 +3893,7 @@ export const DASHBOARD_JS = String.raw`(() => {
     }
     renderMetrics();
 
-    if (event.ruleId) {
+    if (state.source === null && event.ruleId) {
       renderWarning({
         ruleId: event.ruleId,
         severity: event.severity,
@@ -3662,9 +3901,9 @@ export const DASHBOARD_JS = String.raw`(() => {
         occurrences: event.occurrences,
         issueIds: event.issueIds
       });
-    } else if (event.kind === "progress") {
+    } else if (state.source === null && event.kind === "progress") {
       renderWarning(null);
-    } else if (event.issueIds.length) {
+    } else if (state.source === null && event.issueIds.length) {
       updateCoach(event.issueIds);
     }
   }
@@ -3705,13 +3944,43 @@ export const DASHBOARD_JS = String.raw`(() => {
     if (
       payload &&
       typeof payload === "object" &&
+      payload.kind === "snapshot" &&
+      payload.reset === true &&
+      payload.status &&
+      typeof payload.status === "object"
+    ) {
+      renderStatus(payload, true);
+      return;
+    }
+    if (
+      payload &&
+      typeof payload === "object" &&
       (payload.kind === "status" || payload.status)
     ) {
       renderStatus(payload);
       return;
     }
     const sequence = sequenceInteger(message.lastEventId);
-    renderEvent(payload, sequence);
+    if (
+      state.source === "live" &&
+      (sequence === null ||
+        !state.streamAlias ||
+        !message.lastEventId.startsWith(state.streamAlias + ":"))
+    ) {
+      return;
+    }
+    if (
+      state.source === "trace" &&
+      (sequence === null ||
+        !/^(?:0|[1-9][0-9]*)$/u.test(message.lastEventId))
+    ) {
+      return;
+    }
+    const eventId =
+      sequence !== null && message.lastEventId
+        ? message.lastEventId
+        : null;
+    renderEvent(payload, sequence, eventId);
   }
 
   function connectEvents() {
@@ -3723,7 +3992,14 @@ export const DASHBOARD_JS = String.raw`(() => {
       withCredentials: false
     });
     stream.onopen = () =>
-      setConnection(state.traceHealth === "degraded" ? "degraded" : "connected");
+      setConnection(
+        state.traceHealth !== "healthy" ||
+          (state.coverage !== null && state.coverage !== "complete")
+          ? "degraded"
+          : state.sourceState === "empty"
+            ? "connecting"
+            : "connected"
+      );
     stream.onerror = () => setConnection("reconnecting");
     stream.onmessage = consumeMessage;
     stream.addEventListener("semantic", consumeMessage);
