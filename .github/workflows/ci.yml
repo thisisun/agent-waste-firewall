@@ -54,3 +54,48 @@ jobs:
       # execution. The product target remains 100 ms; CI uses a separate runner budget.
       - run: npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
       - run: npm run benchmark:dashboard -- --events 15000 --requests 100 --sessions 16 --p95-ms 100
+
+  native-macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      AWF_DERIVED_DATA: ${{ runner.temp }}/awf-derived-data
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Pin native worker Node
+        run: |
+          node_path="$(command -v node)"
+          "$node_path" --version
+          echo "AWF_NODE_PATH=$node_path" >> "$GITHUB_ENV"
+      - run: xcodebuild -version
+      # Pull requests build without a keychain identity. This is not a signed release artifact.
+      - name: Build unsigned native developer preview
+        run: |
+          xcodebuild \
+            -project macos/AWF.xcodeproj \
+            -scheme AWF \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$AWF_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            build
+      # UI automation remains a separate interactive/nightly release gate.
+      - name: Run native unit target
+        run: |
+          xcodebuild \
+            -project macos/AWF.xcodeproj \
+            -scheme AWF \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$AWF_DERIVED_DATA" \
+            -only-testing:AWFTests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            test

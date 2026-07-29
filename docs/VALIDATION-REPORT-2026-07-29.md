@@ -1,8 +1,8 @@
 # Validation report — 2026-07-29
 
-This report records a local functional, privacy, browser, and performance evaluation of the
-current `0.1.0` research alpha. It is evidence from one machine, not a cross-platform performance
-guarantee.
+This report records a local functional, privacy, browser, performance, and unsigned native
+source-build evaluation of the current `0.1.0` research alpha. It is evidence from one machine, not
+a cross-platform performance guarantee or a signed-release certification.
 
 ## Verdict
 
@@ -21,11 +21,18 @@ The current Node.js product path works as a research alpha:
   4,096-event bounded generation, and the historical trace cursor remains below the target at
   15,000 events on this machine.
 - Exported trace scans found none of the synthetic prompt, command, session, or workspace markers.
+- A macOS 13+ SwiftUI/AppKit developer-preview target now builds from source without signing. It
+  contains a menu bar, restricted local `WKWebView`, transparent floating `NSPanel`, app-owned
+  dashboard supervisor, and closed Swift readiness/status decoders.
+- The native `AWFTests` target passes 33/33 with no skips, including an actual launch of the worker
+  copied into the built app and a validated loopback status fetch.
 
 It is not yet a distributable macOS application:
 
-- there is no SwiftUI/AppKit target, menu-bar app, transparent `NSPanel`, signed helper, DMG,
-  notarization, or one-click integration manager;
+- the source build has no Developer ID signature, notarization ticket, DMG, bundled Node runtime,
+  update path, start-at-login service, or one-click integration manager;
+- the native GitHub unit job has not reported on this branch, the UI target is excluded from that
+  job, and the local UI runner did not materialize its worker;
 - exact token usage is not measured;
 - actual Codex and Claude installations have not yet passed the provider acceptance matrix.
 
@@ -33,6 +40,8 @@ It is not yet a distributable macOS application:
 
 - Apple silicon Mac
 - macOS 26.5.2
+- Xcode 26.6 (build 17F113)
+- Swift 6.3.3
 - Node.js 22.22.3
 - npm 10.9.8
 - real hook entry point: `node scripts/hook.mjs`
@@ -46,19 +55,15 @@ smoke test.
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | Pass: 46 JavaScript files and 13 JSON files |
-| `npm test` | Pass: 146/146 |
-| Line coverage | 95.24% |
-| Branch coverage | 83.24% |
-| Function coverage | 94.82% |
-| `src/cli.mjs` line coverage | 63.02% |
-| `npm pack --dry-run --json` | Pass: 68 files, 1,757,124 bytes packed |
-| `npm audit --omit=dev --ignore-scripts` | Pass: 0 known vulnerabilities |
-| `doctor --json` | Pass: all 19 current checks, including live cursor/projection and spool readiness |
+| `npm run check` | Pass: 49 JavaScript files and 25 JSON files |
+| `npm test` | Pass: 154/154 |
+| Unsigned `xcodebuild ... build` | Pass locally: Debug app, Info.plist, en/ko localization, and `assets`/`bin`/`src` resources |
+| Native `AWFTests` | Pass locally: 33/33, 0 failures, 0 skips |
+| Native UI runner | Inconclusive: worker did not materialize or launch AWF in 74 seconds; interrupted |
 
-The doctor command currently proves repository files, data-directory access, live-spool
-initialization/maintenance, and the Node version. It does not prove that Codex or Claude has loaded
-and trusted the plugin.
+An earlier live-consumer snapshot recorded 95.24% line, 83.24% branch, and 94.82% function
+coverage, a clean dependency audit, and a passing package dry run. Those measurements were not
+rerun for this native-preview snapshot and are not presented as current native release gates.
 
 ## Functional end-to-end results
 
@@ -123,8 +128,40 @@ The real dashboard CLI was started on a random loopback port and random access t
 - signal state changed to `warn` and the tab title showed review state;
 - compact sentinel mode opened and expanded again;
 - light/dark mode and English/Korean switching worked;
-- browser output did not provide a truly transparent always-on desktop window. That requires the
-  planned native `NSPanel`.
+- browser output did not provide a truly transparent always-on desktop window. The new native
+  source preview implements that presentation separately with an `NSPanel`.
+
+### Native macOS developer preview
+
+The checked-in Xcode project exposes `AWF`, `AWFTests`, and `AWFUITests` plus a shared scheme. The
+unsigned Debug build:
+
+- compiled the Swift 6 app for a macOS 13 deployment target;
+- processed the explicit Info.plist and English/Korean localizations;
+- copied the reviewed `assets/`, `bin/`, and `src/` trees into app resources;
+- installed the transparent green guardian mark as the native app icon;
+- linked the SwiftUI/AppKit menu bar and sentinel with the WebKit dashboard window; and
+- required no third-party Swift package.
+
+The native protocol boundary accepts a maximum 1,024-byte exact `DashboardReadyV1` line and a
+maximum 16 KiB exact `DashboardStatusV1` response. The status client refuses redirects and the
+non-persistent `WKWebView` refuses navigation away from the exact tokenized loopback URL. Swift
+does not receive raw prompts, hook objects, commands, outputs, transcripts, source content, or
+detector state.
+
+The local `AWFTests` target passed all 33 tests without skips. The runtime tests also cover the
+minimum/newer Node boundary, old and malformed versions, override priority, and a bounded
+unresponsive probe. The end-to-end native test resolved the worker from the built app resources,
+launched it with a closed environment allowlist, parsed the bounded readiness line, fetched the
+exact empty status object, and stopped the child. A direct temporary-data launch also showed 0.0%
+CPU at a ten-second snapshot with about 96 MB RSS while its Node child used about 55 MB; normal
+application quit removed both processes.
+
+This is still not native release acceptance. The UI target compiled, but Xcode remained at
+“waiting for workers to materialize” for 74 seconds and never launched AWF, so the attempt was
+interrupted rather than reported as passed or failed. The first GitHub result, interactive UI
+automation on a working host, signed launch, notarization, and clean-machine testing remain
+pending.
 
 ## Privacy checks
 
@@ -174,14 +211,12 @@ The active recording added about 1.2 ms at p95 in that controlled comparison. Tr
 materially slow the hook because append does not reread the complete event file.
 
 The CLI lazily imports the dashboard so every hook process does not parse the dashboard bundle or
-load its images. The current checked-in `npm run benchmark:hook` gate measured the real subprocess
-with both the always-on spool and an active explicit semantic trace:
+load its images. The latest M1 `npm run benchmark:hook` rerun measured the real subprocess with
+both the always-on spool and an active explicit semantic trace:
 
-| Condition | Samples | p50 | p95 | p99 | Max |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Always-on spool + active semantic recording | 100 | 39.58 ms | 41.24 ms | 41.71 ms | 41.76 ms |
-
-Ten excluded warmups plus 100 measured calls committed sequence `110` with no missing live event.
+| Condition | p95 | p99 |
+| --- | ---: | ---: |
+| Always-on spool + active semantic recording | 71.916 ms | 76.311 ms |
 
 The checked-in `npm run benchmark:live-spool` saturated one full 4,096-event generation before
 forcing rotation:
@@ -194,17 +229,16 @@ forcing rotation:
 The steady-state gate is 100 ms p95 and the full-generation rotation gate is 1,000 ms. Both passed
 on this machine.
 
-The checked-in `npm run benchmark:live-dashboard` saturated the full 4,096-event generation,
-started the real loopback server, read status 100 times, forced rotation, observed the SSE reset,
-and published 100 more events:
+The latest isolated `npm run benchmark:live-dashboard` rerun saturated the full 4,096-event
+generation, started the real loopback server, read status repeatedly, forced rotation, observed the
+SSE reset, and published concurrently. The initial full-generation audit took 206.220 ms:
 
-| Cold audit | Warm status p95 | Concurrent publish p95 | Rotation | SSE reset visible | Drops |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 134.57 ms | 0.98 ms | 9.62 ms | 10.10 ms | 477.01 ms | 0 |
+| Warm status p95 | Concurrent publish p95 | Rotation | SSE reset visible | Drops |
+| ---: | ---: | ---: | ---: | ---: |
+| 1.566 ms | 10.604 ms | 15.022 ms | 461.907 ms | 0 |
 
 The SSE visibility number includes the dashboard's bounded polling interval; it is not hook-path
-latency. Cold audit, warm status, concurrent publication, and rotation all passed their checked-in
-limits.
+latency. Warm status, concurrent publication, and rotation passed their checked-in limits.
 
 The product target remains 100 ms p95. GitHub Actions enforces that budget on Ubuntu; the shared
 macOS runner uses a separate 150 ms CI budget because cold Node process creation showed materially
@@ -217,7 +251,7 @@ Not yet covered:
 - file-content hash work;
 - slow or nearly full disks;
 - Intel Macs and older supported macOS versions;
-- minimum supported Node.js 18.
+- performance on the minimum supported Node.js 18 runtime.
 
 ## Dashboard scaling before the cursor milestone
 
@@ -270,12 +304,11 @@ and bounded retention before calling the monitor suitable for 24–90 hour work.
 
 Resolution after this snapshot: the dashboard now performs one strict cold audit, then reads and
 audits only complete appended JSONL bytes. `npm run benchmark:dashboard` is checked in for
-reproduction. A same-machine post-fix run produced:
+reproduction. The latest same-machine 15,000-event rerun produced:
 
 | Events before append | Cold startup | Warm `/api/status` p95 | One-event append visible |
 | ---: | ---: | ---: | ---: |
-| 15,000 | 53.84 ms | 1.33 ms | 0.93 ms |
-| 100,000 | 322.95 ms | 4.09 ms | 3.27 ms |
+| 15,000 | 55.716 ms | 1.569 ms | 1.164 ms |
 
 The cold audit intentionally remains proportional to trace size; steady-state polling no longer
 rereads or reparses the whole file. This table remains the historical explicit-trace baseline.
@@ -292,10 +325,13 @@ The local Codex plugin list did not contain this project, and Claude Code was un
 claim of Codex/Claude compatibility still requires install, trust, live warning, upgrade, and
 uninstall smoke tests in the actual provider applications.
 
-### P1 — No native macOS product
+### Partially resolved P1 — No distributable native macOS product
 
-The requested menu-bar status, true transparent sentinel, start-at-login behavior, bundled runtime,
-signed application, and notarized GitHub artifact remain unimplemented.
+The source preview now implements the SwiftUI lifecycle, menu-bar status, restricted `WKWebView`,
+app-owned dashboard launch, and true transparent sentinel. It remains a no-go for public
+distribution because it still needs an installed Node.js runtime and has no start-at-login service,
+signed nested runtime, Developer ID artifact, notarization, DMG, integration manager, update path,
+or completed native acceptance matrix.
 
 ### P1 — No exact token accounting
 
@@ -347,12 +383,13 @@ audit, and a one-second retention-only maintenance loop. It never takes the publ
 3. ~~Implement `LiveEventV1`, a bounded always-on spool independent of explicit recording.~~
    Completed.
 4. ~~Connect the current dashboard projection to a generation-aware live-spool cursor.~~ Completed.
-5. Run the configured hook/dashboard checks on macOS and Linux CI after the repository is
-   published.
+5. Observe the updated Node and unsigned native build/unit jobs on GitHub CI.
 6. Add real Codex and Claude install/trust smoke tests.
-7. Build the SwiftUI/AppKit shell, menu bar, and transparent sentinel.
+7. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
+   implemented; native UI acceptance remains pending.
 8. Bundle/sign the worker and add install/repair/rollback/uninstall ownership tracking.
 9. Sign, notarize, staple, and Gatekeeper-test GitHub artifacts.
 10. Add optional actual-usage adapters and run the observe-only evaluation corpus.
 
-Current release classification: **working Node research alpha; no-go as an installable macOS beta**.
+Current release classification: **working Node research alpha plus unsigned native developer
+preview; no-go as an installable macOS beta**.

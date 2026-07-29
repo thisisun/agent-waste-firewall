@@ -11,8 +11,8 @@ The M0 live transport and browser-side presentation consumer are implemented:
 
 - `LiveEventV1` is an exact, dependency-free schema made only of closed enums, bounded numbers,
   rule/issue IDs, and one validated session alias.
-- A checked-in JSON Schema, protocol version registry, and valid/invalid conformance fixtures give
-  the later Swift decoder the same contract as the Node runtime validator.
+- Checked-in JSON Schemas, a protocol version registry, and valid/invalid conformance fixtures give
+  the Swift decoder the same readiness/status contracts as the Node runtime validators.
 - The projector constructs an event in memory from the detector result. It never records the raw
   hook object and redacts it later.
 - Every supported Codex or Claude Code hook makes a best-effort publication, whether or not the user
@@ -58,8 +58,96 @@ from one atomic cursor frame, and the browser accepts only exact allowlisted sta
 shapes. An empty healthy spool is connected but visually neutral/yellow; a known dropped
 best-effort publication is incomplete coverage; corruption is degraded.
 
-## Native shell remains pending
+## Native developer preview
 
-No SwiftUI/AppKit target, `MenuBarExtra`, transparent `NSPanel`, app-owned worker supervisor,
-provider integration manager, signed helper, DMG, or notarized artifact exists yet. Those tasks
-are now the next M1 work on top of the stable live-consumer contract.
+An unsigned, source-buildable macOS 13+ shell now exists under `macos/`:
+
+- `AWF.xcodeproj` contains the `AWF`, `AWFTests`, and `AWFUITests` targets and one shared `AWF`
+  scheme. It uses SwiftUI, AppKit, WebKit, Foundation, and XCTest without external packages.
+- The SwiftUI lifecycle owns a normal dashboard window and a `MenuBarExtra`; closing the main
+  window does not opt the app out of menu-bar operation.
+- A borderless, non-activating, transparent `NSPanel` stays independent of the main window. It
+  projects clear, review, danger, critical, degraded, and offline states. Only critical state adds
+  the translucent red panel background.
+- The app supervisor locates an installed Node.js 18+ executable with a bounded direct
+  `--version` probe, launches the bundled `bin/agent-waste-firewall.mjs dashboard --port 0 --json`,
+  accepts one bounded readiness line, and terminates only its presentation subprocess when the app
+  exits.
+- The app bundle copies the reviewed `assets/`, `bin/`, and `src/` directories as folder
+  resources. This packages the AWF JavaScript source but not a Node runtime.
+- The main window embeds the existing loopback dashboard in a non-persistent `WKWebView`.
+  Navigation is restricted to the exact tokenized `127.0.0.1` origin.
+- English and Korean `Localizable.strings` cover native status, action, rule, and failure labels.
+  The sentinel includes VoiceOver labels and respects Reduce Motion, Reduce Transparency, and
+  Differentiate Without Color.
+
+The source build has no Developer ID signature, notarization ticket, DMG, installer, update
+mechanism, or bundled/pinned Node runtime. It is a developer preview, not a downloadable beta.
+Provider install/repair/uninstall, start at login, signed helper lifecycle, and release packaging
+remain pending.
+
+## Native privacy boundary
+
+The native app does not receive a provider hook envelope, detector state, prompt, command, tool
+input/output, transcript, source file, or raw identifier. Its native protocol surface is limited to:
+
+- one exact `DashboardReadyV1` object capped at 1,024 bytes;
+- one exact `DashboardStatusV1` object capped at 16 KiB; and
+- the already-audited loopback document and SSE consumed inside the restricted `WKWebView`.
+
+Both public contracts have checked-in JSON Schemas, dependency-free Node validators, Swift closed
+decoders, and synthetic conformance fixtures. Redirects, oversized responses, unknown keys,
+non-loopback hosts, changed ports/tokens, and status regressions within one stream are rejected.
+WebKit uses `WKWebsiteDataStore.nonPersistent()`.
+
+The developer preview intentionally has App Sandbox disabled because it launches an externally
+installed Node executable and reads the non-container AWF data directory through that worker.
+Release hardening must therefore be evaluated again after a pinned runtime is bundled. No signing
+or sandbox claim should be inferred from an unsigned Debug build.
+
+## Source build and verification status
+
+The current portable rerun passed `npm run check` across 49 JavaScript and 25 JSON files and
+`npm test` with 154/154 tests. The same-machine performance rerun measured:
+
+| Path | Result |
+| --- | ---: |
+| Real hook subprocess | p95 71.916 ms; p99 76.311 ms |
+| Live dashboard full-generation cold audit | 206.220 ms |
+| Live dashboard warm status | p95 1.566 ms |
+| Concurrent live publication | p95 10.604 ms |
+| Full-generation rotation | 15.022 ms |
+| SSE reset visibility | 461.907 ms; 0 drops |
+| 15,000-event trace cursor | 55.716 ms cold startup; 1.569 ms status p95; 1.164 ms append visibility |
+
+SSE visibility includes the bounded polling interval and is not hook decision latency.
+
+The source compiles as an unsigned Debug application on the inspected Apple-silicon environment
+with Xcode 26.6 and Swift 6.3.3:
+
+```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+```
+
+This command verifies source compilation, the guardian-mark app icon, Info.plist processing,
+localization, and folder-resource assembly. It does not create a signed release. The local
+`AWFTests` target passed 33/33 tests with no skips, including Node 18+ probe boundaries, a real
+bundled-worker launch, closed-status fetch, child cancellation and forced reap, exact protocol
+decoding, navigation rejection, and the sentinel state table. A direct temporary-data launch
+remained idle at a 0.0% app CPU snapshot after ten seconds (about 96 MB app RSS and 55 MB Node RSS)
+and removed its Node child on normal quit.
+
+The UI target compiles, but the local Xcode 26.6 UI runner did not materialize its worker or launch
+the target app during a 74-second attempt, so that run was interrupted and is not counted as a UI
+pass or product failure. The new GitHub unit-test job has not yet reported on this branch, and no
+signed clean-machine launch matrix has run.

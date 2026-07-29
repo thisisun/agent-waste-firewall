@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "connected": true,
+  "source": "live",
+  "sourceState": "empty",
+  "streamHealth": "degraded",
+  "traceHealth": "degraded",
+  "coverage": "complete",
+  "generation": 0,
+  "streamAlias": null,
+  "mode": "warn",
+  "state": "idle",
+  "traceId": null,
+  "traceAlias": null,
+  "metrics": {
+    "events": 0,
+    "incidents": 0,
+    "avoidableCalls": 0,
+    "elapsedMs": 0
+  },
+  "lastSequence": 0,
+  "currentWarning": null,
+  "promptCoach": {
+    "issueIds": []
+  }
+}

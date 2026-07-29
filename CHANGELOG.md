@@ -42,3 +42,18 @@
 - Handle malformed local request targets without crashing, close active SSE connections on
   shutdown, recover streams after trace rotation, and display audited-trace failures as a red
   degraded state.
+- Publish closed `DashboardReadyV1` and `DashboardStatusV1` contracts with JSON Schemas, synthetic
+  conformance fixtures, dependency-free Node validators, and strict Swift decoders.
+- Add an unsigned macOS 13+ developer-preview Xcode project with SwiftUI/AppKit menu-bar lifecycle,
+  a non-persistent restricted `WKWebView`, app-owned loopback dashboard supervision, English/Korean
+  localization, and a transparent floating `NSPanel` sentinel.
+- Bundle the reviewed `assets`, `bin`, and `src` trees into the developer-preview app while retaining
+  an explicit installed-Node.js requirement; no signed or notarized distribution artifact is
+  claimed.
+- Add native unit and UI test targets and an unsigned macOS pull-request build/unit job. UI
+  automation, Developer ID signing, notarization, and clean-machine acceptance remain release
+  gates.
+- Add the transparent green guardian mark as the native app icon, remove a `MenuBarExtra`
+  write-back loop that caused runaway CPU/memory, and launch the worker with a closed environment
+  allowlist. Node discovery now validates major version 18+ with a bounded direct probe. The local
+  native unit/integration target passes 33/33 tests with no skips.

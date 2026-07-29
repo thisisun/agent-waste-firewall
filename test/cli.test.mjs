@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +50,102 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
         check.check === "bounded live spool is ready" && check.ok === true,
     ),
   );
+});
+
+test("dashboard emits one closed JSON readiness record", async (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-ready-"),
+  );
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const child = spawn(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "dashboard",
+      "--port",
+      "0",
+      "--json",
+    ],
+    {
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (!child.killed) child.kill("SIGTERM");
+  });
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const firstLine = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Dashboard readiness timed out.")),
+      5000,
+    );
+    const inspect = () => {
+      const newline = stdout.indexOf("\n");
+      if (newline < 0) return;
+      clearTimeout(timeout);
+      resolve(stdout.slice(0, newline));
+    };
+    child.stdout.on("data", inspect);
+    inspect();
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (!stdout.includes("\n")) {
+        clearTimeout(timeout);
+        reject(
+          new Error(
+            `Dashboard exited before readiness (${code}): ${stderr}`,
+          ),
+        );
+      }
+    });
+  });
+  const ready = JSON.parse(firstLine);
+  assert.deepEqual(Object.keys(ready), [
+    "v",
+    "kind",
+    "host",
+    "port",
+    "token",
+    "source",
+  ]);
+  assert.deepEqual(
+    {
+      ...ready,
+      port: 4319,
+      token: "0".repeat(48),
+    },
+    {
+      v: 1,
+      kind: "dashboard_ready",
+      host: "127.0.0.1",
+      port: 4319,
+      token: "0".repeat(48),
+      source: "live",
+    },
+  );
+  const status = await fetch(
+    `http://127.0.0.1:${ready.port}/api/status?token=${ready.token}`,
+  );
+  assert.equal(status.status, 200);
+  assert.equal((await status.json()).source, "live");
+
+  child.kill("SIGTERM");
+  await new Promise((resolve) => child.once("close", resolve));
+  assert.equal(stdout.trim(), firstLine);
+  assert.equal(stderr, "");
 });
 
 test("replays a JSONL incident fixture", () => {

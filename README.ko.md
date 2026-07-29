@@ -16,6 +16,9 @@ AWF는 Codex와 Claude Code가 일하는 동안 옆에서 켜 두는 로컬 실�
 `LiveEventV1` 의미 이벤트 저장소, 원문 비저장 녹화, 익명 의미 재생, 로컬 대시보드가
 동작합니다. 훅에는 정확한 토큰 사용량이 없으므로 아직 “몇 토큰을 절약했다”고 주장하지
 않고, 절감 후보 호출 수와 감지 시점을 보여줍니다.
+SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패널을 포함한 macOS
+개발자 미리보기도 소스에 들어 있습니다. 다만 아직 서명·공증·패키징된 앱이 아니며,
+설치된 Node.js 18 이상이 필요합니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했지만, 각 프로그램에 설치한
 상태의 승인·업그레이드·제거 검증은 아직 남아 있습니다.
 대시보드는 별도 녹화 없이 상시 `LiveEventV1` 저장소를 기본으로 읽습니다. 완성된 신규
@@ -63,7 +66,32 @@ node bin/agent-waste-firewall.mjs dashboard
 다시 열립니다. 상태는 녹색 → 노란색 → 빨간색으로 바뀌며, 높은 심각도가 반복되면 축소
 화면 전체가 짙은 빨간색으로 전환됩니다. 같은 상태를 브라우저 탭 제목과 파비콘에도
 표시합니다. 브라우저 창은 운영체제에서 최소화하면 화면 위에 남을 수 없으므로, 실제
-메뉴 막대·트레이 상시 표시는 후속 데스크톱 셸에서 이 의미 상태를 그대로 재사용합니다.
+메뉴 막대와 투명 `NSPanel`은 아래 macOS 개발자 미리보기에서 이 의미 상태를 그대로
+재사용합니다.
+
+### macOS 개발자 미리보기
+
+macOS 13 이상과 Xcode가 필요합니다. 현재 프로젝트는 검토된 `bin/`, `src/`, `assets/`
+폴더를 앱 리소스에 포함하지만, 실행에는 시스템에 설치된 Node.js 18 이상을 사용합니다.
+서명하지 않은 소스 빌드는 다음과 같이 확인합니다.
+
+```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+```
+
+이 명령은 컴파일·번들 구성을 확인할 뿐 배포용 앱을 만들지 않습니다. Developer ID 서명,
+공증, DMG, 설치 프로그램, 내장 Node 런타임은 아직 없습니다. 실제 개발 실행은
+`macos/AWF.xcodeproj`를 Xcode에서 열고 로컬 서명을 사용합니다.
 
 - `observe`: 감지만 기록하고 에이전트 작업에는 개입하지 않음
 - `warn`: 감지 내용을 사용자 화면과 에이전트 문맥에 짧게 전달
@@ -94,6 +122,11 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 
 원문 훅 JSON을 저장한 뒤 마스킹하지 않습니다. 훅을 받은 메모리 안에서 즉시 의미 이벤트로
 변환하고, 허용된 필드만 저장합니다.
+
+네이티브 미리보기도 원문 훅을 받지 않습니다. 제한된 `dashboard_ready`와
+`DashboardStatusV1` 계약만 Swift에서 검증하고, WebKit 데이터 저장소는 비영구 모드이며
+정확한 토큰 포함 `127.0.0.1` 주소 이외의 이동을 거부합니다. 외부 Node를 실행해야 하므로
+현재 미리보기는 App Sandbox를 사용하지 않으며, 공개 보안 강화 빌드로 간주하면 안 됩니다.
 
 로컬 탐지 상태에도 작업공간 이름, 파일명·경로, provider 도구명은 남기지 않습니다.
 프롬프트·호출·결과·파일·작업공간은 세션 범위의 키 기반 별칭으로만 연결합니다.
@@ -152,6 +185,9 @@ manifest로 처리하며 탐지 코어와 대시보드는 공유합니다.
 - 저장소가 바쁘거나 사용할 수 없으면 의미 이벤트가 누락될 수 있습니다. 확인 가능한
   순서 공백과 drop 표시는 `불완전한 관측`으로 보여주지만, 저장장치 자체가 실패하면 그
   표시도 기록하지 못할 수 있습니다.
+- macOS 앱은 서명하지 않은 소스 미리보기이며 설치된 Node.js 18 이상에 의존합니다.
+  네이티브 UI 승인, Developer ID 서명, 공증, 깨끗한 Mac 설치·업그레이드·제거 검증은
+  아직 완료되지 않았습니다.
 
 영문 문서는 [README.md](README.md), 코어 설계는
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), macOS 제품 구조는

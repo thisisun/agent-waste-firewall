@@ -14,6 +14,7 @@ import {
   projectTraceDashboardEvent,
   projectTraceDashboardStatus,
 } from "./dashboard-projection.mjs";
+import { validateDashboardStatus } from "./dashboard-status-schema.mjs";
 import { DashboardTraceCursor } from "./dashboard-trace-cursor.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
 import { TraceStore } from "./trace-store.mjs";
@@ -354,7 +355,7 @@ export async function startDashboard(options = {}) {
     cursor.readEvents();
     projectEvent = projectLiveDashboardEvent;
     snapshotStatus = (snapshot) =>
-      liveStatusPayload(cursor, snapshot);
+      validateDashboardStatus(liveStatusPayload(cursor, snapshot));
   } else {
     store =
       options.store ??
@@ -372,7 +373,9 @@ export async function startDashboard(options = {}) {
     cursor.readEvents();
     projectEvent = projectTraceDashboardEvent;
     snapshotStatus = (snapshot) =>
-      traceStatusPayload(store, traceId, cursor, snapshot);
+      validateDashboardStatus(
+        traceStatusPayload(store, traceId, cursor, snapshot),
+      );
   }
   let actualPort = port;
   const urlHost = host === "::1" ? "[::1]" : host;

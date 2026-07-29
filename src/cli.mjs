@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { configFromEnv } from "./config.mjs";
+import { dashboardReady } from "./dashboard-ready-schema.mjs";
 import { handleHook } from "./engine.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
 import { evaluatePrompt } from "./prompt-contract.mjs";
@@ -92,7 +93,7 @@ Usage:
   agent-waste-firewall record start --workspace <path> --label <safe-label> [--mode observe|warn|block] [--json]
   agent-waste-firewall record status [--json]
   agent-waste-firewall record stop [--json]
-  agent-waste-firewall dashboard [trace-id] [--port 4319]
+  agent-waste-firewall dashboard [trace-id] [--port 4319] [--json]
   agent-waste-firewall trace list [--json]
   agent-waste-firewall trace audit <trace-id> [--json]
   agent-waste-firewall trace export <trace-id> --output <trace.jsonl> [--json]
@@ -382,6 +383,7 @@ async function commandTrace(args, env = process.env) {
 async function commandDashboard(args, env = process.env) {
   const { startDashboard } = await import("./dashboard-server.mjs");
   const config = configFromEnv(env);
+  const json = args.includes("--json");
   const traceId = positionalArguments(args, ["--port"])[0] ?? null;
   const dashboard = await startDashboard({
     root: config.dataDir,
@@ -391,8 +393,21 @@ async function commandDashboard(args, env = process.env) {
     mode: config.mode,
     env,
   });
-  console.log(`AWF dashboard: ${dashboard.url}`);
-  console.log("Press Ctrl-C to stop the local dashboard.");
+  if (json) {
+    console.log(
+      JSON.stringify(
+        dashboardReady({
+          host: dashboard.host,
+          port: dashboard.port,
+          token: dashboard.token,
+          source: dashboard.source,
+        }),
+      ),
+    );
+  } else {
+    console.log(`AWF dashboard: ${dashboard.url}`);
+    console.log("Press Ctrl-C to stop the local dashboard.");
+  }
 
   await new Promise((resolve) => {
     let closing = false;
@@ -446,6 +461,8 @@ async function commandDoctor(args, env = process.env) {
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
     "src/dashboard-server.mjs",
+    "src/dashboard-ready-schema.mjs",
+    "src/dashboard-status-schema.mjs",
     "src/dashboard-live-cursor.mjs",
     "src/dashboard-projection.mjs",
     "src/dashboard-trace-cursor.mjs",

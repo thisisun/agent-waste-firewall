@@ -8,6 +8,20 @@
       ],
       "schema": "live-event-v1.schema.json"
     },
+    "dashboardReady": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "dashboard-ready-v1.schema.json"
+    },
+    "dashboardStatus": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "dashboard-status-v1.schema.json"
+    },
     "detectorState": {
       "current": 4,
       "supported": [

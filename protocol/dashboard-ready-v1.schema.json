@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/dashboard-ready-v1.schema.json",
+  "title": "DashboardReadyV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "kind",
+    "host",
+    "port",
+    "token",
+    "source"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "kind": {
+      "const": "dashboard_ready"
+    },
+    "host": {
+      "const": "127.0.0.1"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{48}$"
+    },
+    "source": {
+      "enum": [
+        "live",
+        "trace"
+      ]
+    }
+  }
+}

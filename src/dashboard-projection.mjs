@@ -165,6 +165,7 @@ export function projectTraceDashboardStatus({
       mode: "observe",
       state: "idle",
       traceId: null,
+      traceAlias: null,
       metrics: {
         events: 0,
         incidents: 0,

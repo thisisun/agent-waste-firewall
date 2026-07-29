@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kind": "dashboard_ready",
+  "host": "127.0.0.1",
+  "port": 4319,
+  "token": "0123456789abcdef0123456789abcdef0123456789abcdef",
+  "source": "live",
+  "message": "SECRET-READY-PROSE"
+}

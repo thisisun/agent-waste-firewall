@@ -27,6 +27,7 @@ Native shell:
 
 - a supported macOS development machine;
 - the current stable Xcode capable of targeting macOS 13 or newer;
+- Node.js 18 or newer for the current developer preview;
 - an Apple Developer Program identity only for signed/notarized release builds.
 
 Run the current baseline before changing anything:
@@ -64,10 +65,11 @@ Deliverables:
 - fixtures for every valid event and adversarial privacy canaries;
 - rotation to a new unlinkable live generation when a retention boundary is reached.
 
-The language-neutral JSON Schema, version registry, and synthetic positive, productive-progress,
-privacy, and incompatible-version fixtures live under `protocol/`. Runtime validation remains
-dependency-free. When the Swift validator is introduced, run it against the same conformance corpus;
-do not make the hook runtime depend on a schema package.
+The language-neutral JSON Schemas, version registry, and synthetic positive,
+productive-progress, privacy, and incompatible-version fixtures live under `protocol/`. Runtime
+validation remains dependency-free. The native preview now has closed Swift readiness/status
+decoders; keep their conformance tests aligned with the same public corpus without making the hook
+runtime depend on a schema package.
 
 Acceptance:
 
@@ -80,6 +82,13 @@ Acceptance:
 ### M1 — Native read-only shell
 
 Goal: make the current live monitor feel like a real Mac app without changing enforcement.
+
+Implementation status: an unsigned macOS 13+ developer preview is source-buildable. It implements
+the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboard subprocess, and
+transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The local
+`AWFTests` target passes 33/33 with no skips, including the real bundled worker. M1 acceptance is
+still incomplete because GitHub unit results, a successfully materialized UI run, signed launch,
+and clean-machine tests remain pending.
 
 Deliverables:
 
@@ -273,25 +282,27 @@ sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical 
 Do not let Swift invent detector meaning. Swift receives typed IDs and numbers, then maps IDs to
 localized copy and visual state.
 
-### Step 4: scaffold the Xcode project
+### Step 4: scaffold the Xcode project — developer preview implemented
 
-Create one macOS application target, one unit-test target, and one UI-test target under `macos/`.
-Suggested modules:
+The project contains one macOS application target, one unit-test target, one UI-test target, and a
+shared scheme under `macos/`. Current modules:
 
 ```text
-App/              lifecycle, commands, window routing
-Engine/           worker discovery, version handshake, dashboard supervisor
-Integrations/     Codex and Claude install/status adapters
+App/              lifecycle, window routing, observable presentation state
+Engine/           Node/worker discovery, dashboard supervisor, status client
 MenuBar/          compact state and actions
+Protocol/         closed readiness/status decoders and stream regression guard
 Sentinel/         NSPanel controller and state renderer
-Dashboard/        WKWebView and local navigation policy
-Settings/         mode, startup, retention, notifications, privacy
-Resources/        localized copy and packaged audited web assets
+Dashboard/        WKWebView and exact local navigation policy
+Resources/        Info.plist and English/Korean localized copy
+AWFTests/         protocol, navigation, runtime, supervisor, and projection tests
+AWFUITests/       initial app-lifecycle smoke test
 ```
 
-Use protocol-based Swift interfaces around the file watcher, engine supervisor, integration
-manager, and notification sender. Unit tests can then use temporary directories and fake clocks
-without launching provider tools.
+`assets/`, `bin/`, and `src/` are copied into the application as folder resources. There are no
+external Swift packages. Integrations, Settings, a version handshake, and a notification sender
+remain later milestones. Introduce protocol-based interfaces around those future side effects so
+tests can use temporary directories and fake clocks.
 
 The Swift process must not read or mutate `StateStore` JSON. That state contains detector-internal
 metadata not approved for presentation and must have one writer: the Node worker.
@@ -300,8 +311,10 @@ metadata not approved for presentation and must have one writer: the Node worker
 
 Developer preview:
 
-- discover Node 18+ explicitly;
-- show the resolved executable and version in health UI;
+- bundles the reviewed JavaScript worker source, dashboard source, and visual assets;
+- discovers Node 18+ explicitly with a bounded direct `--version` probe and no interactive shell;
+- accepts `AWF_NODE_PATH` only as an absolute regular executable path;
+- still needs to show the resolved executable and version in health UI;
 - never assume an interactive shell `PATH`;
 - fail with an actionable install message.
 
@@ -438,15 +451,38 @@ npm run benchmark:live-dashboard
 npm run benchmark:dashboard
 ```
 
-After the native target exists, also run:
+The unsigned source build and unit-only test commands are:
 
 ```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+
 xcodebuild \
   -project macos/AWF.xcodeproj \
   -scheme AWF \
+  -configuration Debug \
   -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  -only-testing:AWFTests \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
   test
 ```
+
+These commands intentionally do not sign the app. They prove neither Developer ID distribution nor
+notarization. Run `AWFUITests` separately on an interactive macOS test host; the pull-request job
+does not execute UI automation.
 
 PR description checklist:
 
@@ -461,11 +497,12 @@ PR description checklist:
 
 ## Continuous integration
 
-Recommended GitHub Actions jobs:
+Current and recommended GitHub Actions jobs:
 
 1. Node checks and tests on macOS and Linux with the minimum and current supported Node versions.
 2. Privacy/schema adversarial suite on every pull request.
-3. Xcode build and unit tests on a pinned macOS runner.
+3. Unsigned Xcode build and `AWFTests` on the macOS runner. The same commands pass locally; the
+   first branch result must still be observed before calling the CI gate validated.
 4. UI smoke tests on protected branches or nightly runs.
 5. Unsigned reproducible artifact assembly for pull requests.
 6. Signed/notarized release only from a protected tag environment.

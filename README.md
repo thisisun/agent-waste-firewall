@@ -5,12 +5,12 @@
 Local-first live monitoring, prompt coaching, and no-progress circuit breakers for Codex and
 Claude Code.
 
-> Status: `0.1.0` research alpha. The live hook path, bounded always-on `LiveEventV1` spool,
-> generation-aware dashboard, anonymized recorder, and replay work and are tested. The dashboard
-> consumes the live spool by default without `record start`; an explicit trace ID opens historical
-> audited data. Exact token accounting, a native macOS shell, and one-command installation are not
-> implemented yet. Provider-shaped events pass the real hook executable, but installed Codex and
-> Claude Code acceptance tests are still pending.
+> Status: `0.1.0` research alpha with an unsigned native macOS developer preview. The live hook
+> path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, anonymized recorder, and
+> replay work and are tested. The source tree now also contains a SwiftUI/AppKit menu-bar shell,
+> local `WKWebView`, and transparent floating sentinel. It is not a signed, notarized, or packaged
+> release and still needs an installed Node.js 18+ runtime. Exact token accounting, one-command
+> installation, and installed Codex/Claude acceptance tests remain pending.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -48,6 +48,13 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Keeps warning state independent for concurrent pseudonymous sessions. The sentinel, tab title,
   and favicon move from green to yellow to red; repeated high-severity signals also turn the
   compact background deep red.
+- Provides an unsigned macOS 13+ source preview with a `MenuBarExtra`, app-owned loopback dashboard
+  process, non-persistent `WKWebView`, and transparent floating `NSPanel`. The native sentinel maps
+  only validated status enums and counters to clear, review, danger, critical, degraded, or offline
+  presentation.
+- Validates the dashboard readiness line and status response against exact closed Swift contracts,
+  refuses redirects and non-exact loopback navigation, and keeps the Node detector independent of
+  the app lifecycle.
 - Audits every semantic event against a closed schema before export and rejects unknown fields,
   free text, paths, URLs, emails, and common secret formats.
 - Fails open if its hook cannot run, but shows a rate-limited warning instead of silently disabling
@@ -81,8 +88,32 @@ waiting; live events appear as the hooks publish them.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
-web alpha also mirrors the state in the tab title and favicon. A future desktop shell can reuse the
-same audited semantic state for a menu-bar or tray indicator.
+web alpha also mirrors the state in the tab title and favicon.
+
+### Native macOS developer preview
+
+The repository includes an Xcode project for macOS 13 or newer. It bundles the reviewed `bin/`,
+`src/`, and `assets/` directories into the app resources, but intentionally uses an installed
+Node.js 18+ executable during this developer-preview phase. Build the source without signing:
+
+```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+```
+
+This is a compile/package check, not a distributable artifact. It has no Developer ID signature,
+notarization ticket, DMG, installer, or bundled Node runtime. For interactive development, open
+`macos/AWF.xcodeproj` in Xcode and use local signing. The app searches explicit and standard Node
+locations; `AWF_NODE_PATH` may point to an absolute regular executable for development.
 
 An explicit research trace is still opt-in and is the only source that can be audited, exported,
 or replayed. To capture one workspace:
@@ -118,6 +149,14 @@ The dashboard is a local sidecar web app, not a cloud service. It binds only to 
 outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE
 endpoints share one audited cursor snapshot so a generation change cannot mix old status with new
 events.
+
+The native preview does not widen that observation boundary. Its supervisor receives one bounded,
+closed `dashboard_ready` record, and its status client accepts only the closed `DashboardStatusV1`
+shape. The embedded WebKit store is non-persistent and navigation is restricted to the exact
+tokenized `127.0.0.1` dashboard origin. Raw prompts, tool inputs, outputs, transcripts, source
+content, and detector state are never sent to Swift. The preview is not App Sandbox-contained
+because it must launch an external Node executable; this is another reason it is a source preview,
+not a public security-hardened build.
 
 ## Modes
 
@@ -249,6 +288,8 @@ Codex / Claude hook event
  strict semantic serializer
           │
           ├──► bounded always-on LiveEventV1 spool ─► default loopback dashboard
+          │                                      ├──► browser
+          │                                      └──► native macOS preview
           └──► explicit trace ─► historical dashboard / audit / export / replay
 ```
 
@@ -276,6 +317,9 @@ See [core architecture](docs/ARCHITECTURE.md),
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
+- The native app is currently an unsigned source build. It depends on an installed Node.js 18+
+  executable and has not completed UI acceptance, Developer ID signing, notarization, clean-machine
+  installation, upgrade, or uninstall testing.
 - Windows hook loading has not been tested in this repository yet.
 - Cross-session semantic duplicate-task detection is not implemented.
 
@@ -285,8 +329,8 @@ See [core architecture](docs/ARCHITECTURE.md),
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.
-4. Package the working live projection with the
-   [documented native macOS shell](docs/MACOS-ARCHITECTURE.md).
+4. Complete native UI acceptance, bundle a pinned worker runtime, and sign/notarize the
+   [macOS shell](docs/MACOS-ARCHITECTURE.md).
 5. Add one-command installation only after safe upgrade/uninstall behavior is tested.
 
 ## License
