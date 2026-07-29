@@ -102,10 +102,10 @@ the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboa
 transparent `NSPanel` sentinel. It still depends on an installed Node.js runtime. The native
 sentinel decodes `ProviderIntegrationStatusV1` and remains yellow until fresh audited provider
 activity is observed; retained or expired activity cannot make it green. The local `AWFTests`
-target passes 36/36 with no skips, including the real bundled worker. The configured GitHub
-unsigned build/unit job passed on the prior PR head and must be rechecked after current changes
-are pushed. M1 acceptance is still incomplete because a successfully
-materialized UI run, signed launch, and clean-machine tests remain pending.
+target passes 36/36 with no skips, including the real bundled worker. The current PR head passes
+the configured GitHub Node matrix, dashboard benchmark jobs, and unsigned native build/unit job.
+M1 acceptance is still incomplete because a successfully materialized UI run, signed launch, and
+clean-machine tests remain pending.
 
 Deliverables:
 

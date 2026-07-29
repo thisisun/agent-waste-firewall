@@ -37,8 +37,9 @@ It is not yet a distributable macOS application:
 
 - the source build has no Developer ID signature, notarization ticket, DMG, bundled Node runtime,
   update path, start-at-login service, or one-click integration manager;
-- the configured native GitHub build/unit job passed on the prior PR head, but the UI target is
-  excluded from that job and the local UI runner did not materialize its worker;
+- the current PR head passes the configured GitHub Node matrix, dashboard benchmark jobs, and
+  native build/unit job, but the UI target is excluded and the local UI runner did not materialize
+  its worker;
 - exact token usage is not measured;
 - actual user-owned Codex `/hooks` trust/live delivery and Claude installation have not yet passed
   the provider acceptance matrix.
@@ -228,9 +229,11 @@ entry.
 
 This is still not native release acceptance. The UI target compiled, but Xcode remained at
 “waiting for workers to materialize” for 74 seconds and never launched AWF, so the attempt was
-interrupted rather than reported as passed or failed. The configured GitHub build/unit job passed
-on the prior PR head; current-head CI is rechecked after push. Interactive UI automation on a
-working host, signed launch, notarization, and clean-machine testing remain pending.
+interrupted rather than reported as passed or failed. All seven configured GitHub jobs pass on the
+current PR head. The first Ubuntu hook benchmark attempt had a transient p95 of 195.751 ms while
+the unchanged hot path's p50 was 52.339 ms; the failed-job rerun passed at 57.129 ms p95 without a
+code or threshold change. Interactive UI automation on a working host, signed launch,
+notarization, and clean-machine testing remain pending.
 
 ## Privacy checks
 
@@ -462,7 +465,8 @@ audit, and a one-second retention-only maintenance loop. It never takes the publ
    activity.~~ Completed.
 6. ~~Add an isolated Codex marketplace/install/direct-hook/privacy acceptance runner.~~ Completed
    and passed on this Mac.
-7. Observe the updated Node and unsigned native build/unit jobs on GitHub CI.
+7. ~~Observe the updated Node and unsigned native build/unit jobs on GitHub CI.~~ Current PR head
+   passes all seven configured jobs.
 8. Add user-owned Codex `/hooks` trust/live-delivery and Claude install/trust smoke tests.
 9. ~~Build the SwiftUI/AppKit source shell, menu bar, and transparent sentinel.~~ Developer preview
    implemented; native UI acceptance remains pending.
