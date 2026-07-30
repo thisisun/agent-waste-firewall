@@ -354,9 +354,17 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
   연동 수명주기와 UI는 구현됐지만 저장소에는 생성된 Node 바이너리가 없습니다. 소스
   미리보기 대시보드는 설치된 Node.js 18 이상에 의존합니다. Developer ID 서명, 공증,
   clean-machine provider 전달과 배포 패키지는 아직 완료되지 않았습니다.
-- 2026-07-30 로컬 훅 성능은 100 ms 제품 목표를 넘었습니다. 외부 Node 경로의 두 번
-  p95는 129.037 ms와 210.986 ms였고, 봉인된 네이티브 경로는 248.935 ms였습니다.
-  대시보드와 spool gate는 통과했지만 훅 시작 최적화는 공개 베타 차단 조건입니다.
+- 검사한 Apple-silicon Mac에서 2026-07-30 current-head를 통제된 조건으로 다시 측정한
+  결과, 측정한 모든 내부 훅 경로가 p95 100 ms 제품 목표 아래였습니다. 5회 warmup 뒤
+  50개 표본을 세 번 측정했을 때 외부 launcher는 활성 trace 없이
+  64.670/49.438/48.692 ms, 활성 trace에서 50.294/57.978/50.585 ms였습니다. 네이티브
+  내부 경로는 각각 60.054/60.040/60.271 ms와 66.668/60.684/60.999 ms였습니다.
+- 이 측정에는 내부 shell, 실제 worker, 상시 live spool이 포함되고, 네이티브 경로에는
+  서명하지 않은 Debug helper와 현재 Node runtime의 임시 복제본도 포함됩니다. provider
+  dispatch와 provider가 만드는 바깥 shell은 제외했고 runtime prewarm도 포함하지
+  않았습니다. 따라서 더 넓은 지원 Mac 범위나 clean machine 성능까지 증명하지는
+  않습니다. 이전 loaded-host 및 봉인 runtime 수치는 검증 보고서에 과거 변동 근거로
+  남겨 두었습니다.
 - macOS shim은 안전한 고정 사용자 helper를 우선 사용할 수 있지만, helper가 없거나
   unsafe하면 외부 Node 알파 경로를 유지합니다. helper 호출 뒤 activation 오류는
   fail-open하고 Node로 재시도하지 않습니다. provider가 시작하는 최초 interpreter/loader와

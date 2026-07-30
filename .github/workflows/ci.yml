@@ -52,7 +52,10 @@ jobs:
       - run: npm ci --ignore-scripts
       # Process startup on shared macOS runners has materially higher variance than local
       # execution. The product target remains 100 ms; CI uses a separate runner budget.
-      - run: npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
+      - name: Benchmark default hook path
+        run: npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
+      - name: Benchmark explicit trace hook path
+        run: npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
       - run: npm run benchmark:dashboard -- --events 15000 --requests 100 --sessions 16 --p95-ms 100
 
   native-macos:
@@ -99,10 +102,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM= \
             test
-      - name: Benchmark native hook path
+      - name: Benchmark default native hook path
         # The product target remains 100 ms p95 on a supported local Mac.
         # Shared runners showed materially higher multi-process startup variance,
         # so CI keeps a separate regression budget.
+        run: |
+          npm run benchmark:native-hook -- \
+            --helper "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+            --no-trace \
+            --samples 50 \
+            --warmups 5 \
+            --p95-ms 350
+      - name: Benchmark explicit trace native hook path
         run: |
           npm run benchmark:native-hook -- \
             --helper "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \

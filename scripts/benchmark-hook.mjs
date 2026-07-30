@@ -29,6 +29,7 @@ function percentile(values, fraction) {
 const sampleCount = integerArgument("--samples", 100, 10_000);
 const warmupCount = integerArgument("--warmups", 10, 1_000);
 const p95LimitMs = integerArgument("--p95-ms", 100, 60_000);
+const activeSemanticTrace = !process.argv.includes("--no-trace");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "awf-hook-benchmark-"));
 const workspace = path.join(root, "workspace");
 const dataDir = path.join(root, "data");
@@ -50,11 +51,13 @@ const env = {
   AGENT_WASTE_FIREWALL_PLATFORM: "codex",
 };
 const traceStore = new TraceStore({ root: dataDir, env });
-traceStore.start({
-  workspace,
-  label: "hook-benchmark",
-  mode: "observe",
-});
+if (activeSemanticTrace) {
+  traceStore.start({
+    workspace,
+    label: "hook-benchmark",
+    mode: "observe",
+  });
+}
 
 function invokeHook(index) {
   const payload = {
@@ -101,6 +104,18 @@ try {
   if (liveStatus?.committedSeq !== expectedEventCount) {
     throw new Error("Always-on live spool did not publish every benchmark event.");
   }
+  const traceStatus = traceStore.status();
+  if (
+    activeSemanticTrace
+      ? traceStatus?.eventCount !== expectedEventCount
+      : traceStatus !== null
+  ) {
+    throw new Error(
+      activeSemanticTrace
+        ? "Explicit trace did not record every benchmark event."
+        : "No-trace benchmark unexpectedly created an explicit trace.",
+    );
+  }
   console.log(
     JSON.stringify(
       {
@@ -110,7 +125,8 @@ try {
         nativeHelperIncluded: false,
         providerShellIncluded: false,
         innerShellShimIncluded: true,
-        activeSemanticTrace: true,
+        activeSemanticTrace,
+        traceEventCount: traceStatus?.eventCount ?? 0,
         alwaysOnLiveSpool: true,
         liveCommittedSequence: liveStatus.committedSeq,
         liveRetainedEventCount: liveStatus.eventCount,

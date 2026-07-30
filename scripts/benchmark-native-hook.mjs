@@ -67,6 +67,7 @@ if (process.platform !== "darwin") {
 const sampleCount = integerArgument("--samples", 100, 10_000);
 const warmupCount = integerArgument("--warmups", 10, 1_000);
 const p95LimitMs = integerArgument("--p95-ms", 100, 60_000);
+const activeSemanticTrace = !process.argv.includes("--no-trace");
 const builtHelper = absoluteFileArgument("--helper");
 const builtRuntime = optionalAbsoluteFileArgument(
   "--runtime",
@@ -197,11 +198,13 @@ function invokeHook(index) {
 
 try {
   const runtimePrewarmMs = prewarmRuntime();
-  traceStore.start({
-    workspace,
-    label: "native-hook-benchmark",
-    mode: "observe",
-  });
+  if (activeSemanticTrace) {
+    traceStore.start({
+      workspace,
+      label: "native-hook-benchmark",
+      mode: "observe",
+    });
+  }
   for (let index = 0; index < warmupCount; index += 1) {
     invokeHook(index);
   }
@@ -218,6 +221,18 @@ try {
   const expectedEventCount = sampleCount + warmupCount;
   if (liveStatus?.committedSeq !== expectedEventCount) {
     throw new Error("Native hook did not publish every benchmark event.");
+  }
+  const traceStatus = traceStore.status();
+  if (
+    activeSemanticTrace
+      ? traceStatus?.eventCount !== expectedEventCount
+      : traceStatus !== null
+  ) {
+    throw new Error(
+      activeSemanticTrace
+        ? "Native explicit trace did not record every benchmark event."
+        : "Native no-trace benchmark unexpectedly created an explicit trace.",
+    );
   }
   const liveEvents = liveStore.readEvents();
   if (
@@ -238,7 +253,8 @@ try {
         runtimeSource,
         runtimePrewarmIncludedInLatency: false,
         runtimePrewarmMs,
-        activeSemanticTrace: true,
+        activeSemanticTrace,
+        traceEventCount: traceStatus?.eventCount ?? 0,
         alwaysOnLiveSpool: true,
         liveCommittedSequence: liveStatus.committedSeq,
         liveRetainedEventCount: liveStatus.eventCount,

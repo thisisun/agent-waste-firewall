@@ -528,9 +528,17 @@ See [core architecture](docs/ARCHITECTURE.md),
   therefore still uses an installed Node.js 18+ executable in source-preview builds. Developer ID
   release signing, notarization, clean-machine provider delivery, and distribution packaging
   remain incomplete.
-- The 2026-07-30 local hook benchmarks missed the 100 ms product target: external-Node p95 was
-  129.037 ms and 210.986 ms in two runs, and the sealed native path was 248.935 ms. The dashboard
-  and spool gates passed, but hook-startup optimization remains a public-beta blocker.
+- A controlled 2026-07-30 current-head rerun on the inspected Apple-silicon Mac put every measured
+  inner hook path below the 100 ms p95 product target. Three 50-sample generations after five
+  warmups measured the external launcher at 64.670/49.438/48.692 ms without an active trace and
+  50.294/57.978/50.585 ms with one. The native inner path measured
+  60.054/60.040/60.271 ms without a trace and 66.668/60.684/60.999 ms with one.
+- Those measurements include the inner shell, real worker, and always-on live spool; the native
+  arm also includes an unsigned Debug helper and a temporary clone of the current Node runtime.
+  They exclude provider dispatch and the provider-created outer shell, do not include runtime
+  prewarming, and do not establish performance across broader supported Macs or a clean machine.
+  Earlier loaded-host and sealed-runtime baselines remain documented as historical variance in the
+  validation report.
 - The plugin-root macOS shim no longer searches inherited `PATH` after it starts. It can hand off
   to a safe fixed per-user helper, which then validates activation; otherwise it retains the
   external Node alpha fallback. Provider-spawned initial interpreter/loader startup, plus Codex's

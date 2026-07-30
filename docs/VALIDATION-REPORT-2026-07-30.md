@@ -1,9 +1,10 @@
 # Validation report — 2026-07-30
 
-This report records the validated macOS integration and pinned-runtime baseline. A later same-day
-hot-path follow-up is described separately below. Its short, loaded-host A/B measurements are
-diagnostic relative comparisons only and do not replace the full product-path, packaging, CI, or
-release-gate runs recorded for the baseline.
+This report records the validated macOS integration and pinned-runtime baseline, the later
+loaded-host hot-path diagnostic, and a controlled current-head latency rerun. The loaded-host A/B
+measurements remain historical relative comparisons. The controlled rerun establishes a narrower
+current-head result for local inner product paths on the inspected Apple-silicon Mac; it does not
+replace packaging, broader supported-Mac, clean-machine, or provider-dispatch release evidence.
 
 ## Verdict
 
@@ -12,8 +13,9 @@ The candidate is suitable for continued review as a source-buildable research al
 The functional, privacy, packaging, runtime-sealing, and native lifecycle gates exercised here
 passed. It is not ready to be called a downloadable public beta because:
 
-- the recorded external-Node and pinned native product-path baselines missed the 100 ms local
-  product target, and the later loaded-host diagnostic did not establish a current-head pass;
+- controlled current-head inner paths passed the 100 ms p95 target on the inspected Apple-silicon
+  Mac, but provider dispatch, the provider-created outer shell, broader supported Macs, and a clean
+  machine have not established that target;
 - the assembled app was ad-hoc signed, not Developer ID signed or notarized;
 - Intel, minimum-supported-macOS, Gatekeeper, and clean-machine provider delivery were not tested;
 - interactive English/Korean, light/dark UI automation did not complete; and
@@ -40,7 +42,7 @@ tool output, transcript, source-file content, or provider hook JSON was persiste
 | --- | --- |
 | `npm run check` | Pass: 67 JavaScript files and 47 JSON files |
 | `npm test` | Pass: 312/312; 0 failures, skips, or cancellations |
-| `npm run test:coverage` | Pass: 312/312; line 94.50%, branch 82.03%, functions 95.13% |
+| `npm run test:coverage` | Pass: 312/312; line 94.49%, branch 82.01%, functions 95.13% |
 | Native `AWFTests` | Pass: 92/92; 0 failures, skips, or expected failures |
 | `git diff --check` | Pass |
 | Plist/localization lint | Pass: runtime entitlement, Info.plist, English, and Korean resources |
@@ -128,11 +130,46 @@ the later hot-path follow-up.
 | Ad-hoc signed helper + cloned sealed Node + real hook | 100 after 10 warmups | p95 248.935 ms; p99 274.147 ms | Pass: 350 ms CI budget; fail: 100 ms product target |
 | Pinned runtime prewarm | 1 install-time run | 2,563.514 ms | Reported separately; excluded from steady-state latency |
 
-These baseline failures remain sufficient to block a public-beta latency claim. The short follow-up
-A/B runs below excluded the shell launcher and ran under material host load, so they cannot close
-the 100 ms gate. A current-head rerun must separately profile fresh-process startup, shell/helper
-handoff, state maintenance, and atomic live/trace publication. The current temp-write/rename paths
-do not claim fsync-backed power-loss durability.
+These historical baseline failures are retained rather than averaged together with the controlled
+current-head rerun below. They show that startup tail latency can vary materially with host state
+and runtime construction. The current temp-write/rename paths do not claim fsync-backed power-loss
+durability.
+
+### Controlled current-head inner-path rerun
+
+The current head was measured in three independent generations per condition, each with 50 samples
+after five warmups. Every generation used a fresh private benchmark root and synthetic allowlisted
+events. The always-on live spool remained enabled in both conditions; `--no-trace` disabled only
+the optional active semantic trace.
+
+| Path | No active trace, p95 by generation | Active trace, p95 by generation | Local 100 ms target |
+| --- | ---: | ---: | --- |
+| External launcher + real worker + live spool | 64.670 / 49.438 / 48.692 ms | 50.294 / 57.978 / 50.585 ms | Pass on inspected Mac |
+| Native inner full path + live spool | 60.054 / 60.040 / 60.271 ms | 66.668 / 60.684 / 60.999 ms | Pass on inspected Mac |
+
+The external launcher row includes its inner shell and a fresh real worker process. The native row
+starts at the inner shell and includes the unsigned Debug helper, a temporary clone of the current
+Node executable, the real worker, and live-spool publication. Provider dispatch and the
+provider-created outer shell are excluded. Runtime prewarming is also excluded rather than being
+hidden inside steady-state latency. Consequently, these results establish the current-head inner
+path target only on the inspected Apple-silicon Mac; broader supported Macs, a clean machine, and
+provider-created dispatch/outer-shell timing remain open.
+
+A controlled fresh-process stage breakdown isolated where the inner-path time was spent:
+
+| Stage | p95 |
+| --- | ---: |
+| Node no-op startup | 24.260 ms |
+| Hook-module import | 31.061 ms |
+| Direct worker, no active trace | 41.833 ms |
+| Direct worker, active trace | 40.643 ms |
+| External shell path, active trace | 52.386 ms |
+| Cloned native runtime, direct | 43.078 ms |
+| Cloned runtime through unsigned Debug helper | 53.775 ms |
+| Full native inner shell path | 61.725 ms |
+
+The stage values are diagnostics, not additive components. Each row is an independently timed
+fresh-process boundary, so summing them would double-count startup.
 
 ### Loaded-host hot-path diagnostic — relative only
 
@@ -176,8 +213,10 @@ A same-host external-launcher A/B recorded p95 142.968 ms on this worktree and p
 detached unchanged `fa2a85b` baseline immediately afterward. A later final-code diagnostic under
 greater host load recorded p95 226.157 ms. All failed the 100 ms product target, so these loaded-host
 measurements support neither an improvement nor a regression claim. The final-code native-helper
-diagnostic recorded p95 247.886 ms and passed its separate 350 ms CI budget. The supported-Mac
-product-path rerun remains open.
+diagnostic recorded p95 247.886 ms and passed its separate 350 ms CI budget. These remain historical
+loaded-host observations; the controlled current-head section above records the later local inner
+path pass. Broader supported-Mac, clean-machine, and provider-created outer-shell/dispatch timing
+remain open.
 
 Security regression fixtures also verify that a symlinked `sessions` directory cannot delete an
 external victim, malformed maintenance control triggers no deletion, an old but held session lock
@@ -216,8 +255,9 @@ tests passed, but interactive UI automation remains a separate release gate.
 
 | Gate | Status |
 | --- | --- |
-| Hook latency below 100 ms p95 on supported Macs | Open |
-| Current-head full product-path latency rerun after hot-path changes | Open |
+| Local inner hook latency below 100 ms p95 on the inspected Apple-silicon Mac | Passed in three 50-sample generations for external/native and active/no-trace paths |
+| Broader supported-Mac and clean-machine hook latency | Open |
+| Provider-created outer shell and provider-dispatch latency | Open |
 | Bounded state-retention due path at large session counts | Local logical gate passed at 1,000 and 10,000 entries; unattended OS trigger and hard lifecycle/workload caps remain open |
 | Developer ID identity and inside-out signing | Open |
 | Notarization, stapling, and Gatekeeper | Open |

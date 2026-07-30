@@ -85,6 +85,9 @@
 - Add a reproducible saturated-spool benchmark covering cold audit, warm status, concurrent hook
   publication, rotation, and SSE visibility.
 - Add reproducible hook and dashboard latency gates for macOS and Linux CI.
+- Split portable and native hook benchmarks into default no-trace and explicit-trace scenarios so
+  CI measures the always-on product path without dropping the stricter recording-path regression
+  gate.
 - Reject non-loopback `Host` and cross-origin dashboard requests and compare access tokens with a
   fixed-length constant-time operation.
 - Handle malformed local request targets without crashing, close active SSE connections on

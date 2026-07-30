@@ -661,7 +661,8 @@ Before requesting review:
 npm run check
 npm test
 npm run test:coverage
-npm run benchmark:hook
+npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms 100
+npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms 100
 npm run benchmark:live-spool
 npm run benchmark:live-dashboard
 npm run benchmark:dashboard
@@ -700,7 +701,21 @@ npm run benchmark:native-hook -- \
   --samples 100 \
   --warmups 10 \
   --p95-ms 100
+
+npm run benchmark:native-hook -- \
+  --helper "$AWF_DERIVED_DATA/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+  --no-trace \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 100
 ```
+
+Both hook benchmarks create an active semantic trace by default. `--no-trace` measures the same
+always-on live-spool path without an active exported trace; run both modes because neither result
+substitutes for the other. Native timing starts at the inner shell and therefore excludes provider
+dispatch and a provider-created outer shell. The benchmark's temporary runtime clone and unsigned
+Debug helper are not release-signing evidence, and install-time runtime prewarming is reported
+separately from steady-state hook latency.
 
 These commands intentionally do not sign the app. They prove neither Developer ID distribution nor
 notarization. Run `AWFUITests` separately on an interactive macOS test host; the pull-request job
@@ -723,9 +738,10 @@ Current and recommended GitHub Actions jobs:
 
 1. Node checks and tests on macOS and Linux with the minimum and current supported Node versions.
 2. Privacy/schema adversarial suite on every pull request.
-3. Unsigned Xcode build, `AWFTests`, and the native hook benchmark on the macOS runner. The local
-   product target remains 100 ms p95; the shared runner uses a separate 350 ms multi-process
-   startup regression budget.
+3. Unsigned Xcode build, `AWFTests`, and the native hook benchmark on the macOS runner. The product
+   target remains 100 ms p95; the shared runner uses a separate 350 ms multi-process startup
+   regression budget, and provider dispatch plus the provider-created outer shell require separate
+   clean-machine evidence.
 4. UI smoke tests on protected branches or nightly runs.
 5. Unsigned reproducible artifact assembly for pull requests.
 6. Signed/notarized release only from a protected tag environment.

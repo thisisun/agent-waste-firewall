@@ -153,14 +153,17 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The 2026-07-30 rerun passed `npm run check` across 63 JavaScript and 47 JSON files,
-`npm test` with 292/292 tests, and the complete coverage command with 94.54% line,
-82.16% branch, and 95.13% function coverage. The same-machine performance rerun measured:
+The 2026-07-30 current baseline passed `npm run check` across 67 JavaScript and 47 JSON files,
+`npm test` with 312/312 tests, and the complete coverage command with 94.49% line,
+82.01% branch, and 95.13% function coverage. A controlled current-head rerun on the inspected
+Apple-silicon Mac measured three independent 50-sample generations after five warmups:
 
 | Path | Result |
 | --- | ---: |
-| External-Node inner launcher plus real hook subprocess | p95 129.037 ms, then 210.986 ms; 100 ms product target failed |
-| Ad-hoc signed native helper plus sealed Node and real hook subprocess | p95 248.935 ms; p99 274.147 ms; 350 ms CI budget passed, 100 ms product target failed |
+| External launcher, no active trace | p95 64.670 / 49.438 / 48.692 ms |
+| External launcher, active trace | p95 50.294 / 57.978 / 50.585 ms |
+| Native inner full path, no active trace | p95 60.054 / 60.040 / 60.271 ms |
+| Native inner full path, active trace | p95 66.668 / 60.684 / 60.999 ms |
 | Pinned runtime first prewarm | 2,563.514 ms; excluded from steady-state hook latency |
 | Live dashboard full-generation cold audit | 446.181 ms |
 | Live dashboard warm status | p95 5.003 ms |
@@ -169,11 +172,21 @@ The 2026-07-30 rerun passed `npm run check` across 63 JavaScript and 47 JSON fil
 | SSE reset visibility | 416.034 ms; 0 drops |
 | 15,000-event trace cursor | 194.900 ms cold startup; 7.146 ms status p95; 4.212 ms append visibility |
 
-SSE visibility includes the bounded polling interval and is not hook decision latency. The
-dashboard and spool gates passed, but the two hook launch paths did not meet the 100 ms local
-product target. That latency gap remains a public-beta blocker rather than being averaged away.
-See [VALIDATION-REPORT-2026-07-30.md](VALIDATION-REPORT-2026-07-30.md) for the exact commands and
-release-boundary evidence.
+The native arm covers the inner shell, unsigned Debug helper, temporary clone of the current Node
+runtime, real worker, and always-on live spool. The external arm covers the external launcher and
+real worker. Provider dispatch and the provider-created outer shell are excluded, while runtime
+prewarming is excluded from steady-state latency. Every controlled current-head p95 above is below
+100 ms on the inspected Mac; broader supported-Mac, clean-machine, provider-created outer-shell,
+and provider-dispatch performance remain open release evidence.
+
+The fresh-process stage breakdown was p95 24.260 ms for Node no-op, 31.061 ms for hook-module
+import, 41.833 ms for the direct worker without a trace, 40.643 ms for the direct worker with an
+active trace, and 52.386 ms for the external shell path with an active trace. The native stages
+were p95 43.078 ms for direct runtime, 53.775 ms through the helper, and 61.725 ms through the full
+inner shell. Historical loaded-host and sealed-runtime measurements are retained in
+[VALIDATION-REPORT-2026-07-30.md](VALIDATION-REPORT-2026-07-30.md) rather than being recast as
+current-head results. SSE visibility includes the bounded polling interval and is not hook
+decision latency.
 
 The source compiles as an unsigned Debug application on the inspected Apple-silicon environment
 with Xcode 26.6 and Swift 6.3.3:
@@ -195,7 +208,7 @@ xcodebuild \
 This command verifies source compilation, the embedded executable
 `Contents/Helpers/awf-hook`, guardian-mark app icon, Info.plist processing, localization, and
 folder-resource assembly. It does not create a signed release. The local `AWFTests` target passed
-90/90 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
+92/92 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
 bounded Finder-style NVM discovery, a real bundled-worker launch, exact native provider and
 activation contracts, raw stdin streaming, filesystem identity revalidation, timeout/signal
 process-group cleanup, closed status/provider fetches, exact protocol decoding, navigation
@@ -206,7 +219,8 @@ minimum-version runtime acceptance still requires a macOS 13.5 host.
 
 The configured GitHub jobs cover the Node matrix, dashboard benchmarks, unsigned native
 build/unit target, and a real native hook-path benchmark. The native CI benchmark uses a 350 ms
-shared-runner regression budget while the local product target remains 100 ms p95. The UI target
+shared-runner regression budget while the product target remains 100 ms p95; only the inspected
+Apple-silicon local inner paths have established the latter so far. The UI target
 compiles. An isolated local app launch connected the English/light dashboard and exposed the native
 integration control, but the UI automation transport disconnected while opening the detail sheet;
 that inspection is not counted as a complete UI pass or product failure. No Developer ID-signed,
