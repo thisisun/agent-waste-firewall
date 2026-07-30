@@ -746,6 +746,10 @@ Current and recommended GitHub Actions jobs:
 5. Unsigned reproducible artifact assembly for pull requests.
 6. Signed/notarized release only from a protected tag environment.
 
+The portable shared-runner steps keep their configured p95 budget, retain a failed first sample in
+the job log, and retry once. The step fails after two consecutive misses; this bounds scheduler
+variance handling without silently raising the product or runner budget.
+
 Release secrets must be unavailable to forked pull requests. Pin third-party Actions by commit SHA,
 grant the workflow minimum permissions, and generate provenance/checksums after the final signed
 artifact is assembled.

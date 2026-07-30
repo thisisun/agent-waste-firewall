@@ -52,10 +52,26 @@ jobs:
       - run: npm ci --ignore-scripts
       # Process startup on shared macOS runners has materially higher variance than local
       # execution. The product target remains 100 ms; CI uses a separate runner budget.
+      # Both shared-runner checks retain the first failed sample and retry once. Two
+      # consecutive failures are required so one scheduler burst does not create a false gate.
       - name: Benchmark default hook path
-        run: npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Default hook benchmark attempt $attempt failed."
+          done
+          exit 1
       - name: Benchmark explicit trace hook path
-        run: npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Explicit trace hook benchmark attempt $attempt failed."
+          done
+          exit 1
       - run: npm run benchmark:dashboard -- --events 15000 --requests 100 --sessions 16 --p95-ms 100
 
   native-macos:

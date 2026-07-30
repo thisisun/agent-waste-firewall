@@ -87,7 +87,8 @@
 - Add reproducible hook and dashboard latency gates for macOS and Linux CI.
 - Split portable and native hook benchmarks into default no-trace and explicit-trace scenarios so
   CI measures the always-on product path without dropping the stricter recording-path regression
-  gate.
+  gate. Shared portable runners retain one failed sample and retry once at the same budget, so a
+  scheduler burst is visible without passing a persistent regression.
 - Reject non-loopback `Host` and cross-origin dashboard requests and compare access tokens with a
   fixed-length constant-time operation.
 - Handle malformed local request targets without crashing, close active SSE connections on
