@@ -12,6 +12,9 @@ import {
 import {
   validateProviderDeliveryVerification,
 } from "../src/provider-delivery-verification.mjs";
+import {
+  validateCodexHookPreflight,
+} from "../src/codex-hook-preflight.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const protocolRoot = path.join(root, "protocol");
@@ -56,6 +59,13 @@ for (const contract of [
     schema: "provider-delivery-verification-v1.schema.json",
     fixtures: "provider-delivery-verification-v1",
     validate: validateProviderDeliveryVerification,
+  },
+  {
+    name: "Codex hook preflight",
+    registryKey: "codexHookPreflight",
+    schema: "codex-hook-preflight-v1.schema.json",
+    fixtures: "codex-hook-preflight-v1",
+    validate: validateCodexHookPreflight,
   },
 ]) {
   test(`${contract.name} public schema matches its runtime version`, () => {
@@ -121,6 +131,124 @@ test("dashboard status rejects aliases from the wrong source domain", () => {
         ),
       /Invalid DashboardStatusV1/u,
       fixture,
+    );
+  }
+});
+
+test("Codex hook preflight schema mirrors runtime reason precedence", () => {
+  const schema = readJson(
+    path.join(protocolRoot, "codex-hook-preflight-v1.schema.json"),
+  );
+  const reasonRules = new Map(
+    schema.allOf
+      .filter((rule) => rule.if?.properties?.reason?.const)
+      .map((rule) => [rule.if.properties.reason.const, rule.then.properties]),
+  );
+  const reasons = [
+    "provider_plugin_not_found",
+    "discovery_errors",
+    "discovery_warnings",
+    "unexpected_hooks",
+    "duplicate_hooks",
+    "missing_hooks",
+    "manifest_mismatch",
+    "disabled_hooks",
+    "modified_hooks",
+    "untrusted_hooks",
+  ];
+
+  assert.deepEqual([...reasonRules.keys()], reasons);
+  assert.match(
+    schema.description,
+    /unexpectedHookCount <= discoveredHookCount remains runtime-only/u,
+  );
+  for (const reason of reasons) {
+    assert.equal(reasonRules.get(reason).result.const, "not_ready", reason);
+  }
+
+  const providerMissing = reasonRules.get("provider_plugin_not_found");
+  for (const count of [
+    "discoveredHookCount",
+    "unexpectedHookCount",
+    "readyHookCount",
+    "errorCount",
+    "warningCount",
+  ]) {
+    assert.equal(providerMissing[count].const, 0, count);
+  }
+  assert.equal(
+    providerMissing.events.contains.properties.state.const,
+    "missing",
+  );
+  assert.equal(providerMissing.events.minContains, 4);
+  assert.equal(providerMissing.events.maxContains, 4);
+
+  assert.equal(reasonRules.get("discovery_errors").errorCount.minimum, 1);
+  assert.equal(reasonRules.get("discovery_warnings").errorCount.const, 0);
+  assert.equal(
+    reasonRules.get("discovery_warnings").warningCount.minimum,
+    1,
+  );
+
+  const unexpected = reasonRules.get("unexpected_hooks");
+  assert.equal(unexpected.errorCount.const, 0);
+  assert.equal(unexpected.warningCount.const, 0);
+  assert.equal(unexpected.discoveredHookCount.minimum, 1);
+  assert.equal(unexpected.unexpectedHookCount.minimum, 1);
+
+  function eventStateSets(reason) {
+    const clauses = reasonRules.get(reason).events.allOf;
+    const included = [];
+    const excluded = [];
+    for (const clause of clauses) {
+      const state = clause.contains.properties.state;
+      const states = state.enum ?? [state.const];
+      if (clause.maxContains === 0) excluded.push(...states);
+      else if (clause.minContains >= 1) included.push(...states);
+    }
+    return {
+      included: [...new Set(included)],
+      excluded: [...new Set(excluded)],
+    };
+  }
+
+  const eventPrecedence = [
+    ["duplicate_hooks", "duplicate", []],
+    ["missing_hooks", "missing", ["duplicate"]],
+    [
+      "manifest_mismatch",
+      "mismatch",
+      ["duplicate", "missing"],
+    ],
+    [
+      "disabled_hooks",
+      "disabled",
+      ["duplicate", "missing", "mismatch"],
+    ],
+    [
+      "modified_hooks",
+      "modified",
+      ["duplicate", "missing", "mismatch", "disabled"],
+    ],
+    [
+      "untrusted_hooks",
+      "untrusted",
+      ["duplicate", "missing", "mismatch", "disabled", "modified"],
+    ],
+  ];
+  for (const [reason, requiredState, higherPrecedenceStates] of eventPrecedence) {
+    const properties = reasonRules.get(reason);
+    assert.equal(properties.errorCount.const, 0, reason);
+    assert.equal(properties.warningCount.const, 0, reason);
+    assert.equal(properties.unexpectedHookCount.const, 0, reason);
+    assert.equal(properties.discoveredHookCount.minimum, 1, reason);
+    assert.deepEqual(
+      eventStateSets(reason),
+      {
+        included: [requiredState],
+        excluded: higherPrecedenceStates,
+      },
+      reason,
     );
   }
 });

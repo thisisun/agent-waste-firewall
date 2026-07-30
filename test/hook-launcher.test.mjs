@@ -44,8 +44,13 @@ function nativeLauncherPath(home) {
   );
 }
 
-function invoke(pluginRoot, { input = "", env = {} } = {}) {
-  return spawnSync("/bin/sh", ["-p", launcher, pluginRoot], {
+function invoke(
+  pluginRoot,
+  { input = "", env = {}, provider = undefined } = {},
+) {
+  const args = ["-p", launcher, pluginRoot];
+  if (provider !== undefined) args.push(provider);
+  return spawnSync("/bin/sh", args, {
     encoding: "utf8",
     input,
     env,
@@ -178,10 +183,17 @@ test("prefers the fixed native helper and streams stdin unchanged", (context) =>
 
   for (const provider of ["codex", "claude"]) {
     const providerRoot = provider === "codex"
-      ? { PLUGIN_ROOT: pluginRoot }
-      : { CLAUDE_PLUGIN_ROOT: pluginRoot };
+      ? {
+          PLUGIN_ROOT: pluginRoot,
+          CLAUDE_PLUGIN_ROOT: pluginRoot,
+        }
+      : {
+          PLUGIN_ROOT: path.join(pluginRoot, "unrelated-codex-root"),
+          CLAUDE_PLUGIN_ROOT: pluginRoot,
+        };
     const result = invoke(pluginRoot, {
       input,
+      provider,
       env: {
         HOME: home,
         AWF_EXPECTED_PLUGIN_ROOT: pluginRoot,
@@ -197,6 +209,46 @@ test("prefers the fixed native helper and streams stdin unchanged", (context) =>
     assert.equal(result.stderr, "");
   }
   assert.equal(fs.existsSync(portableMarker), false);
+});
+
+test("provider and root mismatch skips native dispatch and clears a spoofed override", (context) => {
+  if (process.platform !== "darwin") return;
+  const pluginRoot = makeTemporaryPlugin(context);
+  const home = path.join(pluginRoot, "native-home");
+  const nativeLauncher = nativeLauncherPath(home);
+  const nativeMarker = path.join(pluginRoot, "native-used");
+  const portableNode = path.join(pluginRoot, "portable-node");
+  makeExecutable(
+    nativeLauncher,
+    `#!/bin/sh\n/usr/bin/touch "${nativeMarker}"\nexit 70\n`,
+  );
+  makeExecutable(
+    portableNode,
+    [
+      "#!/bin/sh",
+      'test -z "${AGENT_WASTE_FIREWALL_PLATFORM-}" || exit 78',
+      "exec /bin/cat",
+      "",
+    ].join("\n"),
+  );
+  const input = '{"event":"provider-root-mismatch"}\n';
+
+  const result = invoke(pluginRoot, {
+    input,
+    provider: "codex",
+    env: {
+      HOME: home,
+      PLUGIN_ROOT: path.join(pluginRoot, "different-root"),
+      CLAUDE_PLUGIN_ROOT: pluginRoot,
+      AGENT_WASTE_FIREWALL_PLATFORM: "claude",
+      AWF_NODE_PATH: portableNode,
+      PATH: path.join(pluginRoot, "untrusted"),
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, input);
+  assert.equal(fs.existsSync(nativeMarker), false);
 });
 
 test("unsafe native helper preserves the portable fallback", (context) => {
@@ -216,6 +268,7 @@ test("unsafe native helper preserves the portable fallback", (context) => {
 
   const result = invoke(pluginRoot, {
     input,
+    provider: "codex",
     env: {
       HOME: home,
       PLUGIN_ROOT: pluginRoot,
@@ -232,6 +285,7 @@ test("unsafe native helper preserves the portable fallback", (context) => {
   fs.chmodSync(path.dirname(nativeLauncher), 0o720);
   const unsafeDirectoryResult = invoke(pluginRoot, {
     input,
+    provider: "codex",
     env: {
       HOME: home,
       PLUGIN_ROOT: pluginRoot,
@@ -271,6 +325,7 @@ test("never retries through Node after native handoff", (context) => {
 
   const result = invoke(pluginRoot, {
     input: '{"secret":"native-handoff"}\n',
+    provider: "codex",
     env: {
       HOME: home,
       PLUGIN_ROOT: pluginRoot,
@@ -727,6 +782,7 @@ test("runs the real hook worker through an absolute runtime override", (context)
       turn_id: "SECRET-LAUNCHER-TURN",
       prompt,
     }),
+    provider: "codex",
     env: {
       ...process.env,
       HOME: path.join(dataDir, "isolated-home"),
@@ -768,6 +824,7 @@ test("both provider manifests route through the rooted launcher", () => {
         assert.equal(hook.command.startsWith("/bin/sh -p "), true);
         assert.match(hook.command, /scripts\/hook-launcher\.sh/u);
         assert.match(hook.command, /\$\{PLUGIN_ROOT\}/u);
+        assert.match(hook.command, /\scodex$/u);
         assert.doesNotMatch(hook.command, /(^|\s)node(\s|$)/u);
         assert.equal(hook.commandWindows, undefined);
       }
@@ -781,6 +838,7 @@ test("both provider manifests route through the rooted launcher", () => {
           "-p",
           "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
           "${CLAUDE_PLUGIN_ROOT}",
+          "claude",
         ]);
       }
     }

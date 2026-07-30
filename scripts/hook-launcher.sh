@@ -37,6 +37,26 @@ case "$plugin_root" in
   /*) ;;
   *) fail_open ;;
 esac
+requested_provider=${2-}
+validated_provider=
+case "$requested_provider" in
+  codex)
+    if [ "${PLUGIN_ROOT-}" = "$plugin_root" ]; then
+      validated_provider=codex
+    fi
+    ;;
+  claude)
+    if [ "${CLAUDE_PLUGIN_ROOT-}" = "$plugin_root" ]; then
+      validated_provider=claude
+    fi
+    ;;
+esac
+if [ -n "$validated_provider" ]; then
+  AGENT_WASTE_FIREWALL_PLATFORM=$validated_provider
+  export AGENT_WASTE_FIREWALL_PLATFORM
+else
+  unset AGENT_WASTE_FIREWALL_PLATFORM
+fi
 
 awf_darwin=false
 if [ -x /usr/bin/uname ] &&
@@ -112,24 +132,18 @@ run_native_with() {
 # current user's Application Support directory. An absent or unsafe install
 # keeps the checkout-compatible portable path available.
 if [ "$awf_darwin" = true ]; then
-  native_provider=
-  if [ "${PLUGIN_ROOT-}" = "$plugin_root" ] &&
-    [ "${CLAUDE_PLUGIN_ROOT-}" != "$plugin_root" ]
-  then
-    native_provider=codex
-  elif [ "${CLAUDE_PLUGIN_ROOT-}" = "$plugin_root" ] &&
-    [ "${PLUGIN_ROOT-}" != "$plugin_root" ]
-  then
-    native_provider=claude
-  fi
+  # The audited manifests pass the provider explicitly. Codex exports both
+  # root variables for compatibility, so inferring the provider from variable
+  # presence is ambiguous. Require the provider-specific root to match before
+  # selecting the fixed native helper.
   case "${HOME-}" in
     /*)
       native_integration_root="$HOME/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1"
       native_launcher="$native_integration_root/awf-hook"
       if secure_directory "$native_integration_root" &&
-        [ -n "$native_provider" ]
+        [ -n "$validated_provider" ]
       then
-        run_native_with "$native_launcher" "$native_provider"
+        run_native_with "$native_launcher" "$validated_provider"
       fi
       ;;
   esac

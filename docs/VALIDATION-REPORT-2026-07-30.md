@@ -14,8 +14,9 @@ The functional, privacy, packaging, runtime-sealing, and native lifecycle gates 
 passed. It is not ready to be called a downloadable public beta because:
 
 - controlled current-head inner paths passed the 100 ms p95 target on the inspected Apple-silicon
-  Mac, but provider dispatch, the provider-created outer shell, broader supported Macs, and a clean
-  machine have not established that target;
+  Mac, and the new exact-manifest shell benchmark passed its separate 150 ms budget. That
+  benchmark still excludes provider process creation and dispatch; broader supported Macs and a
+  clean machine have not established the product target;
 - the assembled app was ad-hoc signed, not Developer ID signed or notarized;
 - Intel, minimum-supported-macOS, Gatekeeper, and clean-machine provider delivery were not tested;
 - interactive English/Korean, light/dark UI automation did not complete; and
@@ -40,16 +41,81 @@ tool output, transcript, source-file content, or provider hook JSON was persiste
 
 | Gate | Result |
 | --- | --- |
-| `npm run check` | Pass: 67 JavaScript files and 47 JSON files |
-| `npm test` | Pass: 312/312; 0 failures, skips, or cancellations |
-| `npm run test:coverage` | Pass: 312/312; line 94.49%, branch 82.01%, functions 95.13% |
+| `npm run check` | Pass: 72 JavaScript files and 55 JSON files |
+| `npm test` | Pass: 340/340; 0 failures, skips, or cancellations |
+| `npm run test:coverage` | Pass: 340/340; line 94.52%, branch 81.75%, functions 95.26% |
+| `npm run acceptance:providers` | Pass: Codex isolated install, installed-root-bound model-free discovery, direct launchers, events, privacy, and cleanup in 457 ms; Claude isolated direct-launcher path in 2,474 ms with provider delivery explicitly not tested |
+| `claude plugin validate --strict .` | Pass |
 | Native `AWFTests` | Pass: 92/92; 0 failures, skips, or expected failures |
 | `git diff --check` | Pass |
 | Plist/localization lint | Pass: runtime entitlement, Info.plist, English, and Korean resources |
-| `npm pack --dry-run --json` | Pass: 121 entries, including the janitor; exact native-source/runtime exclusion checks passed |
+| `npm pack --dry-run --json` | Pass: 132 entries and 3,723,582 unpacked bytes, including the Codex preflight contract and bounded probe; exact native-source/runtime exclusion checks passed |
 
 The npm package contains only the runtime manifest and entitlement from `runtime/`. It does not
 contain `macos/`, `awf-node`, a prepared payload, or generated app artifacts.
+
+## Provider compatibility and shell-boundary evidence
+
+Current Codex exports `PLUGIN_ROOT` and the compatibility alias `CLAUDE_PLUGIN_ROOT` with the same
+plugin root. The prior shim treated that real environment as ambiguous, skipped the fixed native
+helper, and fell back to the external runtime. The manifests now pass `codex` or `claude`
+explicitly. The shim accepts that value only when the corresponding provider-root variable
+matches the same plugin root, clears an unvalidated platform override, and otherwise preserves
+the portable fail-open path. A positive regression reproduces Codex's dual-root environment; a
+productive counterexample proves a provider/root mismatch cannot select the native helper.
+
+The separate provider-shell benchmark validates the exact checked-in manifest before every run.
+It uses a private temporary home, data root, and a workspace containing spaces and Korean
+characters. Codex runs through `/bin/zsh -lc` plus the inner shim; Claude uses its exact exec-form
+`/bin/sh` arguments. Neither form launches a provider process or includes provider dispatch.
+
+| Shell boundary | Trace | p50 | p95 | p99 | max | Budget |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Codex manifest via isolated `/bin/zsh -lc` | off | 57.396 ms | 140.005 ms | 221.148 ms | 241.849 ms | 150 ms |
+| Codex manifest via isolated `/bin/zsh -lc` | on | 58.196 ms | 73.329 ms | 113.620 ms | 134.850 ms | 150 ms |
+| Claude exact exec form | off | 53.023 ms | 69.601 ms | 113.374 ms | 119.865 ms | 150 ms |
+| Claude exact exec form | on | 52.336 ms | 92.130 ms | 108.173 ms | 126.944 ms | 150 ms |
+
+Each row used 10 warmups and 100 measured calls, produced all 110 expected closed semantic events,
+and produced no incident. The Codex rows reproduced its equal `PLUGIN_ROOT` and
+`CLAUDE_PLUGIN_ROOT` compatibility environment. These values are reproducible shell-path
+measurements, not provider-delivery measurements.
+
+One real Codex CLI probe was attempted with an ephemeral temporary project and a second
+`UserPromptSubmit` blocker intended to stop processing before any model request. The temporary
+project hook layer was not discovered because project trust had not been established. Neither the
+blocker marker nor an AWF semantic event appeared, and Codex proceeded to a model turn that
+reported 14,397 tokens. This is a failed delivery probe and negative safety evidence, not a pass.
+No further automated provider launch is permitted until a discovery-only `hooks/list` preflight
+proves the exact hook set is loaded, enabled, and trusted before `turn/start`. The temporary probe
+tree was removed. Claude Code is installed on this Mac but is not authenticated, so no real
+Claude provider turn was attempted.
+
+That model-free gate is now implemented as
+`integration preflight codex --workspace <path> [--json]`. It sends only app-server
+`initialize`, `initialized`, and `hooks/list`, bounds stdout and runtime, discards stderr, and
+reduces provider metadata to `CodexHookPreflightV1`. Paths, commands, hook hashes, plugin IDs,
+warning/error text, and raw RPC never enter the result. A real check against this workspace
+completed in 178 ms with `provider_plugin_not_found`, `0/4` hooks ready, and no model turn. This is
+the correct fail-closed result because AWF is not installed in the current user Codex
+configuration; it is not a delivery pass. No automated provider turn was retried.
+
+The preflight matcher recognizes only the exact provider-reported plugin ID
+`agent-waste-firewall@agent-waste-firewall`. A different custom-marketplace ID intentionally
+collapses to `provider_plugin_not_found`, even if other metadata resembles AWF. A `ready` result
+would establish only that Codex reported the expected manifest-shaped metadata, enablement, and
+trust state at discovery time. It would not attest the installed plugin files, the Codex binary,
+or subsequent hook delivery.
+
+The isolated Codex acceptance now also invokes the same model-free app-server discovery after
+local marketplace installation. It binds every discovered source path to the validated installed
+cache root before redaction. A separate closed-result capture completed discovery in 66 ms with
+`untrusted_hooks`: all four exact events were discovered as `untrusted`, with zero unexpected
+hooks, errors, or warnings. The acceptance then directly exercised those launchers, produced
+closed events, ran boundary-and-interior privacy canaries, and cleaned up. That gate intentionally
+accepts exact metadata in either trusted or untrusted state, and its public report records only the
+closed `providerHooksDiscovered` check. It is therefore real provider-registration evidence, but
+not a user-owned `ready` or live-delivery pass.
 
 The serial native run used a fresh derived-data directory on arm64 macOS 26.5.2. Xcode selected the
 arm64 destination and emitted five SDK-link warnings because its XCTest support libraries are built

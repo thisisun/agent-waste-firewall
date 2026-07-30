@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "kind": "codex_hook_preflight",
+  "provider": "codex",
+  "result": "unavailable",
+  "reason": "provider_not_found",
+  "checkedMs": 3,
+  "expectedHookCount": 4,
+  "discoveredHookCount": 0,
+  "unexpectedHookCount": 0,
+  "readyHookCount": 0,
+  "errorCount": 0,
+  "warningCount": 0,
+  "events": []
+}

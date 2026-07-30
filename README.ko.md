@@ -29,12 +29,14 @@ Node.js 18 이상을 사용합니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
 사용자 소유 provider의 훅 신뢰·실시간 전달과 업그레이드·제거 검증은 아직 남아 있습니다.
-provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출합니다. macOS shim은
-provider root 환경으로 Codex 또는 Claude를 하나만 명확히 판별했을 때, 안전한 고정
-사용자 경로
+provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출하고 끝에 고정된
+`codex` 또는 `claude` 인자를 전달합니다. macOS shim은 그 인자와 해당 provider root가
+자신의 plugin root에 정확히 일치할 때만 안전한 고정 사용자 경로
 `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`을
-먼저 호출합니다. helper가 없거나 unsafe하거나 provider 판별이 ambiguous하면 기존 외부
-Node 알파 경로를 유지합니다. helper가 호출된 뒤 activation이 잘못되면 fail-open하며
+먼저 호출합니다. Codex가 호환성을 위해 두 root 변수를 모두 내보내도 명시적 인자로
+provider를 잘못 판별하지 않습니다. helper가 없거나 unsafe하거나 provider/root가
+불일치하면 기존 외부 Node 알파 경로를 유지합니다. helper가 호출된 뒤 activation이
+잘못되면 fail-open하며
 Node로 다시 시도하거나 두 번째 JSON을 붙이지 않습니다. 두 경로 모두 shim이 제어권을
 얻은 뒤에는 상속 `PATH`를 검색하지
 않습니다. 이 처리는 provider나 최초 interpreter/loader 시작 단계를 정리하지 못합니다.
@@ -101,6 +103,26 @@ Codex·Claude 검사를 동시에 실행합니다. 각 provider의 버전 확인
 상태로 정리합니다. 프로세스 시작과 그 밖의 CLI 작업 시간은 이 provider 검사 예산과
 별개입니다.
 
+자동화된 Codex 실제 파일럿보다 먼저, 모델을 호출하지 않는 정적 발견 검사를 실행합니다.
+
+```bash
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --timeout 3
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --json
+```
+
+이 명령은 app-server에 `initialize`, `initialized`, `hooks/list`만 보내며 thread나 model
+turn을 시작하지 않습니다. 닫힌 `CodexHookPreflightV1` 결과에는 고정 enum, 개수, 공개된
+네 이벤트 이름만 남습니다. 경로, 명령문, hook hash, plugin ID, warning/error 원문,
+stderr, 원본 RPC는 버립니다. 내부적으로는 정확한 Codex provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`만 AWF로 인정합니다. 사용자 정의 marketplace
+ID는 비슷한 metadata가 있어도 의도적으로 `provider_plugin_not_found`를 반환합니다.
+`ready`는 Codex가 예상 manifest 형태의 hook metadata를 활성화·신뢰 상태로 보고했다는
+뜻일 뿐입니다. 설치된 파일, Codex binary, 이후 hook 전달을 증명하지 않습니다. 실제
+모델 비호출 근거에는 현재 사용자 환경의 플러그인 없음 결과와, 격리 marketplace 설치
+후 Codex `hooks/list`가 정확한 네 hook을 발견하고 launcher 실행까지 이어진 결과가 모두
+포함됩니다. 격리 gate는 정확한 metadata가 trusted 또는 untrusted인 경우를 허용하므로
+provider 등록 근거일 뿐, 사용자 소유 `ready`나 live delivery 통과는 아닙니다.
+
 플러그인을 불러온 뒤 실제 훅 전달을 읽기 전용으로 확인하려면 일반 터미널에서 다음 중
 하나를 실행합니다.
 
@@ -120,6 +142,10 @@ node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
 `AWF_READY provider=claude timeoutSeconds=60` 같은 고정 한 줄이 나오므로, 그 줄을 확인한
 뒤 새 프롬프트를 보냅니다.
 
+결과의 `waitedMs`는 baseline 이후 이벤트가 관찰될 때까지의 대기 시간일 뿐입니다. 별도
+프롬프트를 제출하는 사람의 반응 시간과 polling 지연이 포함되므로 provider dispatch,
+outer shell, hook latency로 사용하면 안 됩니다.
+
 이 검사는 전달을 관찰하는 도구이지 provider 신원 증명은 아닙니다. 로컬 의미 이벤트를
 쓴 프로세스의 신원을 암호학적으로 증명하지 않으며, Codex나 Claude Code를 설치·활성화·
 실행·복구·설정하지도 않습니다. provider 상태 검사와 전달 검사는 서로 다른 읽기 전용
@@ -138,13 +164,31 @@ npm run acceptance:claude
 launcher 실행, 닫힌 의미 이벤트, 원문 canary 비저장, 임시 파일 정리를 확인합니다.
 Codex는 prompt/pre-tool/post-tool과 관찰 전용 `Stop`을, Claude는 여기에
 `PostToolUseFailure`까지 검사합니다. 프롬프트·세션·turn·작업공간·tool ID·입력·출력의
-앞뒤에 필드별 고유 표식을 넣고, 원문 일부만 저장되는 회귀도 검증 실패로 잡습니다.
+앞뒤와 내부에 필드별 고유 표식을 넣고, 원문 일부만 저장되는 회귀도 검증 실패로
+잡습니다. Codex는 직접 실행 전에 실제 모델 비호출 `hooks/list` 결과의 정확한 네 hook이
+검증된 설치 cache root에서 왔는지도 확인합니다.
 
 이 검사는 사용자 전역 설정을 바꾸거나 Codex `/hooks` 신뢰를 승인하지 않으며, Claude의
 `disableAllHooks`나 조직 정책을 우회하지 않습니다. 실제 provider가 훅을 전달했다는
-주장도 하지 않습니다. 내부 launcher를 직접 실행하므로 provider 전달, 적대적인 최초
-interpreter/loader 시작, Codex의 바깥 login shell도 검증하지 않습니다. 사용자 소유
-실제 세션 전달은 별도의 읽기 전용 `integration verify`로 확인합니다.
+주장도 하지 않습니다. hook 전달 자체는 내부 launcher를 직접 실행하므로 provider
+dispatch, 적대적인 최초 interpreter/loader 시작, Codex의 바깥 login shell도 검증하지
+않습니다. Codex discovery는 등록 근거일 뿐입니다. 사용자 소유 실제 세션 전달은 별도의
+읽기 전용 `integration verify`로 확인합니다.
+
+provider나 모델을 실행하지 않고 반복 가능한 manifest/shell 경계만 별도로 측정할 수
+있습니다.
+
+```bash
+npm run benchmark:provider-shell -- --provider codex --shell /bin/zsh --samples 100 --warmups 10 --p95-ms 150
+npm run benchmark:provider-shell -- --provider claude --samples 100 --warmups 10 --p95-ms 150
+```
+
+Codex 측정은 체크인된 전체 manifest를 검증한 뒤, 실제 Codex처럼 두 root 변수를 같은
+값으로 둔 환경에서 격리된 login-shell 의미와 inner shim을 포함합니다. Claude 측정도
+전체 manifest를 검증하고 정확한 exec-form 인자를 실행합니다. 두 경로 모두 닫힌 의미
+이벤트 전체를 확인하고 `--no-trace`를 지원합니다. 결과의
+`providerCreatedProcessIncluded: false`와 `providerDispatchIncluded: false`는 의도적인
+경계입니다. 실제 provider 전달 증거가 아니라 반복 가능한 shell-path 증거입니다.
 
 플러그인이 실행되면 지원되는 모든 훅은 별도의 녹화 명령 없이도 제한된
 `LiveEventV1` 저장소에 `best-effort` 방식으로 의미 이벤트를 남깁니다. 로컬

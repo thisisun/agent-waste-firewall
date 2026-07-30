@@ -8,10 +8,12 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
-- Keep the Codex and Claude manifests on their plugin-root shell shims. On macOS the shim now
-  identifies exactly one provider from its matching provider-root environment and prefers a safe
-  fixed per-user `integration-v1/awf-hook`; a missing or unsafe helper, or an ambiguous provider
-  match, preserves the bounded external Node alpha fallback. Once invoked, the helper validates
+- Keep the Codex and Claude manifests on their plugin-root shell shims. Each audited manifest now
+  passes its provider explicitly, and the shim accepts it only when the matching provider-root
+  variable resolves to the same plugin root. This handles Codex's dual compatibility variables
+  without misclassifying Claude and prefers a safe fixed per-user `integration-v1/awf-hook`; a
+  missing, unsafe, or mismatched native path preserves the bounded external Node alpha fallback.
+  Once invoked, the helper validates
   activation and any failure fails open without retrying the same stdin through Node or appending
   a second JSON response. After startup, both paths exclude
   inherited `PATH` and Node/loader injection variables from the worker. Provider and initial
@@ -43,13 +45,28 @@
   delivery witness rather than cryptographic provider attestation.
 - Keep JSON stdout to one final verification record and emit a fixed, raw-free `AWF_READY` line on
   stderr only after the audited baseline is established.
+- Define delivery `waitedMs` as operator-and-polling-inclusive observation wait and explicitly
+  prohibit reporting it as provider dispatch, outer-shell, or hook latency.
+- Add the closed, raw-free `CodexHookPreflightV1` contract and model-free
+  `integration preflight codex` gate. It sends only app-server initialization and `hooks/list`,
+  pins recognition to the exact provider ID
+  `agent-waste-firewall@agent-waste-firewall`, requires the exact four AWF hooks to be reported
+  with manifest-shaped metadata as enabled and trusted, and discards paths, commands, hashes,
+  plugin IDs, provider diagnostics, stderr, and raw RPC. Custom-marketplace IDs intentionally
+  return `provider_plugin_not_found`. `ready` does not attest installed files, the Codex binary,
+  or later delivery. The isolated Codex acceptance now requires a real model-free `hooks/list`
+  discovery of all four exact installed hooks before direct launcher execution; it accepts exact
+  trusted or untrusted metadata and therefore is registration evidence, not a user-owned
+  `ready` or live-delivery pass.
 - Detect provider state without modifying global configuration. Installation, enablement, hook
   review, and trust remain user-controlled. Current activity requires a new audited event after
   dashboard startup and expires after five minutes; retained spool and trace events do not count.
 - Add an isolated `npm run acceptance:codex` gate for temporary marketplace add, plugin
   install/list, installed-launcher prompt/pre-tool/post-tool/Stop execution, closed-event production,
-  prefix/suffix raw-canary scanning, and cleanup. This direct-launcher check deliberately does not
-  claim provider-driven registration, user-owned `/hooks` trust, or live provider delivery.
+  boundary/interior raw-canary scanning, and cleanup. Its separate model-free `hooks/list` step
+  establishes installed-root-bound provider registration evidence. The direct-launcher step does
+  not establish provider delivery, and neither step claims user-owned `/hooks` trust or a live
+  provider-delivery pass.
 - Add an isolated `npm run acceptance:claude` gate for local marketplace add/install,
   list/details, installed-launcher execution across prompt/pre-tool/post-tool/failure/Stop,
   closed-event and raw-canary auditing, and owned-root cleanup. Its closed report fixes provider
@@ -85,6 +102,10 @@
 - Add a reproducible saturated-spool benchmark covering cold audit, warm status, concurrent hook
   publication, rotation, and SSE visibility.
 - Add reproducible hook and dashboard latency gates for macOS and Linux CI.
+- Add a separate provider-shell benchmark that validates the exact checked-in manifests, measures
+  Codex through an isolated `$SHELL -lc` plus the inner shim with its real equal dual-root
+  compatibility environment, exercises Claude's exact exec form, and labels provider process
+  creation and dispatch as excluded. CI gates trace and no-trace paths for both providers.
 - Split portable and native hook benchmarks into default no-trace and explicit-trace scenarios so
   CI measures the always-on product path without dropping the stricter recording-path regression
   gate. Shared portable runners retain one failed sample and retry once at the same budget, so a

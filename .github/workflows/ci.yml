@@ -41,8 +41,12 @@ jobs:
         include:
           - os: macos-latest
             hook_p95_ms: 150
+            provider_shell: /bin/zsh
+            provider_shell_p95_ms: 200
           - os: ubuntu-latest
             hook_p95_ms: 100
+            provider_shell: /bin/bash
+            provider_shell_p95_ms: 200
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -70,6 +74,62 @@ jobs:
               exit 0
             fi
             echo "::warning::Explicit trace hook benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Codex outer-shell semantics without provider dispatch
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider codex \
+              --shell ${{ matrix.provider_shell }} \
+              --no-trace \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Provider-shell benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Codex outer-shell semantics with explicit trace
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider codex \
+              --shell ${{ matrix.provider_shell }} \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Provider-shell trace benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Claude exec-form semantics without provider dispatch
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider claude \
+              --no-trace \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Claude provider-shell benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Claude exec-form semantics with explicit trace
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider claude \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Claude provider-shell trace benchmark attempt $attempt failed."
           done
           exit 1
       - run: npm run benchmark:dashboard -- --events 15000 --requests 100 --sessions 16 --p95-ms 100

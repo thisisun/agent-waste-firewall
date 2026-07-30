@@ -20,6 +20,53 @@ const requiredEvents = [
   "PostToolUse",
   "Stop",
 ];
+const preflightEvents = [
+  "userPromptSubmit",
+  "preToolUse",
+  "postToolUse",
+  "stop",
+];
+
+function preflightFixture(state = "untrusted") {
+  const readyHookCount = state === "ready" ? 4 : 0;
+  return {
+    v: 1,
+    kind: "codex_hook_preflight",
+    provider: "codex",
+    result: state === "ready" ? "ready" : "not_ready",
+    reason:
+      state === "ready" ? "exact_hooks_ready" : "untrusted_hooks",
+    checkedMs: 14,
+    expectedHookCount: 4,
+    discoveredHookCount: 4,
+    unexpectedHookCount: 0,
+    readyHookCount,
+    errorCount: 0,
+    warningCount: 0,
+    events: preflightEvents.map((event) => ({ event, state })),
+  };
+}
+
+function missingPreflightFixture() {
+  return {
+    v: 1,
+    kind: "codex_hook_preflight",
+    provider: "codex",
+    result: "not_ready",
+    reason: "provider_plugin_not_found",
+    checkedMs: 11,
+    expectedHookCount: 4,
+    discoveredHookCount: 0,
+    unexpectedHookCount: 0,
+    readyHookCount: 0,
+    errorCount: 0,
+    warningCount: 0,
+    events: preflightEvents.map((event) => ({
+      event,
+      state: "missing",
+    })),
+  };
+}
 
 function tempParentTracker(context) {
   const parent = fs.mkdtempSync(
@@ -62,6 +109,26 @@ function successfulRunner({ command, args, env, input, cwd, timeoutMs, maxOutput
         }),
       };
     }
+  }
+  if (
+    command === process.execPath &&
+    path.basename(args[0]) === "codex-hook-preflight-probe.mjs"
+  ) {
+    const wrapperRoot = path.join(
+      env.CODEX_HOME,
+      "tmp",
+      "arg0",
+      "codex-arg0Synthetic",
+    );
+    fs.mkdirSync(wrapperRoot, { recursive: true, mode: 0o700 });
+    fs.symlinkSync(
+      process.execPath,
+      path.join(wrapperRoot, "codex-execve-wrapper"),
+    );
+    return {
+      outcome: "ok",
+      stdout: JSON.stringify(preflightFixture()),
+    };
   }
   if (command === "/bin/sh") {
     const result = spawnSync(command, args, {
@@ -178,6 +245,7 @@ test("skips cleanly when Codex is unavailable and removes its isolated home", (c
       pluginInstalled: false,
       pluginListed: false,
       installedHookFound: false,
+      providerHooksDiscovered: false,
       hookExecuted: false,
       eventProduced: false,
       privacyPreserved: false,
@@ -190,6 +258,7 @@ test("skips cleanly when Codex is unavailable and removes its isolated home", (c
       marketplaceAdd: 0,
       pluginInstall: 0,
       pluginList: 0,
+      hookDiscovery: 0,
       hook: 0,
       audit: 0,
       cleanup: report.durationsMs.cleanup,
@@ -296,6 +365,31 @@ test("passes the isolated install, installed-hook, closed-event, and privacy gat
     (specification) => specification.command === "/bin/sh",
   );
   assert.equal(hookRecords.length, 4);
+  const preflightRecords = records.filter(
+    (specification) =>
+      specification.command === process.execPath &&
+      path.basename(specification.args[0]) ===
+        "codex-hook-preflight-probe.mjs",
+  );
+  assert.equal(preflightRecords.length, 1);
+  assert.equal(preflightRecords[0].args[1], acceptanceRoot);
+  assert.equal(preflightRecords[0].args[2], "codex");
+  assert.equal(
+    preflightRecords[0].args[3],
+    hookRecords[0].args[2],
+  );
+  assert.equal(preflightRecords[0].killSignal, "SIGTERM");
+  assert.deepEqual(
+    Object.keys(preflightRecords[0].env).sort(),
+    [
+      "CODEX_HOME",
+      "HOME",
+      "LANG",
+      "PATH",
+      "TMPDIR",
+      "XDG_CONFIG_HOME",
+    ],
+  );
   assert.deepEqual(
     hookRecords.map(({ input }) => JSON.parse(input).hook_event_name),
     requiredEvents,
@@ -306,12 +400,13 @@ test("passes the isolated install, installed-hook, closed-event, and privacy gat
       [
         "AGENT_WASTE_FIREWALL_DATA_DIR",
         "AGENT_WASTE_FIREWALL_MODE",
-        "AGENT_WASTE_FIREWALL_PLATFORM",
         "AWF_NODE_PATH",
+        "CLAUDE_PLUGIN_ROOT",
         "CODEX_HOME",
         "HOME",
         "LANG",
         "PATH",
+        "PLUGIN_ROOT",
         "TMPDIR",
         "XDG_CONFIG_HOME",
       ],
@@ -330,9 +425,13 @@ test("passes the isolated install, installed-hook, closed-event, and privacy gat
       hookRecord.env.AGENT_WASTE_FIREWALL_DATA_DIR,
       path.join(acceptanceRoot, "awf-data"),
     );
-    assert.equal(hookRecord.env.AGENT_WASTE_FIREWALL_PLATFORM, "codex");
     assert.equal(hookRecord.env.AGENT_WASTE_FIREWALL_MODE, "observe");
     assert.equal(hookRecord.env.AWF_NODE_PATH, process.execPath);
+    assert.equal(hookRecord.env.PLUGIN_ROOT, hookRecord.args[2]);
+    assert.equal(
+      hookRecord.env.CLAUDE_PLUGIN_ROOT,
+      hookRecord.args[2],
+    );
   }
   const hookRecord = hookRecords[0];
   assert.equal(hookRecord.args[0], "-p");
@@ -351,6 +450,83 @@ test("passes the isolated install, installed-hook, closed-event, and privacy gat
     false,
   );
   assert.equal(hookRecord.args[1].startsWith(root), false);
+  assert.equal(hookRecord.args[3], "codex");
+  tracker.assertClean();
+  validateProviderAcceptanceReport(report);
+});
+
+test("fails when installed files exist but Codex does not discover the hooks", (context) => {
+  const tracker = tempParentTracker(context);
+  const records = [];
+  const successful = isolatedSuccessfulRunner(records);
+  const undiscoveredRunner = (specification) => {
+    if (
+      specification.command === process.execPath &&
+      path.basename(specification.args[0]) ===
+        "codex-hook-preflight-probe.mjs"
+    ) {
+      records.push(specification);
+      return {
+        outcome: "ok",
+        stdout: JSON.stringify(missingPreflightFixture()),
+      };
+    }
+    return successful(specification);
+  };
+
+  const report = runProviderAcceptance({
+    codexCommand: "codex",
+    tempParent: tracker.parent,
+    runner: undiscoveredRunner,
+  });
+
+  assert.equal(report.result, "failed");
+  assert.equal(report.failure, "provider_hook_discovery_failed");
+  assert.equal(report.checks.pluginListed, true);
+  assert.equal(report.checks.installedHookFound, true);
+  assert.equal(report.checks.providerHooksDiscovered, false);
+  assert.equal(report.checks.hookExecuted, false);
+  assert.equal(
+    records.some(({ command }) => command === "/bin/sh"),
+    false,
+  );
+  assert.equal(report.checks.cleanupSucceeded, true);
+  tracker.assertClean();
+  validateProviderAcceptanceReport(report);
+});
+
+test("fails closed when provider discovery scratch is replaced by a symlink", (context) => {
+  const tracker = tempParentTracker(context);
+  const successful = isolatedSuccessfulRunner();
+  const replacedScratchRunner = (specification) => {
+    const result = successful(specification);
+    if (
+      specification.command === process.execPath &&
+      path.basename(specification.args[0]) ===
+        "codex-hook-preflight-probe.mjs"
+    ) {
+      const providerTemp = path.join(
+        specification.env.CODEX_HOME,
+        "tmp",
+      );
+      fs.rmSync(providerTemp, { recursive: true, force: true });
+      fs.symlinkSync(specification.env.HOME, providerTemp);
+    }
+    return result;
+  };
+
+  const report = runProviderAcceptance({
+    codexCommand: "codex",
+    tempParent: tracker.parent,
+    runner: replacedScratchRunner,
+  });
+
+  assert.equal(report.result, "failed");
+  assert.equal(report.failure, "provider_scratch_cleanup_failed");
+  assert.equal(report.checks.installedHookFound, true);
+  assert.equal(report.checks.providerHooksDiscovered, false);
+  assert.equal(report.checks.hookExecuted, false);
+  assert.equal(report.checks.cleanupSucceeded, true);
   tracker.assertClean();
   validateProviderAcceptanceReport(report);
 });
@@ -387,7 +563,7 @@ for (const [label, mutateInstalledPlugin] of [
         "hooks/hooks.json",
         (manifest) => {
           manifest.hooks.PostToolUse[0].hooks[0].command =
-            '/bin/sh  -p "${PLUGIN_ROOT}/scripts/hook-launcher.sh" "${PLUGIN_ROOT}"';
+            '/bin/sh  -p "${PLUGIN_ROOT}/scripts/hook-launcher.sh" "${PLUGIN_ROOT}" codex';
         },
       ),
   ],
@@ -442,6 +618,7 @@ for (const [label, mutateInstalledPlugin] of [
     assert.equal(report.failure, "installed_hook_missing");
     assert.equal(report.checks.pluginListed, true);
     assert.equal(report.checks.installedHookFound, false);
+    assert.equal(report.checks.providerHooksDiscovered, false);
     assert.equal(report.checks.hookExecuted, false);
     assert.equal(
       records.some(({ command }) => command === "/bin/sh"),
@@ -485,6 +662,7 @@ test("rejects a non-empty installed-launcher Stop response in observe mode", (co
   assert.equal(report.result, "failed");
   assert.equal(report.failure, "hook_failed");
   assert.equal(report.checks.installedHookFound, true);
+  assert.equal(report.checks.providerHooksDiscovered, true);
   assert.equal(report.checks.hookExecuted, false);
   assert.equal(report.checks.eventProduced, false);
   assert.equal(report.checks.privacyPreserved, false);
@@ -539,6 +717,51 @@ test("fails closed when only initial raw prompt or tool fragments persist", (con
   assert.equal(report.checks.privacyPreserved, false);
   assert.equal(report.checks.cleanupSucceeded, true);
   assert.equal(JSON.stringify(report).includes("AWF-ACCEPTANCE-PROMPT"), false);
+  tracker.assertClean();
+  validateProviderAcceptanceReport(report);
+});
+
+test("fails closed when only interior raw field sentinels persist", (context) => {
+  const tracker = tempParentTracker(context);
+  const successful = isolatedSuccessfulRunner();
+  const leakingRunner = (specification) => {
+    const result = successful(specification);
+    if (
+      specification.command === "/bin/sh" &&
+      result.outcome === "ok"
+    ) {
+      const payload = JSON.parse(specification.input);
+      const rawValue =
+        payload.prompt ??
+        payload.tool_response?.stdout ??
+        payload.tool_input?.command ??
+        payload.last_assistant_message ??
+        "";
+      const markers = rawValue.match(/AWF[0-9a-f]{12}/gu) ?? [];
+      assert.ok(markers.length >= 3);
+      fs.appendFileSync(
+        path.join(
+          specification.env.AGENT_WASTE_FIREWALL_DATA_DIR,
+          "interior-raw-leak.txt",
+        ),
+        `${markers[1]}\n`,
+        { mode: 0o600 },
+      );
+    }
+    return result;
+  };
+
+  const report = runProviderAcceptance({
+    codexCommand: "codex",
+    tempParent: tracker.parent,
+    runner: leakingRunner,
+  });
+
+  assert.equal(report.result, "failed");
+  assert.equal(report.failure, "privacy_violation");
+  assert.equal(report.checks.eventProduced, true);
+  assert.equal(report.checks.privacyPreserved, false);
+  assert.equal(report.checks.cleanupSucceeded, true);
   tracker.assertClean();
   validateProviderAcceptanceReport(report);
 });

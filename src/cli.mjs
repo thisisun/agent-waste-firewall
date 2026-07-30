@@ -16,6 +16,10 @@ import {
   PROVIDER_DELIVERY_MAX_WAIT_MS,
   verifyProviderDelivery,
 } from "./provider-delivery-verification.mjs";
+import {
+  CODEX_HOOK_PREFLIGHT_MAX_WAIT_MS,
+  runCodexHookPreflight,
+} from "./codex-hook-preflight.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
 import { StateRetentionJanitor } from "./state-retention-janitor.mjs";
@@ -102,6 +106,7 @@ Usage:
   agent-waste-firewall report [--json]
   agent-waste-firewall purge [--all] [--json]
   agent-waste-firewall integration status [--json]
+  agent-waste-firewall integration preflight codex [--workspace <path>] [--timeout 3] [--json]
   agent-waste-firewall integration verify <codex|claude> [--timeout 60] [--json]
   agent-waste-firewall doctor [--json]
 
@@ -199,7 +204,10 @@ function providerStatusPrefix(provider) {
 }
 
 async function commandIntegration(args, env = process.env) {
-  const positional = positionalArguments(args, ["--timeout"]);
+  const positional = positionalArguments(args, [
+    "--timeout",
+    "--workspace",
+  ]);
   const [action, provider, ...extra] = positional;
   if (action === "status") {
     if (
@@ -223,8 +231,90 @@ async function commandIntegration(args, env = process.env) {
     }
     return;
   }
+  if (action === "preflight") {
+    if (provider !== "codex" || extra.length > 0) {
+      throw new Error("integration preflight currently requires codex.");
+    }
+    const allowedOptions = new Set([
+      "--json",
+      "--timeout",
+      "--workspace",
+    ]);
+    for (let index = 0; index < args.length; index += 1) {
+      const current = args[index];
+      if (current.startsWith("--") && !allowedOptions.has(current)) {
+        throw new Error(
+          `Unknown integration preflight option: ${current}`,
+        );
+      }
+      if (["--timeout", "--workspace"].includes(current)) index += 1;
+    }
+    for (const option of ["--timeout", "--workspace"]) {
+      if (args.filter((item) => item === option).length > 1) {
+        throw new Error(
+          `integration preflight accepts one ${option} value.`,
+        );
+      }
+      const value = argumentValue(args, option);
+      if (
+        args.includes(option) &&
+        (value === undefined || value.startsWith("--"))
+      ) {
+        throw new Error(
+          option === "--timeout"
+            ? "integration preflight timeout must be 1–10 seconds."
+            : "integration preflight workspace is required.",
+        );
+      }
+    }
+    const timeoutText = argumentValue(args, "--timeout") ?? "3";
+    if (!/^[1-9]\d?$/u.test(timeoutText)) {
+      throw new Error(
+        "integration preflight timeout must be 1–10 seconds.",
+      );
+    }
+    const timeoutMs = Number.parseInt(timeoutText, 10) * 1_000;
+    if (timeoutMs > CODEX_HOOK_PREFLIGHT_MAX_WAIT_MS) {
+      throw new Error(
+        "integration preflight timeout must be 1–10 seconds.",
+      );
+    }
+    const preflight = await runCodexHookPreflight({
+      cwd: argumentValue(args, "--workspace") ?? process.cwd(),
+      env,
+      timeoutMs,
+    });
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(preflight, null, 2));
+    } else if (preflight.result === "ready") {
+      console.log(
+        `PASS  Codex discovered ${preflight.readyHookCount}/${preflight.expectedHookCount} exact AWF hooks; all are enabled and trusted.`,
+      );
+      console.log(
+        `Static discovery completed in ${preflight.checkedMs} ms without starting a model turn.`,
+      );
+    } else if (preflight.result === "not_ready") {
+      console.log(
+        `WAIT  Codex AWF hook discovery is not ready (${preflight.reason}).`,
+      );
+      console.log(
+        `${preflight.readyHookCount}/${preflight.expectedHookCount} expected hooks are ready. Review install, enable, and trust state before any live pilot.`,
+      );
+    } else {
+      console.log(
+        `UNAVAILABLE  Codex hook discovery could not be checked (${preflight.reason}).`,
+      );
+      console.log(
+        "No model turn was started. Check the Codex CLI and retry.",
+      );
+    }
+    if (preflight.result !== "ready") process.exitCode = 1;
+    return;
+  }
   if (action !== "verify") {
-    throw new Error("integration requires status or verify.");
+    throw new Error(
+      "integration requires status, preflight, or verify.",
+    );
   }
   if (!["codex", "claude"].includes(provider) || extra.length > 0) {
     throw new Error("integration verify requires codex or claude.");
@@ -296,6 +386,9 @@ async function commandIntegration(args, env = process.env) {
             `Submit one short prompt in a separate, already loaded ${name} session.`,
           );
           console.log(
+            "The reported wait includes your response time and polling; it is not provider or hook latency.",
+          );
+          console.log(
             "AWF will not change provider configuration. Press Ctrl-C to cancel.",
           );
         }
@@ -310,7 +403,10 @@ async function commandIntegration(args, env = process.env) {
     console.log(JSON.stringify(verification, null, 2));
   } else if (verification.result === "observed") {
     console.log(
-      `PASS  Fresh audited ${name} prompt activity observed in ${verification.waitedMs} ms.`,
+      `PASS  Fresh audited ${name} prompt activity observed.`,
+    );
+    console.log(
+      `Observation wait: ${verification.waitedMs} ms (includes user action and polling; not hook latency).`,
     );
   } else if (verification.result === "timed_out") {
     console.log(
@@ -708,6 +804,7 @@ async function commandDoctor(args, env = process.env) {
     "src/live-event-store.mjs",
     "src/provider-integration-status.mjs",
     "src/provider-delivery-verification.mjs",
+    "src/codex-hook-preflight.mjs",
     "src/trace-schema.mjs",
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
@@ -720,6 +817,7 @@ async function commandDoctor(args, env = process.env) {
     "src/dashboard-assets.mjs",
     "protocol/provider-integration-status-v1.schema.json",
     "protocol/provider-delivery-verification-v1.schema.json",
+    "protocol/codex-hook-preflight-v1.schema.json",
   ];
   const checks = requiredFiles.map((relativePath) => ({
     check: relativePath,

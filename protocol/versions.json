@@ -36,6 +36,13 @@
       ],
       "schema": "provider-delivery-verification-v1.schema.json"
     },
+    "codexHookPreflight": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "codex-hook-preflight-v1.schema.json"
+    },
     "detectorState": {
       "current": 4,
       "supported": [

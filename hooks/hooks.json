@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3
           }
         ]

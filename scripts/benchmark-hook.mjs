@@ -48,7 +48,6 @@ const env = {
   AWF_NODE_PATH: process.execPath,
   AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
   AGENT_WASTE_FIREWALL_MODE: "observe",
-  AGENT_WASTE_FIREWALL_PLATFORM: "codex",
 };
 const traceStore = new TraceStore({ root: dataDir, env });
 if (activeSemanticTrace) {
@@ -70,11 +69,15 @@ function invokeHook(index) {
     tool_input: { command: "git status --short" },
   };
   const startedAt = performance.now();
-  const result = spawnSync("/bin/sh", ["-p", launcher, projectRoot], {
+  const result = spawnSync(
+    "/bin/sh",
+    ["-p", launcher, projectRoot, "codex"],
+    {
     encoding: "utf8",
     env,
     input: JSON.stringify(payload),
-  });
+    },
+  );
   const elapsedMs = performance.now() - startedAt;
   if (result.status !== 0) {
     throw new Error("Hook benchmark subprocess failed.");

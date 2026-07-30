@@ -103,11 +103,13 @@ Provider rules:
 - Keep `Stop` observation-only. A monitor that automatically resumes a stopped agent can create the
   loop it is meant to prevent.
 
-The checked-in provider manifests continue to invoke the plugin-root `/bin/sh -p` shim; they do
-not contain an app-bundle path or a generated per-user command. On macOS, that shim may prefer the
-fixed per-user native helper only when the matching provider-root environment identifies exactly
-one of Codex or Claude. A missing or unsafe helper, or an ambiguous provider match, leaves the
-portable external-Node alpha path available. Once the shim invokes the native helper, that helper
+The checked-in provider manifests invoke the plugin-root `/bin/sh -p` shim with a fixed trailing
+`codex` or `claude` argument; they do not contain an app-bundle path or a generated per-user
+command. On macOS, that shim may prefer the fixed per-user native helper only when the explicit
+provider and its corresponding root variable match the same plugin root. Codex's equal dual-root
+compatibility environment is therefore valid. A missing or unsafe helper, or a provider/root
+mismatch, leaves the portable external-Node alpha path available. Once the shim invokes the
+native helper, that helper
 validates activation and stdin has crossed the handoff boundary: activation failure must fail open
 without retrying the event through Node or appending a second JSON value.
 
@@ -347,12 +349,13 @@ Node for contributors.
 The current alpha routes macOS/POSIX hooks through a plugin-root inner launcher and removes
 inherited `PATH` lookup from both that launcher and the native dashboard locator after they start.
 After `/bin/sh -p` has started and the launcher has control, it removes Node and dynamic-loader
-variables, validates the plugin-root worker, and on macOS derives the provider only from an exact,
-unambiguous `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` match. It then checks the fixed per-user native
+variables, validates the plugin-root worker, and accepts the manifest's fixed provider only when
+the corresponding `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` matches that root. This avoids ambiguity
+when Codex exports both variables for compatibility. It then checks the fixed per-user native
 helper at
 `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
 A safe native helper is preferred. If the helper or its integration directory is missing or
-unsafe, or provider attribution is ambiguous, the shim falls back to the existing explicit,
+unsafe, or the provider/root pair is mismatched, the shim falls back to the existing explicit,
 bounded external Node locations. After native invocation, success or failure terminates the shim;
 the raw stdin is never replayed and a second JSON response is never appended.
 

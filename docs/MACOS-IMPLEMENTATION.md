@@ -119,9 +119,10 @@ Developer ID/notarization, start at login, clean-machine provider acceptance, an
 packaging remain pending.
 
 Provider manifests keep using a plugin-root inner launcher on macOS/POSIX. After `/bin/sh -p`
-starts, the shim removes Node/dynamic-loader variables, validates the plugin worker, and identifies
-one provider from an exact provider-root environment match. On macOS it prefers a safe fixed
-per-user `integration-v1/awf-hook`; an absent or unsafe helper, or ambiguous provider match,
+starts, the shim removes Node/dynamic-loader variables, validates the plugin worker, and accepts
+the manifest's fixed provider only when its provider-specific root resolves to the same plugin
+root. On macOS it prefers a safe fixed per-user `integration-v1/awf-hook`; an absent or unsafe
+helper, or a provider/root mismatch,
 preserves the explicit/bounded external Node alpha path. The helper validates canonical
 activation, the versioned runtime, plugin directories/files, and a closed environment. Raw stdin
 remains on inherited standard input. Its child owns a separate process group, a 2.25-second
@@ -153,10 +154,12 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The 2026-07-30 current baseline passed `npm run check` across 67 JavaScript and 47 JSON files,
-`npm test` with 312/312 tests, and the complete coverage command with 94.49% line,
-82.01% branch, and 95.13% function coverage. A controlled current-head rerun on the inspected
-Apple-silicon Mac measured three independent 50-sample generations after five warmups:
+The 2026-07-30 current baseline passed `npm run check` across 72 JavaScript and 55 JSON files,
+`npm test` with 340/340 tests, and the complete coverage command with 94.52% line,
+81.75% branch, and 95.26% function coverage. The earlier controlled inner-path run on the
+inspected Apple-silicon Mac measured three independent 50-sample generations after five warmups;
+the current provider-manifest boundary rerun is recorded separately in the dated validation
+report:
 
 | Path | Result |
 | --- | ---: |

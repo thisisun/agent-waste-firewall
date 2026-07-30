@@ -45,6 +45,7 @@
       ]
     },
     "waitedMs": {
+      "description": "Baseline-to-observation wait including user action and polling. This is not provider dispatch or hook latency.",
       "type": "integer",
       "minimum": 0,
       "maximum": 300000

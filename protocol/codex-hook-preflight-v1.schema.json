@@ -1,0 +1,981 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/codex-hook-preflight-v1.schema.json",
+  "title": "CodexHookPreflightV1",
+  "description": "Closed, raw-free evidence from a model-free Codex hooks/list discovery check. Reason precedence is encoded below. The sibling relation unexpectedHookCount <= discoveredHookCount remains runtime-only because standard JSON Schema cannot compare those values; runtime validation is normative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "kind",
+    "provider",
+    "result",
+    "reason",
+    "checkedMs",
+    "expectedHookCount",
+    "discoveredHookCount",
+    "unexpectedHookCount",
+    "readyHookCount",
+    "errorCount",
+    "warningCount",
+    "events"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "kind": {
+      "const": "codex_hook_preflight"
+    },
+    "provider": {
+      "const": "codex"
+    },
+    "result": {
+      "enum": [
+        "ready",
+        "not_ready",
+        "unavailable"
+      ]
+    },
+    "reason": {
+      "enum": [
+        "exact_hooks_ready",
+        "provider_not_found",
+        "timed_out",
+        "protocol_error",
+        "provider_plugin_not_found",
+        "discovery_errors",
+        "discovery_warnings",
+        "unexpected_hooks",
+        "missing_hooks",
+        "manifest_mismatch",
+        "duplicate_hooks",
+        "disabled_hooks",
+        "modified_hooks",
+        "untrusted_hooks"
+      ]
+    },
+    "checkedMs": {
+      "description": "Bounded app-server discovery duration. No thread or model turn is started.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "expectedHookCount": {
+      "const": 4
+    },
+    "discoveredHookCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "unexpectedHookCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "readyHookCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "errorCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "warningCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "events": {
+      "type": "array",
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/userPromptSubmit"
+        },
+        {
+          "$ref": "#/$defs/preToolUse"
+        },
+        {
+          "$ref": "#/$defs/postToolUse"
+        },
+        {
+          "$ref": "#/$defs/stop"
+        }
+      ],
+      "items": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "ready"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "exact_hooks_ready"
+          },
+          "discoveredHookCount": {
+            "const": 4
+          },
+          "readyHookCount": {
+            "const": 4
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "minItems": 4,
+            "maxItems": 4,
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 4,
+            "maxContains": 4
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "provider_plugin_not_found",
+              "discovery_errors",
+              "discovery_warnings",
+              "unexpected_hooks",
+              "missing_hooks",
+              "manifest_mismatch",
+              "duplicate_hooks",
+              "disabled_hooks",
+              "modified_hooks",
+              "untrusted_hooks"
+            ]
+          },
+          "events": {
+            "minItems": 4,
+            "maxItems": 4
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "provider_plugin_not_found"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "const": 0
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "readyHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "missing"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 4,
+            "maxContains": 4
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "discovery_errors"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "errorCount": {
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "discovery_warnings"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "unexpected_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "minimum": 1
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "duplicate_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "duplicate"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "missing_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "missing"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "duplicate"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 0,
+                "maxContains": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "manifest_mismatch"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "mismatch"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "duplicate",
+                        "missing"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 0,
+                "maxContains": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "disabled_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "disabled"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "duplicate",
+                        "missing",
+                        "mismatch"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 0,
+                "maxContains": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "modified_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "modified"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "duplicate",
+                        "missing",
+                        "mismatch",
+                        "disabled"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 0,
+                "maxContains": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "const": "untrusted_hooks"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "not_ready"
+          },
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "const": "untrusted"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "duplicate",
+                        "missing",
+                        "mismatch",
+                        "disabled",
+                        "modified"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                },
+                "minContains": 0,
+                "maxContains": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "unavailable"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "provider_not_found",
+              "timed_out",
+              "protocol_error"
+            ]
+          },
+          "discoveredHookCount": {
+            "const": 0
+          },
+          "readyHookCount": {
+            "const": 0
+          },
+          "unexpectedHookCount": {
+            "const": 0
+          },
+          "errorCount": {
+            "const": 0
+          },
+          "warningCount": {
+            "const": 0
+          },
+          "events": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "readyHookCount": {
+            "const": 0
+          }
+        },
+        "required": [
+          "readyHookCount"
+        ]
+      },
+      "then": {
+        "properties": {
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 0,
+            "maxContains": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "readyHookCount": {
+            "const": 1
+          }
+        },
+        "required": [
+          "readyHookCount"
+        ]
+      },
+      "then": {
+        "properties": {
+          "discoveredHookCount": {
+            "minimum": 1
+          },
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 1,
+            "maxContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "readyHookCount": {
+            "const": 2
+          }
+        },
+        "required": [
+          "readyHookCount"
+        ]
+      },
+      "then": {
+        "properties": {
+          "discoveredHookCount": {
+            "minimum": 2
+          },
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 2,
+            "maxContains": 2
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "readyHookCount": {
+            "const": 3
+          }
+        },
+        "required": [
+          "readyHookCount"
+        ]
+      },
+      "then": {
+        "properties": {
+          "discoveredHookCount": {
+            "minimum": 3
+          },
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 3,
+            "maxContains": 3
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "readyHookCount": {
+            "const": 4
+          }
+        },
+        "required": [
+          "readyHookCount"
+        ]
+      },
+      "then": {
+        "properties": {
+          "discoveredHookCount": {
+            "minimum": 4
+          },
+          "events": {
+            "contains": {
+              "properties": {
+                "state": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "minContains": 4,
+            "maxContains": 4
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "eventState": {
+      "enum": [
+        "ready",
+        "missing",
+        "mismatch",
+        "duplicate",
+        "disabled",
+        "untrusted",
+        "modified"
+      ]
+    },
+    "userPromptSubmit": {
+      "$ref": "#/$defs/eventBase",
+      "properties": {
+        "event": {
+          "const": "userPromptSubmit"
+        },
+        "state": {
+          "$ref": "#/$defs/eventState"
+        }
+      }
+    },
+    "preToolUse": {
+      "$ref": "#/$defs/eventBase",
+      "properties": {
+        "event": {
+          "const": "preToolUse"
+        },
+        "state": {
+          "$ref": "#/$defs/eventState"
+        }
+      }
+    },
+    "postToolUse": {
+      "$ref": "#/$defs/eventBase",
+      "properties": {
+        "event": {
+          "const": "postToolUse"
+        },
+        "state": {
+          "$ref": "#/$defs/eventState"
+        }
+      }
+    },
+    "stop": {
+      "$ref": "#/$defs/eventBase",
+      "properties": {
+        "event": {
+          "const": "stop"
+        },
+        "state": {
+          "$ref": "#/$defs/eventState"
+        }
+      }
+    },
+    "eventBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "state"
+      ],
+      "properties": {
+        "event": {
+          "enum": [
+            "userPromptSubmit",
+            "preToolUse",
+            "postToolUse",
+            "stop"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/eventState"
+        }
+      }
+    }
+  }
+}

@@ -43,6 +43,7 @@
     "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
     "benchmark:hook": "node scripts/benchmark-hook.mjs",
     "benchmark:native-hook": "node scripts/benchmark-native-hook.mjs",
+    "benchmark:provider-shell": "node scripts/benchmark-provider-shell.mjs",
     "benchmark:live-dashboard": "node scripts/benchmark-live-dashboard.mjs",
     "benchmark:live-spool": "node scripts/benchmark-live-spool.mjs",
     "benchmark:state-retention": "node scripts/benchmark-state-retention.mjs",

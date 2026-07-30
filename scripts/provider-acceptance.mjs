@@ -9,6 +9,10 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { LiveEventStore } from "../src/live-event-store.mjs";
+import {
+  CODEX_EXPECTED_HOOKS,
+  validateCodexHookPreflight,
+} from "../src/codex-hook-preflight.mjs";
 
 const PROJECT_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -30,7 +34,12 @@ const CONTEXT_HOOK_EVENTS = new Set([
   "PostToolUse",
 ]);
 const EXPECTED_HOOK_COMMAND =
-  '/bin/sh -p "${PLUGIN_ROOT}/scripts/hook-launcher.sh" "${PLUGIN_ROOT}"';
+  '/bin/sh -p "${PLUGIN_ROOT}/scripts/hook-launcher.sh" "${PLUGIN_ROOT}" codex';
+const PREFLIGHT_PROBE = path.join(
+  PROJECT_ROOT,
+  "scripts",
+  "codex-hook-preflight-probe.mjs",
+);
 const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const MAX_AUDIT_BYTES = 32 * 1024 * 1024;
 const MAX_AUDIT_FILES = 2_048;
@@ -65,6 +74,8 @@ const FAILURE_CODES = new Set([
   "plugin_install_failed",
   "plugin_list_failed",
   "installed_hook_missing",
+  "provider_hook_discovery_failed",
+  "provider_scratch_cleanup_failed",
   "hook_failed",
   "event_missing",
   "privacy_violation",
@@ -89,6 +100,7 @@ const CHECK_KEYS = [
   "pluginInstalled",
   "pluginListed",
   "installedHookFound",
+  "providerHooksDiscovered",
   "hookExecuted",
   "eventProduced",
   "privacyPreserved",
@@ -101,6 +113,7 @@ const DURATION_KEYS = [
   "marketplaceAdd",
   "pluginInstall",
   "pluginList",
+  "hookDiscovery",
   "hook",
   "audit",
   "cleanup",
@@ -171,7 +184,8 @@ export function validateProviderAcceptanceReport(value) {
     ["pluginInstalled", "marketplaceAdded"],
     ["pluginListed", "pluginInstalled"],
     ["installedHookFound", "pluginListed"],
-    ["hookExecuted", "installedHookFound"],
+    ["providerHooksDiscovered", "installedHookFound"],
+    ["hookExecuted", "providerHooksDiscovered"],
     ["eventProduced", "hookExecuted"],
     ["privacyPreserved", "hookExecuted"],
   ];
@@ -228,6 +242,7 @@ export function runProviderAcceptanceCommand({
   input,
   timeoutMs,
   maxOutputBytes,
+  killSignal = "SIGKILL",
 }) {
   const result = spawnSync(command, args, {
     cwd,
@@ -236,7 +251,7 @@ export function runProviderAcceptanceCommand({
     encoding: "utf8",
     shell: false,
     timeout: timeoutMs,
-    killSignal: "SIGKILL",
+    killSignal,
     maxBuffer: maxOutputBytes,
     windowsHide: true,
     stdio: [input === undefined ? "ignore" : "pipe", "pipe", "ignore"],
@@ -536,6 +551,28 @@ function installedHooksUseExpectedLauncher(hookManifest) {
   });
 }
 
+function providerDiscoveredInstalledHooks(output) {
+  let result;
+  try {
+    result = validateCodexHookPreflight(JSON.parse(output));
+  } catch {
+    return false;
+  }
+  if (
+    result.discoveredHookCount !== CODEX_EXPECTED_HOOKS.length ||
+    result.unexpectedHookCount !== 0 ||
+    result.errorCount !== 0 ||
+    result.warningCount !== 0 ||
+    result.events.length !== CODEX_EXPECTED_HOOKS.length
+  ) {
+    return false;
+  }
+  return result.events.every(
+    (event) =>
+      event.state === "ready" || event.state === "untrusted",
+  );
+}
+
 function validateInstalledPluginRoot(candidate, codexHome) {
   const relative = path.relative(
     path.join(codexHome, "plugins", "cache", MARKETPLACE_NAME),
@@ -662,6 +699,33 @@ function scanForCanaries(root, canaries) {
   return true;
 }
 
+function clearModelFreeProviderScratch(codexHome) {
+  const tempDirectory = path.join(codexHome, "tmp");
+  const argumentScratch = path.join(tempDirectory, "arg0");
+  try {
+    if (!fs.existsSync(tempDirectory)) return true;
+    const tempStat = fs.lstatSync(tempDirectory);
+    if (
+      !tempStat.isDirectory() ||
+      tempStat.isSymbolicLink()
+    ) {
+      return false;
+    }
+    if (!fs.existsSync(argumentScratch)) return true;
+    const scratchStat = fs.lstatSync(argumentScratch);
+    if (
+      !scratchStat.isDirectory() ||
+      scratchStat.isSymbolicLink()
+    ) {
+      return false;
+    }
+    fs.rmSync(argumentScratch, { recursive: true, force: true });
+    return !fs.existsSync(argumentScratch);
+  } catch {
+    return false;
+  }
+}
+
 function acceptanceCanary(nonce, field) {
   const digest = crypto
     .createHash("sha256")
@@ -706,6 +770,7 @@ function hookEnvironment(
   baseEnv,
   isolatedHome,
   codexHome,
+  installedPluginRoot,
   dataDir,
   tempRoot,
 ) {
@@ -713,11 +778,12 @@ function hookEnvironment(
     ...safeBaseEnvironment(baseEnv),
     HOME: isolatedHome,
     CODEX_HOME: codexHome,
+    PLUGIN_ROOT: installedPluginRoot,
+    CLAUDE_PLUGIN_ROOT: installedPluginRoot,
     XDG_CONFIG_HOME: path.join(isolatedHome, ".config"),
     TMPDIR: path.join(tempRoot, "tmp"),
     AWF_NODE_PATH: process.execPath,
     AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
-    AGENT_WASTE_FIREWALL_PLATFORM: "codex",
     AGENT_WASTE_FIREWALL_MODE: "observe",
   };
 }
@@ -891,40 +957,104 @@ export function runProviderAcceptance(options = {}) {
       }
     }
 
+    if (report.checks.installedHookFound) {
+      const discoveryStartedAt = clock();
+      const discovery = runBounded(runner, {
+        command: process.execPath,
+        args: [
+          PREFLIGHT_PROBE,
+          tempRoot,
+          codexCommand,
+          installedPluginRoot,
+        ],
+        cwd: tempRoot,
+        env: codexEnv,
+        timeoutMs: 6_000,
+        killSignal: "SIGTERM",
+      });
+      const scratchCleaned =
+        clearModelFreeProviderScratch(codexHome);
+      report.durationsMs.hookDiscovery = durationSince(
+        clock,
+        discoveryStartedAt,
+      );
+      if (!scratchCleaned) {
+        markFailed(report, "provider_scratch_cleanup_failed");
+      } else if (
+        discovery.outcome === "ok" &&
+        providerDiscoveredInstalledHooks(discovery.stdout)
+      ) {
+        report.checks.providerHooksDiscovered = true;
+      } else {
+        markFailed(report, "provider_hook_discovery_failed");
+      }
+    }
+
     const promptMarker = acceptanceCanary(nonce, "prompt");
+    const promptInteriorMarker =
+      acceptanceCanary(nonce, "prompt-interior");
     const rawPrompt =
-      `${promptMarker} Please ensure everything works across the whole ` +
+      `${promptMarker} Please ensure ${promptInteriorMarker} everything ` +
+      `works across the whole ` +
       `repository. ${promptMarker}`;
     const sessionMarker = acceptanceCanary(nonce, "session");
+    const sessionInteriorMarker =
+      acceptanceCanary(nonce, "session-interior");
     const turnMarker = acceptanceCanary(nonce, "turn");
+    const turnInteriorMarker =
+      acceptanceCanary(nonce, "turn-interior");
     const toolUseMarker = acceptanceCanary(nonce, "tool-use");
+    const toolUseInteriorMarker =
+      acceptanceCanary(nonce, "tool-use-interior");
     const toolInputMarker = acceptanceCanary(nonce, "tool-input");
+    const toolInputInteriorMarker =
+      acceptanceCanary(nonce, "tool-input-interior");
     const toolOutputMarker = acceptanceCanary(nonce, "tool-output");
+    const toolOutputInteriorMarker =
+      acceptanceCanary(nonce, "tool-output-interior");
     const assistantMarker = acceptanceCanary(nonce, "assistant");
-    const rawSession = `${sessionMarker}:session:${sessionMarker}`;
-    const rawTurn = `${turnMarker}:turn:${turnMarker}`;
-    const rawToolUse = `${toolUseMarker}:tool-use:${toolUseMarker}`;
-    const rawToolInput = `${toolInputMarker}:tool-input:${toolInputMarker}`;
+    const assistantInteriorMarker =
+      acceptanceCanary(nonce, "assistant-interior");
+    const rawSession =
+      `${sessionMarker}:session:${sessionInteriorMarker}:` +
+      `${sessionMarker}`;
+    const rawTurn =
+      `${turnMarker}:turn:${turnInteriorMarker}:${turnMarker}`;
+    const rawToolUse =
+      `${toolUseMarker}:tool-use:${toolUseInteriorMarker}:` +
+      `${toolUseMarker}`;
+    const rawToolInput =
+      `${toolInputMarker}:tool-input:${toolInputInteriorMarker}:` +
+      `${toolInputMarker}`;
     const rawToolOutput =
-      `${toolOutputMarker}:tool-output:${toolOutputMarker}`;
+      `${toolOutputMarker}:tool-output:${toolOutputInteriorMarker}:` +
+      `${toolOutputMarker}`;
     const canaries = [
       promptMarker,
+      promptInteriorMarker,
       sessionMarker,
+      sessionInteriorMarker,
       turnMarker,
+      turnInteriorMarker,
       workspace,
       toolUseMarker,
+      toolUseInteriorMarker,
       toolInputMarker,
+      toolInputInteriorMarker,
       toolOutputMarker,
+      toolOutputInteriorMarker,
       assistantMarker,
+      assistantInteriorMarker,
     ];
     const hookEnv = hookEnvironment(
       baseEnv,
       isolatedHome,
       codexHome,
+      installedPluginRoot,
       dataDir,
       tempRoot,
     );
-    if (report.checks.installedHookFound) {
+    if (report.checks.providerHooksDiscovered) {
       const hookStartedAt = clock();
       const hookPayloads = [
         {
@@ -967,7 +1097,8 @@ export function runProviderAcceptance(options = {}) {
           turn_id: rawTurn,
           stop_hook_active: false,
           last_assistant_message:
-            `${assistantMarker}:assistant:${assistantMarker}`,
+            `${assistantMarker}:assistant:${assistantInteriorMarker}:` +
+            `${assistantMarker}`,
         },
       ];
       let validHookOutput = true;
@@ -982,6 +1113,7 @@ export function runProviderAcceptance(options = {}) {
               "hook-launcher.sh",
             ),
             installedPluginRoot,
+            "codex",
           ],
           cwd: workspace,
           env: hookEnv,

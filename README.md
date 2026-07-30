@@ -35,12 +35,15 @@ AWF is not another token dashboard. It answers three earlier questions:
   result, or a new test/build result. Re-running the same passing test does not reset the counter.
 - Uses separate Codex and Claude Code hook registrations so Claude's `PostToolUseFailure` is
   observed without sending an unsupported event to Codex.
-- Keeps the public Codex and Claude manifests on the same plugin-root `/bin/sh -p` shim. On macOS,
-  after that shim starts and identifies exactly one provider from the matching provider-root
-  environment, it first checks the fixed per-user
+- Keeps the public Codex and Claude manifests on the same plugin-root `/bin/sh -p` shim. Each
+  manifest passes a fixed `codex` or `claude` argument. On macOS, the shim accepts that argument
+  only when the corresponding provider-root variable matches its own plugin root, then checks the
+  fixed per-user
   `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
-  A safe installed helper is preferred; an absent or unsafe helper, or ambiguous provider match,
-  preserves the bounded external-Node alpha fallback. Once invoked, the helper validates its
+  Codex may export both root variables for compatibility; the explicit argument prevents that real
+  environment from being misclassified as ambiguous. A safe installed helper is preferred; an
+  absent or unsafe helper, or a provider/root mismatch, preserves the bounded external-Node alpha
+  fallback. Once invoked, the helper validates its
   activation; an invalid activation fails open without retrying through Node or appending a second
   JSON response. Neither path searches inherited `PATH`
   after the shim has control, and both exclude Node and dynamic-loader injection variables from the
@@ -72,6 +75,9 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Provides a bounded, read-only `integration verify` witness that starts from a live-spool
   baseline and accepts only a fresh audited prompt event for the selected provider. It does not
   install, enable, launch, or configure either provider.
+- Provides a model-free Codex `integration preflight` that initializes app-server and calls only
+  `hooks/list`. It reduces raw hook metadata to four fixed event states and refuses to report
+  ready unless the exact AWF set is discovered, enabled, and trusted.
 - Reads live generations without taking the publisher lock, validates only committed semantic
   records during steady-state polling, and periodically re-audits the complete bounded generation.
   Rotation emits an atomic reset, sequence gaps or dropped publications show incomplete coverage,
@@ -156,6 +162,27 @@ and plugin-list steps share one three-second probe budget and resolve to a close
 on timeout instead of holding the dashboard open indefinitely. Process startup and other CLI work
 sit outside that provider-probe budget.
 
+Before any automated Codex live pilot, run the model-free discovery gate:
+
+```bash
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --timeout 3
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --json
+```
+
+The command performs only `initialize`, `initialized`, and `hooks/list`; it never starts a thread
+or model turn. Its closed `CodexHookPreflightV1` result contains fixed enums, counts, and the four
+public event names only. Paths, commands, hook hashes, plugin IDs, warnings, errors, stderr, and
+raw RPC entries are discarded. Internally, AWF recognizes only the exact Codex provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`; a custom-marketplace ID intentionally reports
+`provider_plugin_not_found` rather than accepting look-alike metadata. `ready` means only that
+Codex reported the expected manifest-shaped hook metadata as enabled and trusted in that
+workspace. It does not attest the installed files, the Codex binary, or later hook delivery.
+Real model-free evidence now covers both the current-user absent-plugin result and an isolated
+marketplace install where Codex `hooks/list` discovered all four exact hooks before their
+launchers were exercised. The isolated gate accepts exact metadata in either trusted or
+untrusted state, so it proves provider registration but is not a user-owned `ready` or live
+delivery pass.
+
 To check live hook delivery after loading the plugin, start this command in a normal terminal:
 
 ```bash
@@ -169,6 +196,10 @@ closed semantic fields identify a prompt from that provider. `observed` is evide
 AWF hook path produced that event. `timed_out` means only that no qualifying event arrived within
 the deadline; it is not proof that the provider or hook is broken. The result contains no prompt,
 command, output, transcript, path, or provider CLI text.
+
+`waitedMs` is only the baseline-to-observation wait. It includes the time taken to submit the
+separate prompt and up to one polling interval, so it must not be reported as provider dispatch,
+outer-shell, or hook latency.
 
 With `--json`, stdout stays reserved for the one final closed result. After the baseline is ready,
 stderr emits one fixed line such as `AWF_READY provider=claude timeoutSeconds=60`; submit the new
@@ -192,14 +223,33 @@ Each gate uses private temporary provider state, stages only a reviewed package 
 temporary marketplace, installs and inventories the plugin, and invokes the installed launcher
 with synthetic hook envelopes. Codex covers prompt/pre-tool/post-tool and observation-only
 `Stop`; Claude also covers `PostToolUseFailure`. Both require closed `LiveEventV1` evidence, scan
-the bounded temporary tree for per-field raw canaries, and remove only the fresh child directory
-they created. The Claude report fixes `providerDelivery` to `not_tested`.
+the bounded temporary tree for boundary and interior per-field raw canaries, and remove only the
+fresh child directory they created. Before direct execution, Codex additionally requires its real
+model-free `hooks/list` response to bind the four exact hooks to the validated installed cache
+root. The Claude report fixes `providerDelivery` to `not_tested`.
 
 These gates do not invoke Codex `/hooks`, start a real Claude session, change user configuration,
 approve trust, bypass `disableAllHooks` or managed policy, or prove provider-driven delivery.
-They directly invoke the inner launcher and therefore do not exercise provider dispatch, hostile
-initial interpreter/loader startup, or Codex's outer login shell. `integration verify` remains the
-separate read-only witness for a user-owned live session.
+Hook delivery is still exercised by calling the inner launcher directly, so the gates do not
+exercise provider dispatch, hostile initial interpreter/loader startup, or Codex's outer login
+shell. Codex's discovery step proves registration only. `integration verify` remains the separate
+read-only witness for a user-owned live session.
+
+Measure the repeatable manifest/shell boundary separately without launching either provider or
+making a model request:
+
+```bash
+npm run benchmark:provider-shell -- --provider codex --shell /bin/zsh --samples 100 --warmups 10 --p95-ms 150
+npm run benchmark:provider-shell -- --provider claude --samples 100 --warmups 10 --p95-ms 150
+```
+
+The Codex form validates the complete checked-in hook manifest and runs its command through
+isolated login-shell semantics before the inner shim, reproducing Codex's equal dual-root
+compatibility environment. The Claude form validates the complete checked-in manifest and runs
+its exact exec-form arguments. Both verify every closed semantic event and support `--no-trace`.
+They deliberately report
+`providerCreatedProcessIncluded: false` and `providerDispatchIncluded: false`; this is reproducible
+shell-path evidence, not real-provider delivery evidence.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the

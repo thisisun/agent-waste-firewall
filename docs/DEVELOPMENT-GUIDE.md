@@ -66,11 +66,14 @@ share one three-second result budget. Timeout and thrown-error detail collapse t
 `unknown` state. Dashboard shutdown aborts and kills in-flight default provider children.
 
 Provider hook launch boundaries differ. Both checked-in manifests still call the plugin-root shell
-shim. Claude execs `/bin/sh -p` without an additional command-evaluation shell. Provider and
+shim and pass a fixed provider argument. The shim accepts that argument only when its
+provider-specific root variable resolves to the same plugin root. This is required because Codex
+exports both root variables for compatibility. Claude execs `/bin/sh -p` without an additional
+command-evaluation shell. Provider and
 initial interpreter/loader startup remain outside the launcher's post-start scrubbing boundary.
 Codex additionally evaluates its command string through inherited `$SHELL -lc`, which is also
 outside AWF's boundary. On macOS the shim prefers the fixed per-user native helper only when an
-exact provider-root match identifies one provider; missing, unsafe, or ambiguous native state
+explicit provider and its exact root match; missing, unsafe, or mismatched native state
 preserves the external Node alpha fallback. Once native stdin handoff occurs, neither the shim nor
 the helper may replay the event through Node or append a second JSON response. Direct external
 launcher acceptance and latency benchmarks do not exercise provider dispatch, hostile initial
@@ -216,15 +219,36 @@ Run the acceptance gates on a Mac with the provider CLIs:
 npm run acceptance:providers
 ```
 
-A pass establishes only that the isolated package/install/direct-launcher path and privacy cleanup
-worked on that machine. Actual user-owned `/hooks` review/trust, provider-driven live delivery,
-upgrade, repair, rollback, and uninstall remain separate acceptance gates.
+A pass establishes that the isolated package/install/direct-launcher path and privacy cleanup
+worked on that machine. Codex additionally requires a real model-free app-server `hooks/list`
+result whose exact four hook source paths bind to the validated installed cache root. This is
+provider-registration evidence, not provider-driven delivery. Claude remains direct-launcher-only
+and reports `providerDelivery: "not_tested"` explicitly. Actual user-owned `/hooks` review/trust,
+provider-driven live delivery, upgrade, repair, rollback, and uninstall remain separate acceptance
+gates. To collect a user-controlled live-delivery witness, first complete the provider's trust
+flow.
 
-These isolated gates invoke installed launchers directly; they are not proof that a provider
-registered and called the hook. Claude reports `providerDelivery: "not_tested"` explicitly. To
-collect a user-controlled live-delivery witness, first complete the provider's trust
-flow. Then start one of these in a normal terminal and submit a new harmless short prompt in a
-separate conversation of that provider:
+For Codex, run the model-free static discovery gate before any automated live pilot:
+
+```bash
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --timeout 3
+```
+
+This uses app-server only for `initialize`, `initialized`, and `hooks/list`. It never sends
+`thread/start`, `turn/start`, or prompt content. `CodexHookPreflightV1` reduces raw discovery
+metadata to fixed counts and states; paths, commands, hashes, plugin IDs, warnings/errors, stderr,
+and raw RPC are discarded. The in-memory matcher pins AWF to the exact provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`. A custom-marketplace ID is deliberately
+non-equivalent and returns `provider_plugin_not_found`. `ready` requires Codex to report the
+expected manifest-shaped metadata for exactly four enabled, trusted hooks. It attests neither the
+installed files nor the Codex binary and does not prove later delivery. Real model-free evidence
+includes the current-user absent-plugin result and an isolated marketplace acceptance where
+Codex discovered all four exact hooks before direct launcher execution. That isolated gate accepts
+exact trusted or untrusted metadata and therefore proves registration, not a user-owned `ready`
+or live-delivery pass.
+
+Then start one of these in a normal terminal and submit a new harmless short prompt in a separate
+conversation of that provider:
 
 ```bash
 node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
@@ -234,6 +258,8 @@ node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
 The JSON form reserves stdout for one final closed result and emits a fixed
 `AWF_READY provider=<codex|claude> timeoutSeconds=<1..300>` readiness line on stderr after the
 baseline. Automated callers must wait for that line before submitting the fresh prompt.
+`waitedMs` includes the operator's response time and polling delay. It is a delivery-witness wait,
+not provider dispatch, outer-shell, or hook latency.
 
 Provider-specific trust and troubleshooting:
 
@@ -257,6 +283,13 @@ trying to witness: that event precedes the command's baseline. The watcher belon
 and the qualifying prompt belongs in a separate provider conversation after the watcher starts.
 No user-owned live-delivery pass is claimed until that manual sequence is completed and recorded
 as such.
+
+Do not automate a provider turn merely because a temporary blocking hook was written. Project
+trust can prevent that hook layer from being discovered, allowing the prompt to reach a model.
+Any future automated live gate must first use a model-free provider discovery surface such as
+`hooks/list`, require an exact closed set of loaded/enabled/trusted hook identities, and abort
+before `turn/start` on any mismatch. Provider stdout, hook commands, paths, and raw entries must
+not enter the persisted report.
 
 Deliverables for each provider:
 
@@ -466,12 +499,14 @@ Developer preview:
 - never assume an interactive shell `PATH`;
 - fail with an actionable install message.
 
-The provider manifests remain unchanged and continue to invoke their plugin-root shell shim. On
-macOS the shim derives `codex` or `claude` only from one exact provider-root environment match,
-then prefers the fixed per-user
+The provider manifests invoke their plugin-root shell shim with a fixed trailing `codex` or
+`claude` argument. On macOS the shim accepts that argument only when the corresponding
+provider-root variable matches its own plugin root, then prefers the fixed per-user
 `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
-An absent or unsafe helper, or an ambiguous provider match, preserves the external Node alpha
-fallback. Once invoked, the helper validates activation and the shim exits after that attempt:
+Codex may export both root variables with the same value; explicit provider selection keeps that
+supported environment unambiguous. An absent or unsafe helper, or a provider/root mismatch,
+preserves the external Node alpha fallback. Once invoked, the helper validates activation and the
+shim exits after that attempt:
 activation failure fails open without handing the same stdin to Node or appending a second JSON
 response.
 
@@ -708,6 +743,19 @@ npm run benchmark:native-hook -- \
   --samples 100 \
   --warmups 10 \
   --p95-ms 100
+
+npm run benchmark:provider-shell -- \
+  --provider codex \
+  --shell /bin/zsh \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 150
+
+npm run benchmark:provider-shell -- \
+  --provider claude \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 150
 ```
 
 Both hook benchmarks create an active semantic trace by default. `--no-trace` measures the same
@@ -716,6 +764,12 @@ substitutes for the other. Native timing starts at the inner shell and therefore
 dispatch and a provider-created outer shell. The benchmark's temporary runtime clone and unsigned
 Debug helper are not release-signing evidence, and install-time runtime prewarming is reported
 separately from steady-state hook latency.
+
+The provider-shell benchmark is a separate repeatable boundary. It validates each complete
+checked-in manifest. Codex includes isolated login-shell semantics and the real equal dual-root
+compatibility environment; Claude exercises the exact exec-form arguments. It still does not
+launch a provider process or include provider dispatch, and its closed result says so explicitly.
+It must not be used as user-owned live-delivery evidence.
 
 These commands intentionally do not sign the app. They prove neither Developer ID distribution nor
 notarization. Run `AWFUITests` separately on an interactive macOS test host; the pull-request job

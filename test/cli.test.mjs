@@ -350,6 +350,91 @@ test("integration verify rejects unsafe or ambiguous options", () => {
   }
 });
 
+test("integration preflight is model-free, closed, and fails safely without Codex", (context) => {
+  const tempRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-cli-preflight-"),
+  );
+  const workspace = path.join(tempRoot, "private workspace");
+  fs.mkdirSync(workspace);
+  context.after(() =>
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "bin/agent-waste-firewall.mjs"),
+      "integration",
+      "preflight",
+      "codex",
+      "--workspace",
+      workspace,
+      "--timeout",
+      "1",
+      "--json",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        PATH: "",
+        HOME: tempRoot,
+        AWF_PREFLIGHT_SECRET: "MUST_NOT_APPEAR",
+      },
+    },
+  );
+
+  assert.equal(result.status, 1, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.deepEqual(Object.keys(report), [
+    "v",
+    "kind",
+    "provider",
+    "result",
+    "reason",
+    "checkedMs",
+    "expectedHookCount",
+    "discoveredHookCount",
+    "unexpectedHookCount",
+    "readyHookCount",
+    "errorCount",
+    "warningCount",
+    "events",
+  ]);
+  assert.equal(report.kind, "codex_hook_preflight");
+  assert.equal(report.result, "unavailable");
+  assert.equal(report.reason, "provider_not_found");
+  assert.equal(result.stdout.includes(workspace), false);
+  assert.equal(result.stdout.includes("MUST_NOT_APPEAR"), false);
+  assert.equal(result.stderr, "");
+});
+
+test("integration preflight rejects unsupported providers and ambiguous values", () => {
+  const cli = path.join(root, "bin/agent-waste-firewall.mjs");
+  for (const [args, expected] of [
+    [
+      ["integration", "preflight", "claude"],
+      /currently requires codex/u,
+    ],
+    [
+      ["integration", "preflight", "codex", "--timeout", "11"],
+      /timeout must be 1–10 seconds/u,
+    ],
+    [
+      ["integration", "preflight", "codex", "--workspace", "--json"],
+      /workspace is required/u,
+    ],
+    [
+      ["integration", "preflight", "codex", "--unknown"],
+      /Unknown integration preflight option/u,
+    ],
+  ]) {
+    const result = spawnSync(process.execPath, [cli, ...args], {
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, expected);
+  }
+});
+
 test("integration verify emits a closed JSON cancellation result", async (context) => {
   const parent = fs.mkdtempSync(
     path.join(os.tmpdir(), "awf-integration-cancel-"),

@@ -122,7 +122,6 @@ const env = {
   PLUGIN_ROOT: projectRoot,
   AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
   AGENT_WASTE_FIREWALL_MODE: "observe",
-  AGENT_WASTE_FIREWALL_PLATFORM: "claude",
 };
 function prewarmRuntime() {
   const startedAt = performance.now();
@@ -175,11 +174,15 @@ function invokeHook(index) {
     tool_input: { command: "git status --short" },
   };
   const startedAt = performance.now();
-  const result = spawnSync("/bin/sh", ["-p", launcher, projectRoot], {
+  const result = spawnSync(
+    "/bin/sh",
+    ["-p", launcher, projectRoot, "codex"],
+    {
     encoding: "utf8",
     env,
     input: JSON.stringify(payload),
-  });
+    },
+  );
   const elapsedMs = performance.now() - startedAt;
   if (result.status !== 0) {
     throw new Error("Native hook benchmark subprocess failed.");

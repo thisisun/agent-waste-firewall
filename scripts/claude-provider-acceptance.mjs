@@ -26,6 +26,7 @@ const EXPECTED_LAUNCHER_ARGUMENTS = Object.freeze([
   "-p",
   `${CLAUDE_PLUGIN_ROOT_REFERENCE}/scripts/hook-launcher.sh`,
   CLAUDE_PLUGIN_ROOT_REFERENCE,
+  "claude",
 ]);
 const MAX_COMMAND_OUTPUT_BYTES = 256 * 1024;
 const MAX_AUDIT_BYTES = 32 * 1024 * 1024;
@@ -709,7 +710,6 @@ function hookEnvironment(
     TMPDIR: path.join(tempRoot, "tmp"),
     AWF_NODE_PATH: process.execPath,
     AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
-    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
     AGENT_WASTE_FIREWALL_MODE: "observe",
   };
 }
@@ -1104,6 +1104,7 @@ export function runClaudeProviderAcceptance(options = {}) {
               "hook-launcher.sh",
             ),
             installedPluginRoot,
+            "claude",
           ],
           cwd: workspace,
           env: hookEnv,

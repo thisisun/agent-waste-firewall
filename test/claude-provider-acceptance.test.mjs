@@ -392,7 +392,6 @@ test("passes isolated local install, inventory, five launcher events, semantic e
       [
         "AGENT_WASTE_FIREWALL_DATA_DIR",
         "AGENT_WASTE_FIREWALL_MODE",
-        "AGENT_WASTE_FIREWALL_PLATFORM",
         "AWF_NODE_PATH",
         "CLAUDE_CONFIG_DIR",
         "CLAUDE_PLUGIN_ROOT",
@@ -402,10 +401,6 @@ test("passes isolated local install, inventory, five launcher events, semantic e
         "TMPDIR",
         "XDG_CONFIG_HOME",
       ],
-    );
-    assert.equal(
-      hookRecord.env.AGENT_WASTE_FIREWALL_PLATFORM,
-      "claude",
     );
     assert.equal(
       hookRecord.env.AGENT_WASTE_FIREWALL_MODE,
@@ -437,6 +432,7 @@ test("passes isolated local install, inventory, five launcher events, semantic e
       false,
     );
     assert.equal(hookRecord.args[1].startsWith(root), false);
+    assert.equal(hookRecord.args[3], "claude");
   }
   tracker.assertClean();
   validateClaudeProviderAcceptanceReport(report);

@@ -10,7 +10,8 @@
             "args": [
               "-p",
               "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
-              "${CLAUDE_PLUGIN_ROOT}"
+              "${CLAUDE_PLUGIN_ROOT}",
+              "claude"
             ],
             "timeout": 3
           }
@@ -26,7 +27,8 @@
             "args": [
               "-p",
               "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
-              "${CLAUDE_PLUGIN_ROOT}"
+              "${CLAUDE_PLUGIN_ROOT}",
+              "claude"
             ],
             "timeout": 3
           }
@@ -42,7 +44,8 @@
             "args": [
               "-p",
               "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
-              "${CLAUDE_PLUGIN_ROOT}"
+              "${CLAUDE_PLUGIN_ROOT}",
+              "claude"
             ],
             "timeout": 3
           }
@@ -58,7 +61,8 @@
             "args": [
               "-p",
               "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
-              "${CLAUDE_PLUGIN_ROOT}"
+              "${CLAUDE_PLUGIN_ROOT}",
+              "claude"
             ],
             "timeout": 3
           }
@@ -74,7 +78,8 @@
             "args": [
               "-p",
               "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launcher.sh",
-              "${CLAUDE_PLUGIN_ROOT}"
+              "${CLAUDE_PLUGIN_ROOT}",
+              "claude"
             ],
             "timeout": 3
           }
