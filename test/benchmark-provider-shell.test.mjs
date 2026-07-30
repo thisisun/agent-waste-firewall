@@ -10,6 +10,7 @@ const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+const canonicalPosixShell = fs.realpathSync.native("/bin/sh");
 
 function makeFixture(context) {
   const fixtureRoot = fs.mkdtempSync(
@@ -119,7 +120,7 @@ test("benchmarks both exact production manifest shell forms", (context) => {
         "--provider",
         "codex",
         "--shell",
-        "/bin/sh",
+        canonicalPosixShell,
         "--samples",
         "2",
         "--warmups",
@@ -208,6 +209,30 @@ test("strict arguments and exact-manifest validation fail closed", (context) => 
   assert.equal(unknown.stderr.includes(secret), false);
   assert.match(unknown.stderr, /Unknown benchmark argument/u);
 
+  const symlinkShell = path.join(fixtureRoot, "symlink-shell");
+  fs.symlinkSync(canonicalPosixShell, symlinkShell);
+  const unsafeShell = runBenchmark(
+    fixtureRoot,
+    [
+      "--provider",
+      "codex",
+      "--shell",
+      symlinkShell,
+      "--samples",
+      "1",
+      "--warmups",
+      "1",
+    ],
+    secret,
+  );
+  assert.notEqual(unsafeShell.status, 0);
+  assert.equal(unsafeShell.stdout, "");
+  assert.equal(unsafeShell.stderr.includes(secret), false);
+  assert.match(
+    unsafeShell.stderr,
+    /codex user shell failed executable-file validation/u,
+  );
+
   const manifestFile = path.join(fixtureRoot, "hooks", "hooks.json");
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
   manifest.hooks.PreToolUse[0].hooks[0].command += " ";
@@ -222,7 +247,7 @@ test("strict arguments and exact-manifest validation fail closed", (context) => 
       "--provider",
       "codex",
       "--shell",
-      "/bin/sh",
+      canonicalPosixShell,
       "--samples",
       "1",
       "--warmups",
@@ -257,7 +282,7 @@ test("strict arguments and exact-manifest validation fail closed", (context) => 
       "--provider",
       "codex",
       "--shell",
-      "/bin/sh",
+      canonicalPosixShell,
       "--samples",
       "1",
       "--warmups",

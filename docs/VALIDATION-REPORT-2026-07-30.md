@@ -43,7 +43,7 @@ tool output, transcript, source-file content, or provider hook JSON was persiste
 | --- | --- |
 | `npm run check` | Pass: 72 JavaScript files and 55 JSON files |
 | `npm test` | Pass: 340/340; 0 failures, skips, or cancellations |
-| `npm run test:coverage` | Pass: 340/340; line 94.52%, branch 81.75%, functions 95.26% |
+| `npm run test:coverage` | Pass: 340/340; line 94.58%, branch 81.93%, functions 95.21% |
 | `npm run acceptance:providers` | Pass: Codex isolated install, installed-root-bound model-free discovery, direct launchers, events, privacy, and cleanup in 457 ms; Claude isolated direct-launcher path in 2,474 ms with provider delivery explicitly not tested |
 | `claude plugin validate --strict .` | Pass |
 | Native `AWFTests` | Pass: 92/92; 0 failures, skips, or expected failures |

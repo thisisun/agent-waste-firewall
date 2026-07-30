@@ -155,8 +155,8 @@ or sandbox claim should be inferred from an unsigned Debug build.
 ## Source build and verification status
 
 The 2026-07-30 current baseline passed `npm run check` across 72 JavaScript and 55 JSON files,
-`npm test` with 340/340 tests, and the complete coverage command with 94.52% line,
-81.75% branch, and 95.26% function coverage. The earlier controlled inner-path run on the
+`npm test` with 340/340 tests, and the complete coverage command with 94.58% line,
+81.93% branch, and 95.21% function coverage. The earlier controlled inner-path run on the
 inspected Apple-silicon Mac measured three independent 50-sample generations after five warmups;
 the current provider-manifest boundary rerun is recorded separately in the dated validation
 report:
