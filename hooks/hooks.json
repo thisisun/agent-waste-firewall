@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"",
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
             "timeout": 3,
             "additionalContextLimit": 2500
           }
@@ -42,9 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"",
-            "timeout": 3,
-            "additionalContextLimit": 2500
+            "command": "/bin/sh -p \"${PLUGIN_ROOT}/scripts/hook-launcher.sh\" \"${PLUGIN_ROOT}\" codex",
+            "timeout": 3
           }
         ]
       }

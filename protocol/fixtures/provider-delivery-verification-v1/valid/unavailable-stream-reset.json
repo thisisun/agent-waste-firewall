@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kind": "provider_delivery_verification",
+  "provider": "codex",
+  "result": "unavailable",
+  "reason": "stream_reset",
+  "waitedMs": 250,
+  "event": null
+}

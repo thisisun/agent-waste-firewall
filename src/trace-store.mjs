@@ -574,11 +574,22 @@ export class TraceStore {
     return null;
   }
 
-  appendHook(payload, result, config) {
-    const active = this.activeFor(payload.cwd ?? process.cwd());
+  appendHook(payload, result, config, activeContext = undefined) {
+    const active =
+      activeContext === undefined
+        ? this.activeFor(payload.cwd ?? process.cwd())
+        : activeContext;
     if (!active) return null;
     const lockPath = path.join(this.traceDir(active.traceId), "append.lock");
     return this.withLock(lockPath, () => {
+      const current = this.readActive();
+      if (
+        !current ||
+        current.traceId !== active.traceId ||
+        current.workspaceAlias !== active.workspaceAlias
+      ) {
+        return null;
+      }
       const metadata = parseJsonFile(this.metadataPath(active.traceId));
       if (metadata.status !== "recording") return null;
       const elapsedMs = Math.max(

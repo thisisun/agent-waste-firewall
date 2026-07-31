@@ -37,8 +37,10 @@ for (const file of files) {
 
 const jsonFiles = [
   "package.json",
+  ".agents/plugins/marketplace.json",
   ".codex-plugin/plugin.json",
   ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
   "hooks/hooks.json",
   "hooks/claude-hooks.json",
 ];
@@ -56,6 +58,7 @@ function collectJson(directory) {
 }
 
 collectJson(path.join(root, "protocol"));
+collectJson(path.join(root, "runtime"));
 
 for (const jsonFile of jsonFiles) {
   JSON.parse(fs.readFileSync(path.join(root, jsonFile), "utf8"));

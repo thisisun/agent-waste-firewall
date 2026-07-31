@@ -848,7 +848,7 @@ test("replaces a legacy detector state when that session becomes active", () => 
     prompt: "Refactor everything forever",
   });
   const sessionsDir = path.join(context.dataDir, "sessions");
-  fs.mkdirSync(sessionsDir, { recursive: true });
+  fs.mkdirSync(sessionsDir, { recursive: true, mode: 0o700 });
   const statePath = context.store.statePath(context.store.keyFor(currentPayload));
   fs.writeFileSync(
     statePath,
@@ -858,6 +858,7 @@ test("replaces a legacy detector state when that session becomes active", () => 
       files: { "SECRET-LEGACY-PATH.js": {} },
       rawPrompt: "SECRET-LEGACY-PROMPT",
     })}\n`,
+    { mode: 0o600 },
   );
 
   handleHook(currentPayload, context);

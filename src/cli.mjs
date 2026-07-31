@@ -1,29 +1,36 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { configFromEnv } from "./config.mjs";
+import { dashboardReady } from "./dashboard-ready-schema.mjs";
 import { handleHook } from "./engine.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
 import { evaluatePrompt } from "./prompt-contract.mjs";
+import {
+  providerIntegrationStatus,
+  providerIntegrationStatusAsync,
+} from "./provider-integration-status.mjs";
+import {
+  PROVIDER_DELIVERY_MAX_WAIT_MS,
+  verifyProviderDelivery,
+} from "./provider-delivery-verification.mjs";
+import {
+  CODEX_HOOK_PREFLIGHT_MAX_WAIT_MS,
+  runCodexHookPreflight,
+} from "./codex-hook-preflight.mjs";
 import { replaySemanticEvents } from "./semantic-replay.mjs";
 import { StateStore } from "./state-store.mjs";
+import { StateRetentionJanitor } from "./state-retention-janitor.mjs";
 import { TraceStore } from "./trace-store.mjs";
-import { hash } from "./utils.mjs";
+import { runHookStdio } from "./hook-stdio.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "./helper-worker-handshake.mjs";
+
+export { runHookStdio };
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = "0.1.0";
-
-async function readStdin() {
-  let input = "";
-  process.stdin.setEncoding("utf8");
-  for await (const chunk of process.stdin) {
-    input += chunk;
-  }
-  return input;
-}
 
 function argumentValue(args, name) {
   const index = args.indexOf(name);
@@ -88,17 +95,20 @@ function usage() {
 Usage:
   agent-waste-firewall --version
   agent-waste-firewall check-prompt <prompt> [--json]
-  agent-waste-firewall hook
+  agent-waste-firewall hook <codex|claude>
   agent-waste-firewall record start --workspace <path> --label <safe-label> [--mode observe|warn|block] [--json]
   agent-waste-firewall record status [--json]
   agent-waste-firewall record stop [--json]
-  agent-waste-firewall dashboard [trace-id] [--port 4319]
+  agent-waste-firewall dashboard [trace-id] [--port 4319] [--json]
   agent-waste-firewall trace list [--json]
   agent-waste-firewall trace audit <trace-id> [--json]
   agent-waste-firewall trace export <trace-id> --output <trace.jsonl> [--json]
   agent-waste-firewall replay <events.jsonl> [--mode observe|warn|block] [--json]
   agent-waste-firewall report [--json]
   agent-waste-firewall purge [--all] [--json]
+  agent-waste-firewall integration status [--json]
+  agent-waste-firewall integration preflight codex [--workspace <path>] [--timeout 3] [--json]
+  agent-waste-firewall integration verify <codex|claude> [--timeout 60] [--json]
   agent-waste-firewall doctor [--json]
 
 Modes:
@@ -106,6 +116,323 @@ Modes:
   AGENT_WASTE_FIREWALL_MODE=warn     record and add concise context (default)
   AGENT_WASTE_FIREWALL_MODE=block    block only high-confidence repeats
 `;
+}
+
+export function integrationStatus(
+  env = process.env,
+  runner = undefined,
+) {
+  return providerIntegrationStatus({
+    env,
+    runner,
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+  });
+}
+
+export async function integrationStatusAsync(
+  env = process.env,
+  runner = undefined,
+  options = {},
+) {
+  return providerIntegrationStatusAsync({
+    env,
+    runner,
+    probeTimeoutMs: options.probeTimeoutMs,
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+  });
+}
+
+export function summarizeProviderMonitoring(integration) {
+  const providerInstalled = integration.providers.some((provider) =>
+    ["needs_enable", "installed_unverified", "active"].includes(
+      provider.state,
+    )
+  );
+  let monitoring;
+  if (integration.providers.some((provider) => provider.state === "active")) {
+    monitoring = "active";
+  } else if (
+    integration.providers.some((provider) =>
+      ["needs_install", "needs_enable", "installed_unverified"].includes(
+        provider.state,
+      )
+    )
+  ) {
+    monitoring = "attention";
+  } else if (
+    integration.providers.every(
+      (provider) => provider.state === "not_detected",
+    )
+  ) {
+    monitoring = "inactive";
+  } else {
+    monitoring = "unknown";
+  }
+  return {
+    providerInstalled,
+    monitoringActive: monitoring === "active",
+    monitoring,
+  };
+}
+
+function providerStatusLine(provider) {
+  const labels = {
+    active: "activity observed",
+    installed_unverified: "installed; delivery not yet observed",
+    needs_enable: "installed but disabled",
+    needs_install: "AWF plugin not installed",
+    not_detected: "CLI not detected",
+    unknown: "status unavailable",
+  };
+  const version = provider.version
+    ? ` ${provider.version.major}.${provider.version.minor}.${provider.version.patch}`
+    : "";
+  const name = provider.provider === "codex" ? "Codex" : "Claude Code";
+  return `${name}${version}: ${labels[provider.state]}`;
+}
+
+function providerStatusPrefix(provider) {
+  if (provider.state === "active") return "PASS";
+  if (provider.state === "not_detected") return "MISS";
+  if (provider.state === "unknown") return "WARN";
+  return "WAIT";
+}
+
+async function commandIntegration(args, env = process.env) {
+  const positional = positionalArguments(args, [
+    "--timeout",
+    "--workspace",
+  ]);
+  const [action, provider, ...extra] = positional;
+  if (action === "status") {
+    if (
+      provider !== undefined ||
+      extra.length > 0 ||
+      args.some(
+        (item) => item.startsWith("--") && item !== "--json",
+      )
+    ) {
+      throw new Error("integration status accepts only --json.");
+    }
+    const integration = await integrationStatusAsync(env);
+    const { monitoring } = summarizeProviderMonitoring(integration);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(integration, null, 2));
+      return;
+    }
+    console.log(`Monitoring: ${monitoring}`);
+    for (const current of integration.providers) {
+      console.log(providerStatusLine(current));
+    }
+    return;
+  }
+  if (action === "preflight") {
+    if (provider !== "codex" || extra.length > 0) {
+      throw new Error("integration preflight currently requires codex.");
+    }
+    const allowedOptions = new Set([
+      "--json",
+      "--timeout",
+      "--workspace",
+    ]);
+    for (let index = 0; index < args.length; index += 1) {
+      const current = args[index];
+      if (current.startsWith("--") && !allowedOptions.has(current)) {
+        throw new Error(
+          `Unknown integration preflight option: ${current}`,
+        );
+      }
+      if (["--timeout", "--workspace"].includes(current)) index += 1;
+    }
+    for (const option of ["--timeout", "--workspace"]) {
+      if (args.filter((item) => item === option).length > 1) {
+        throw new Error(
+          `integration preflight accepts one ${option} value.`,
+        );
+      }
+      const value = argumentValue(args, option);
+      if (
+        args.includes(option) &&
+        (value === undefined || value.startsWith("--"))
+      ) {
+        throw new Error(
+          option === "--timeout"
+            ? "integration preflight timeout must be 1–10 seconds."
+            : "integration preflight workspace is required.",
+        );
+      }
+    }
+    const timeoutText = argumentValue(args, "--timeout") ?? "3";
+    if (!/^[1-9]\d?$/u.test(timeoutText)) {
+      throw new Error(
+        "integration preflight timeout must be 1–10 seconds.",
+      );
+    }
+    const timeoutMs = Number.parseInt(timeoutText, 10) * 1_000;
+    if (timeoutMs > CODEX_HOOK_PREFLIGHT_MAX_WAIT_MS) {
+      throw new Error(
+        "integration preflight timeout must be 1–10 seconds.",
+      );
+    }
+    const preflight = await runCodexHookPreflight({
+      cwd: argumentValue(args, "--workspace") ?? process.cwd(),
+      env,
+      timeoutMs,
+    });
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(preflight, null, 2));
+    } else if (preflight.result === "ready") {
+      console.log(
+        `PASS  Codex discovered ${preflight.readyHookCount}/${preflight.expectedHookCount} exact AWF hooks; all are enabled and trusted.`,
+      );
+      console.log(
+        `Static discovery completed in ${preflight.checkedMs} ms without starting a model turn.`,
+      );
+    } else if (preflight.result === "not_ready") {
+      console.log(
+        `WAIT  Codex AWF hook discovery is not ready (${preflight.reason}).`,
+      );
+      console.log(
+        `${preflight.readyHookCount}/${preflight.expectedHookCount} expected hooks are ready. Review install, enable, and trust state before any live pilot.`,
+      );
+    } else {
+      console.log(
+        `UNAVAILABLE  Codex hook discovery could not be checked (${preflight.reason}).`,
+      );
+      console.log(
+        "No model turn was started. Check the Codex CLI and retry.",
+      );
+    }
+    if (preflight.result !== "ready") process.exitCode = 1;
+    return;
+  }
+  if (action !== "verify") {
+    throw new Error(
+      "integration requires status, preflight, or verify.",
+    );
+  }
+  if (!["codex", "claude"].includes(provider) || extra.length > 0) {
+    throw new Error("integration verify requires codex or claude.");
+  }
+  const allowedOptions = new Set(["--json", "--timeout"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current.startsWith("--") && !allowedOptions.has(current)) {
+      throw new Error(`Unknown integration verify option: ${current}`);
+    }
+    if (current === "--timeout") index += 1;
+  }
+  if (args.filter((item) => item === "--timeout").length > 1) {
+    throw new Error("integration verify accepts one --timeout value.");
+  }
+  const hasTimeout = args.includes("--timeout");
+  const timeoutText = hasTimeout
+    ? argumentValue(args, "--timeout")
+    : "60";
+  if (hasTimeout && timeoutText === undefined) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+  if (!/^[1-9]\d{0,2}$/u.test(timeoutText)) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+  const timeoutSeconds = Number.parseInt(timeoutText, 10);
+  const timeoutMs = timeoutSeconds * 1_000;
+  if (timeoutMs > PROVIDER_DELIVERY_MAX_WAIT_MS) {
+    throw new Error("integration verify timeout must be 1–300 seconds.");
+  }
+
+  const config = configFromEnv(env);
+  const store = new LiveEventStore({
+    root: config.dataDir,
+    env,
+    maxEvents: config.liveMaxEvents,
+    maxBytes: config.liveMaxBytes,
+    maxAgeMs: config.liveMaxAgeMinutes * 60 * 1_000,
+  });
+  const controller = new AbortController();
+  let interruptedExitCode = 130;
+  const interrupt = (exitCode) => {
+    interruptedExitCode = exitCode;
+    controller.abort();
+  };
+  const onSigint = () => interrupt(130);
+  const onSigterm = () => interrupt(143);
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  const json = args.includes("--json");
+  const name = provider === "codex" ? "Codex" : "Claude Code";
+  let verification;
+  try {
+    verification = await verifyProviderDelivery({
+      provider,
+      store,
+      timeoutMs,
+      signal: controller.signal,
+      onBaseline: () => {
+        if (json) {
+          process.stderr.write(
+            `AWF_READY provider=${provider} timeoutSeconds=${timeoutSeconds}\n`,
+          );
+        } else {
+          console.log(
+            `Waiting for a fresh audited ${name} prompt event for up to ${timeoutSeconds} seconds.`,
+          );
+          console.log(
+            `Submit one short prompt in a separate, already loaded ${name} session.`,
+          );
+          console.log(
+            "The reported wait includes your response time and polling; it is not provider or hook latency.",
+          );
+          console.log(
+            "AWF will not change provider configuration. Press Ctrl-C to cancel.",
+          );
+        }
+      },
+    });
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
+  }
+
+  if (json) {
+    console.log(JSON.stringify(verification, null, 2));
+  } else if (verification.result === "observed") {
+    console.log(
+      `PASS  Fresh audited ${name} prompt activity observed.`,
+    );
+    console.log(
+      `Observation wait: ${verification.waitedMs} ms (includes user action and polling; not hook latency).`,
+    );
+  } else if (verification.result === "timed_out") {
+    console.log(
+      `TIMEOUT  No fresh audited ${name} prompt activity was observed.`,
+    );
+    console.log(
+      "This does not prove hooks are broken. Check install, enable, and trust state, then retry.",
+    );
+  } else if (verification.result === "cancelled") {
+    console.log("CANCELLED  Provider delivery verification was interrupted.");
+  } else if (verification.reason === "stream_reset") {
+    console.log(
+      "UNAVAILABLE  The audited live stream changed during verification. Retry once.",
+    );
+  } else {
+    console.log(
+      "UNAVAILABLE  The audited live spool could not be read safely.",
+    );
+  }
+
+  if (verification.result === "cancelled") {
+    process.exitCode = interruptedExitCode;
+  } else if (verification.result !== "observed") {
+    process.exitCode = 1;
+  }
 }
 
 async function commandCheckPrompt(args) {
@@ -382,7 +709,12 @@ async function commandTrace(args, env = process.env) {
 async function commandDashboard(args, env = process.env) {
   const { startDashboard } = await import("./dashboard-server.mjs");
   const config = configFromEnv(env);
+  const json = args.includes("--json");
   const traceId = positionalArguments(args, ["--port"])[0] ?? null;
+  const stateJanitor = new StateRetentionJanitor({
+    store: new StateStore({ root: config.dataDir }),
+    retentionDays: config.retentionDays,
+  });
   const dashboard = await startDashboard({
     root: config.dataDir,
     source: traceId ? "trace" : "live",
@@ -390,22 +722,49 @@ async function commandDashboard(args, env = process.env) {
     port: argumentValue(args, "--port") ?? 4319,
     mode: config.mode,
     env,
+    stateJanitor,
   });
-  console.log(`AWF dashboard: ${dashboard.url}`);
-  console.log("Press Ctrl-C to stop the local dashboard.");
+  if (json) {
+    console.log(
+      JSON.stringify(
+        dashboardReady({
+          host: dashboard.host,
+          port: dashboard.port,
+          token: dashboard.token,
+          source: dashboard.source,
+        }),
+      ),
+    );
+  } else {
+    console.log(`AWF dashboard: ${dashboard.url}`);
+    console.log("Press Ctrl-C to stop the local dashboard.");
+  }
 
-  await new Promise((resolve) => {
+  await new Promise((resolve, reject) => {
     let closing = false;
-    const close = async () => {
+    const hasParentLifeline =
+      env.AGENT_WASTE_FIREWALL_PARENT_LIFELINE === "1";
+    const close = () => {
       if (closing) return;
       closing = true;
       process.removeListener("SIGINT", close);
       process.removeListener("SIGTERM", close);
-      await dashboard.close();
-      resolve();
+      process.stdin.removeListener("end", close);
+      process.stdin.removeListener("error", close);
+      if (hasParentLifeline && !process.stdin.destroyed) {
+        process.stdin.destroy();
+      }
+      Promise.resolve()
+        .then(() => dashboard.close())
+        .then(resolve, reject);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
+    if (hasParentLifeline) {
+      process.stdin.once("end", close);
+      process.stdin.once("error", close);
+      process.stdin.resume();
+    }
   });
 }
 
@@ -436,20 +795,33 @@ async function commandDoctor(args, env = process.env) {
   const requiredFiles = [
     ".codex-plugin/plugin.json",
     ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
     "hooks/hooks.json",
     "hooks/claude-hooks.json",
     "scripts/hook.mjs",
+    "src/helper-worker-handshake.mjs",
+    "src/hook-stdio.mjs",
     "src/live-event-schema.mjs",
     "src/live-event-projection.mjs",
     "src/live-event-store.mjs",
+    "src/provider-integration-status.mjs",
+    "src/provider-delivery-verification.mjs",
+    "src/codex-hook-preflight.mjs",
     "src/trace-schema.mjs",
     "src/trace-store.mjs",
     "src/semantic-replay.mjs",
     "src/dashboard-server.mjs",
+    "src/dashboard-ready-schema.mjs",
+    "src/dashboard-status-schema.mjs",
     "src/dashboard-live-cursor.mjs",
     "src/dashboard-projection.mjs",
     "src/dashboard-trace-cursor.mjs",
     "src/dashboard-assets.mjs",
+    "protocol/helper-worker-handshake-v1.json",
+    "protocol/helper-worker-handshake-v1.schema.json",
+    "protocol/provider-integration-status-v1.schema.json",
+    "protocol/provider-delivery-verification-v1.schema.json",
+    "protocol/codex-hook-preflight-v1.schema.json",
   ];
   const checks = requiredFiles.map((relativePath) => ({
     check: relativePath,
@@ -488,10 +860,20 @@ async function commandDoctor(args, env = process.env) {
   }
   const major = Number.parseInt(process.versions.node.split(".")[0], 10);
   checks.push({ check: "Node.js >= 18", ok: major >= 18, detail: process.version });
+  const providerIntegration = await integrationStatusAsync(env);
+  const providerMonitoring =
+    summarizeProviderMonitoring(providerIntegration);
+  const monitoring = providerMonitoring.monitoring;
+  const engineReady = checks.every((current) => current.ok);
   const result = {
-    ok: checks.every((current) => current.ok),
+    ok: engineReady,
+    engineReady,
+    providerInstalled: providerMonitoring.providerInstalled,
+    monitoringActive: providerMonitoring.monitoringActive,
+    monitoring,
     mode: config.mode,
     dataDir: config.dataDir,
+    providerIntegration,
     checks,
   };
   if (args.includes("--json")) {
@@ -502,6 +884,10 @@ async function commandDoctor(args, env = process.env) {
     }
     console.log(`Mode: ${config.mode}`);
     console.log(`Data: ${config.dataDir}`);
+    console.log(`Monitoring: ${monitoring}`);
+    for (const provider of providerIntegration.providers) {
+      console.log(`${providerStatusPrefix(provider)}  ${providerStatusLine(provider)}`);
+    }
   }
   if (!result.ok) {
     process.exitCode = 1;
@@ -556,161 +942,14 @@ async function commandPurge(args, env = process.env) {
         `Skipped ${result.activeFilesSkipped} active file(s); run purge again after the coding-agent session stops.`,
       );
     }
+    if (result.unsafeFilesSkipped > 0) {
+      console.log(
+        `Skipped ${result.unsafeFilesSkipped} unsafe state file(s); inspect the private data directory before removing them manually.`,
+      );
+    }
     if (result.activeTracesSkipped > 0) {
       console.log("Skipped the active trace recording; stop it before purging.");
     }
-  }
-}
-
-function failOpenMarker(env, suffix = "warning") {
-  const uid = typeof process.getuid === "function" ? process.getuid() : "user";
-  const dataKey = hash(env.AGENT_WASTE_FIREWALL_DATA_DIR ?? "default").slice(0, 12);
-  const directory = path.join(os.tmpdir(), `agent-waste-firewall-${uid}`);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const stat = fs.lstatSync(directory);
-  if (
-    !stat.isDirectory() ||
-    stat.isSymbolicLink() ||
-    (typeof uid === "number" && stat.uid !== uid)
-  ) {
-    throw new Error("Unsafe fail-open warning directory.");
-  }
-  return path.join(directory, `${dataKey}.${suffix}`);
-}
-
-function failOpenOutput(env = process.env) {
-  const interval = 5 * 60 * 1000;
-  let shouldWarn = true;
-  try {
-    const marker = failOpenMarker(env);
-    if (fs.existsSync(marker)) {
-      shouldWarn = Date.now() - fs.statSync(marker).mtimeMs >= interval;
-    }
-    if (shouldWarn) {
-      fs.writeFileSync(marker, String(Date.now()), { mode: 0o600 });
-    }
-  } catch {
-    // If rate limiting itself fails, warning once is safer than silent disablement.
-  }
-  return shouldWarn
-    ? {
-        systemMessage:
-          "AWF failed open: this event was not checked. Run `agent-waste-firewall doctor`.",
-      }
-    : {};
-}
-
-function recorderWarningOutput(output, env = process.env) {
-  const interval = 5 * 60 * 1000;
-  let shouldWarn = true;
-  try {
-    const marker = failOpenMarker(env, "recorder-warning");
-    if (fs.existsSync(marker)) {
-      shouldWarn = Date.now() - fs.statSync(marker).mtimeMs >= interval;
-    }
-    if (shouldWarn) {
-      fs.writeFileSync(marker, String(Date.now()), { mode: 0o600 });
-    }
-  } catch {
-    // A local recorder warning is safer than silently claiming recording succeeded.
-  }
-  if (!shouldWarn) return output;
-  const message =
-    "AWF explicit trace recording failed for this event; the guard decision still applied. Run `agent-waste-firewall doctor`.";
-  return {
-    ...output,
-    systemMessage: output.systemMessage
-      ? `${output.systemMessage}\n${message}`
-      : message,
-  };
-}
-
-function warnLiveSpoolFailure(env = process.env) {
-  const interval = 5 * 60 * 1000;
-  let shouldWarn = true;
-  try {
-    const marker = failOpenMarker(env, "live-spool-warning");
-    if (fs.existsSync(marker)) {
-      shouldWarn = Date.now() - fs.statSync(marker).mtimeMs >= interval;
-    }
-    if (shouldWarn) {
-      fs.writeFileSync(marker, String(Date.now()), { mode: 0o600 });
-    }
-  } catch {
-    // The live spool is optional presentation transport; the guard still runs.
-  }
-  if (shouldWarn) {
-    process.stderr.write(
-      "AWF live monitor degraded: one semantic presentation event was dropped. The guard decision still applied.\n",
-    );
-  }
-}
-
-export async function runHookStdio(options = {}) {
-  try {
-    const input = await readStdin();
-    const payload = JSON.parse(input);
-    const env = options.env ?? process.env;
-    const baseConfig = {
-      ...configFromEnv(env),
-      ...(options.config ?? {}),
-    };
-    const traceStore =
-      options.traceStore ?? new TraceStore({ root: baseConfig.dataDir, env });
-    const liveStore =
-      options.liveStore ??
-      new LiveEventStore({
-        root: baseConfig.dataDir,
-        env,
-        maxEvents: baseConfig.liveMaxEvents,
-        maxBytes: baseConfig.liveMaxBytes,
-        maxAgeMs: baseConfig.liveMaxAgeMinutes * 60 * 1000,
-      });
-    let config = baseConfig;
-    let recorderFailed = false;
-    try {
-      const active = traceStore.activeFor(payload.cwd ?? process.cwd());
-      if (active?.metadata?.mode) {
-        config = { ...baseConfig, mode: active.metadata.mode };
-      }
-    } catch {
-      recorderFailed = true;
-    }
-
-    const decisionStartedAt = performance.now();
-    const result = handleHook(payload, {
-      ...options,
-      env,
-      config,
-    });
-    const decisionLatencyMs = performance.now() - decisionStartedAt;
-    try {
-      const publication = liveStore.publish(payload, result, config, {
-        decisionLatencyMs,
-      });
-      if (
-        publication?.published === false &&
-        publication.reason !== "unsupported"
-      ) {
-        warnLiveSpoolFailure(env);
-      }
-    } catch {
-      warnLiveSpoolFailure(env);
-    }
-    try {
-      traceStore.appendHook(payload, result, config);
-    } catch {
-      recorderFailed = true;
-    }
-    const output = recorderFailed
-      ? recorderWarningOutput(result.output, env)
-      : result.output;
-    process.stdout.write(`${JSON.stringify(output)}\n`);
-  } catch (error) {
-    if (process.env.AGENT_WASTE_FIREWALL_DEBUG === "1") {
-      process.stderr.write(`AWF hook failed open: ${error.stack ?? error}\n`);
-    }
-    process.stdout.write(`${JSON.stringify(failOpenOutput(options.env))}\n`);
   }
 }
 
@@ -724,7 +963,18 @@ export async function main(args, options = {}) {
     } else if (command === "check-prompt") {
       await commandCheckPrompt(rest);
     } else if (command === "hook") {
-      await runHookStdio(options);
+      if (rest.length !== 1 || !["codex", "claude"].includes(rest[0])) {
+        throw new Error("hook requires exactly one provider: codex or claude.");
+      }
+      const env = {
+        ...(options.env ?? process.env),
+        AGENT_WASTE_FIREWALL_PLATFORM: rest[0],
+      };
+      await runHookStdio({
+        ...options,
+        env,
+        arguments: [...PORTABLE_WORKER_ARGUMENTS],
+      });
     } else if (command === "record") {
       await commandRecord(rest, options.env);
     } else if (command === "dashboard" || command === "monitor") {
@@ -737,6 +987,8 @@ export async function main(args, options = {}) {
       await commandReport(rest, options.env);
     } else if (command === "purge") {
       await commandPurge(rest, options.env);
+    } else if (command === "integration") {
+      await commandIntegration(rest, options.env);
     } else if (command === "doctor") {
       await commandDoctor(rest, options.env);
     } else {

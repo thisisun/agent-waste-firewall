@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "kind": "provider_delivery_verification",
+  "provider": "codex",
+  "result": "observed",
+  "reason": "fresh_prompt_event",
+  "waitedMs": 250,
+  "event": null
+}

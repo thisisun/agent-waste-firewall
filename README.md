@@ -5,12 +5,23 @@
 Local-first live monitoring, prompt coaching, and no-progress circuit breakers for Codex and
 Claude Code.
 
-> Status: `0.1.0` research alpha. The live hook path, bounded always-on `LiveEventV1` spool,
-> generation-aware dashboard, anonymized recorder, and replay work and are tested. The dashboard
-> consumes the live spool by default without `record start`; an explicit trace ID opens historical
-> audited data. Exact token accounting, a native macOS shell, and one-command installation are not
-> implemented yet. Provider-shaped events pass the real hook executable, but installed Codex and
-> Claude Code acceptance tests are still pending.
+> Status: `0.1.0` research alpha with an unsigned native macOS developer preview. The live hook
+> path, bounded always-on `LiveEventV1` spool, generation-aware dashboard, raw-free pseudonymous
+> recorder, and replay are implemented and tested. The source tree now also contains a
+> SwiftUI/AppKit menu-bar shell, local `WKWebView`, transparent floating sentinel, and a
+> hardened-runtime Swift hook helper embedded at `Contents/Helpers/awf-hook`. A native
+> integration manager now validates, installs, upgrades, repairs, rolls back, and conservatively
+> uninstalls an app-sealed helper/runtime payload. A test-only subprocess gate now covers 30
+> lifecycle scenarios by delivering 34 verified `SIGKILL`s at post-sync publication/removal
+> checkpoints, then requiring bounded recovery without raw-data persistence. This is process-crash
+> evidence, not a sudden-power-loss claim. The repository pins Node.js `v24.18.0` for
+> architecture-specific release assembly and verifies its archive, executable, license, nested
+> signature, exact version, and post-sign digest. The checked-in source build intentionally
+> contains no generated Node binary, so installation stays disabled until that release payload is
+> assembled. The app is not yet Developer ID-signed, notarized, or packaged. Exact token
+> accounting and one-command provider setup remain pending. User-owned Codex and Claude Code live
+> hook delivery and fresh dashboard activity passed on the validation Mac. The Claude model API
+> request itself stopped at external account authentication with zero reported usage.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -28,6 +39,27 @@ AWF is not another token dashboard. It answers three earlier questions:
   result, or a new test/build result. Re-running the same passing test does not reset the counter.
 - Uses separate Codex and Claude Code hook registrations so Claude's `PostToolUseFailure` is
   observed without sending an unsupported event to Codex.
+- Keeps the public Codex and Claude manifests on the same plugin-root `/bin/sh -p` shim. Each
+  manifest passes a fixed `codex` or `claude` argument. On macOS, the shim accepts that argument
+  only when the corresponding provider-root variable matches its own plugin root, then checks the
+  fixed per-user
+  `~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
+  Codex may export both root variables for compatibility; the explicit argument prevents that real
+  environment from being misclassified as ambiguous. A safe installed helper is preferred; an
+  absent or unsafe helper, or a provider/root mismatch, preserves the bounded external-Node alpha
+  fallback. Once invoked, the helper validates its
+  activation; an invalid activation fails open without retrying through Node or appending a second
+  JSON response. Neither path searches inherited `PATH`
+  after the shim has control, and both exclude Node and dynamic-loader injection variables from the
+  worker. This does not sanitize provider or initial interpreter/loader startup. Claude's
+  exec-form hook adds no command-evaluation shell, but its provider-to-`/bin/sh` startup remains a
+  trusted boundary. Codex additionally passes through the provider's inherited `$SHELL -lc`,
+  which is also outside AWF's boundary. See the
+  [Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
+  The native handoff and its integration-management UI are implemented, but the checked-in source
+  build deliberately lacks the generated `awf-node` release payload. Developer ID signing,
+  notarization, and clean-machine provider acceptance remain pending. Windows provider-hook
+  execution is currently unsupported.
 - Ignores user-interrupted tool calls and distinguishes identical failures from changing failures.
 - Stores hashes and detector evidence locally. Raw prompts, tool inputs, and tool outputs are not
   persisted.
@@ -41,6 +73,15 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Serves a token-protected, loopback-only dashboard from the bounded live spool by default, with an
   English-default incident timeline, Korean localization, a prompt-contract coach, and a one-click
   compact sentinel. `dashboard <trace-id>` remains available for explicit historical traces.
+- Reports a closed, raw-free integration status for Codex and Claude Code. The CLI and dashboard
+  distinguish an engine that is ready to run from a provider whose AWF hook activity has actually
+  been observed recently; an empty healthy spool is not presented as active monitoring.
+- Provides a bounded, read-only `integration verify` witness that starts from a live-spool
+  baseline and accepts only a fresh audited prompt event for the selected provider. It does not
+  install, enable, launch, or configure either provider.
+- Provides a model-free Codex `integration preflight` that initializes app-server and calls only
+  `hooks/list`. It reduces raw hook metadata to four fixed event states and refuses to report
+  ready unless the exact AWF set is discovered, enabled, and trusted.
 - Reads live generations without taking the publisher lock, validates only committed semantic
   records during steady-state polling, and periodically re-audits the complete bounded generation.
   Rotation emits an atomic reset, sequence gaps or dropped publications show incomplete coverage,
@@ -48,20 +89,42 @@ AWF is not another token dashboard. It answers three earlier questions:
 - Keeps warning state independent for concurrent pseudonymous sessions. The sentinel, tab title,
   and favicon move from green to yellow to red; repeated high-severity signals also turn the
   compact background deep red.
+- Provides an unsigned macOS 13.5+ source preview with a `MenuBarExtra`, app-owned loopback dashboard
+  process, non-persistent `WKWebView`, transparent floating `NSPanel`, and a separate hardened
+  Swift `awf-hook` target embedded under `Contents/Helpers`. The native sentinel maps only
+  validated status enums and counters to clear, review, danger, critical, degraded, or offline
+  presentation.
+- Provides an English-default, Korean-localized native integration sheet. It performs runtime
+  hashing only on launch, explicit refresh, or mutation completion—not in the one-second monitor
+  poll—and exposes closed status/result enums without displaying raw paths or underlying errors.
+- Uses a private ownership ledger, same-volume staging, process and cross-process locks,
+  descriptor-relative atomic publication, digest validation, side-by-side releases, bounded
+  rollback retention, post-sync `SIGKILL` recovery, bounded ledger-owned release pruning, and
+  residue-preserving uninstall. The crash executable is a test-only product and is not embedded in
+  the app or published npm package.
+- Validates the dashboard readiness line and status response against exact closed Swift contracts,
+  refuses redirects and non-exact loopback navigation, and keeps the Node detector independent of
+  the app lifecycle.
 - Audits every semantic event against a closed schema before export and rejects unknown fields,
   free text, paths, URLs, emails, and common secret formats.
-- Fails open if its hook cannot run, but shows a rate-limited warning instead of silently disabling
-  protection.
-- Replays anonymized semantic traces in `observe`, `warn`, and `block` modes without accessing a
-  repository or running commands. Legacy synthetic hook fixtures remain supported.
+- Fails open if its hook cannot run. The pre-runtime launcher emits one fixed, raw-free stderr
+  warning for each unchecked event; in-worker storage warnings remain rate-limited.
+- Replays raw-free pseudonymous semantic traces in `observe`, `warn`, and `block` modes without
+  accessing a repository or running commands. Legacy synthetic hook fixtures remain supported.
 
 ## Quick start
 
 Requirements: Node.js 18 or newer.
 
+When the fixed native helper is not selected, the external-runtime alpha intentionally rejects
+symlink runtime candidates. A Homebrew or Volta symlink by itself therefore fails open; launch the
+provider with `AWF_NODE_PATH` set to the underlying absolute regular Node executable, or use a
+regular NVM version binary.
+
 ```bash
 npm test
 node bin/agent-waste-firewall.mjs doctor
+node bin/agent-waste-firewall.mjs integration status
 node bin/agent-waste-firewall.mjs check-prompt \
   "Refactor the whole repository and keep going until it is perfect"
 node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
@@ -76,13 +139,200 @@ node bin/agent-waste-firewall.mjs dashboard
 ```
 
 Open the printed `127.0.0.1` URL in a browser. The URL contains a random local access token. Start
-Codex or Claude Code with this plugin loaded. An empty but healthy spool is shown as connected and
-waiting; live events appear as the hooks publish them.
+Codex or Claude Code with this plugin loaded. The provider cards summarize installation state and
+audited activity. An empty but healthy spool is shown as connected and waiting, not as active
+provider monitoring. Live events appear as the hooks publish them.
+
+`doctor` answers whether the local AWF engine, files, Node.js runtime, and bounded spool are ready.
+It reports those checks as `engineReady`, plugin presence as `providerInstalled`, and fresh
+provider evidence as `monitoringActive`. A one-shot CLI probe deliberately does not promote
+retained spool events to current activity, so the engine and plugin can be present while
+`monitoringActive` is false and `monitoring` is `attention`. Use the provider-specific status
+command when diagnosing that distinction:
+
+```bash
+node bin/agent-waste-firewall.mjs integration status
+node bin/agent-waste-firewall.mjs integration status --json
+```
+
+The JSON form is the closed `ProviderIntegrationStatusV1` object. It contains only provider enums,
+numeric version components, and `observed`/`not_observed`/`unknown` activity. States such as
+`needs_install`, `needs_enable`, and `installed_unverified` do not mean that hooks are delivering
+events. For the live dashboard, activity means a new audited semantic event observed after that
+dashboard server started. The evidence expires after five minutes. Retained spool events from
+before startup and events in an explicit historical trace never mark current monitoring as active.
+Read-only provider subprocesses receive only a closed environment allowlist for executable and
+local configuration discovery; API keys and unrelated process secrets are not forwarded. The
+shipped CLI and dashboard run the Codex and Claude probes concurrently. Each provider's version
+and plugin-list steps share one three-second probe budget and resolve to a closed `unknown` state
+on timeout instead of holding the dashboard open indefinitely. Process startup and other CLI work
+sit outside that provider-probe budget.
+
+Before any automated Codex live pilot, run the model-free discovery gate:
+
+```bash
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --timeout 3
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --json
+```
+
+The command performs only `initialize`, `initialized`, and `hooks/list`; it never starts a thread
+or model turn. Its closed `CodexHookPreflightV1` result contains fixed enums, counts, and the four
+public event names only. Paths, commands, hook hashes, plugin IDs, warnings, errors, stderr, and
+raw RPC entries are discarded. Internally, AWF recognizes only the exact Codex provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`; a custom-marketplace ID intentionally reports
+`provider_plugin_not_found` rather than accepting look-alike metadata. `ready` means only that
+Codex reported the expected manifest-shaped hook metadata as enabled and trusted in that
+workspace. It does not attest the installed files, the Codex binary, or later hook delivery.
+Real model-free evidence now covers both the current-user absent-plugin result and an isolated
+marketplace install where Codex `hooks/list` discovered all four exact hooks before their
+launchers were exercised. The isolated gate accepts exact metadata in either trusted or
+untrusted state, so it proves provider registration but is not a user-owned `ready` or live
+delivery pass. A separate user-owned Codex run completed the review/trust flow, returned `ready`
+for the exact 4/4 hooks, observed fresh delivery, and projected `active` in a dashboard that was
+already watching. A user-owned Claude Code run also loaded the canonical installed plugin,
+produced a fresh prompt event, and projected `active`; its later model API authentication failure
+did not invalidate the earlier provider hook dispatch. See the
+[2026-08-01 validation report](docs/VALIDATION-REPORT-2026-08-01.md).
+
+To check live hook delivery after loading the plugin, start this command in a normal terminal:
+
+```bash
+node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
+node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
+```
+
+While it is waiting, submit a new, harmless short prompt in a separate conversation of the selected
+provider. The verifier ignores retained events and accepts only a post-baseline audited event whose
+closed semantic fields identify a prompt from that provider. `observed` is evidence that the local
+AWF hook path produced that event. `timed_out` means only that no qualifying event arrived within
+the deadline; it is not proof that the provider or hook is broken. The result contains no prompt,
+command, output, transcript, path, or provider CLI text.
+
+`waitedMs` is only the baseline-to-observation wait. It includes the time taken to submit the
+separate prompt and up to one polling interval, so it must not be reported as provider dispatch,
+outer-shell, or hook latency.
+
+With `--json`, stdout stays reserved for the one final closed result. After the baseline is ready,
+stderr emits one fixed line such as `AWF_READY provider=claude timeoutSeconds=60`; submit the new
+prompt only after that line appears.
+
+This is a delivery witness, not provider attestation. It does not cryptographically prove the
+identity of the process that wrote the local semantic event. It also never installs, enables,
+launches, repairs, or configures Codex or Claude Code. Provider status and this delivery witness
+are separate read-only checks.
+
+Contributors with the provider CLIs can run isolated install and launcher acceptance:
+
+```bash
+npm run acceptance:providers
+# Or separately:
+npm run acceptance:codex
+npm run acceptance:claude
+```
+
+Each gate uses private temporary provider state, stages only a reviewed package allowlist, adds a
+temporary marketplace, installs and inventories the plugin, and invokes the installed launcher
+with synthetic hook envelopes. Codex covers prompt/pre-tool/post-tool and observation-only
+`Stop`; Claude also covers `PostToolUseFailure`. Both require closed `LiveEventV1` evidence, scan
+the bounded temporary tree for boundary and interior per-field raw canaries, and remove only the
+fresh child directory they created. Before direct execution, Codex additionally requires its real
+model-free `hooks/list` response to bind the four exact hooks to the validated installed cache
+root. The Claude report fixes `providerDelivery` to `not_tested`.
+
+These gates do not invoke Codex `/hooks`, start a real Claude session, change user configuration,
+approve trust, bypass `disableAllHooks` or managed policy, or prove provider-driven delivery.
+Hook delivery is still exercised by calling the inner launcher directly, so the gates do not
+exercise provider dispatch, hostile initial interpreter/loader startup, or Codex's outer login
+shell. Codex's discovery step proves registration only. `integration verify` remains the separate
+read-only witness for a user-owned live session.
+
+Measure the repeatable manifest/shell boundary separately without launching either provider or
+making a model request:
+
+```bash
+npm run benchmark:provider-shell -- --provider codex --shell /bin/zsh --samples 100 --warmups 10 --p95-ms 150
+npm run benchmark:provider-shell -- --provider claude --samples 100 --warmups 10 --p95-ms 150
+```
+
+The Codex form validates the complete checked-in hook manifest and runs its command through
+isolated login-shell semantics before the inner shim, reproducing Codex's equal dual-root
+compatibility environment. The Claude form validates the complete checked-in manifest and runs
+its exact exec-form arguments. Both verify every closed semantic event and support `--no-trace`.
+They deliberately report
+`providerCreatedProcessIncluded: false` and `providerDispatchIncluded: false`; this is reproducible
+shell-path evidence, not real-provider delivery evidence.
 
 Select `COMPACT` to leave only the magnifying-glass eye visible. Select the eye to restore the full
 dashboard. A normal browser window cannot stay visible after an operating-system minimize, so the
-web alpha also mirrors the state in the tab title and favicon. A future desktop shell can reuse the
-same audited semantic state for a menu-bar or tray indicator.
+web alpha also mirrors the state in the tab title and favicon.
+
+### Native macOS developer preview
+
+The GitHub checkout includes an Xcode project for macOS 13.5 or newer. The published npm artifact is
+the portable plugin/CLI package and intentionally excludes `macos/`; clone the GitHub repository
+before running the native commands below. The Xcode project bundles the reviewed `bin/`, `src/`,
+and `assets/` directories into the app resources and embeds the hardened Swift `awf-hook`
+executable under `Contents/Helpers`. The source build does not bundle the generated `awf-node`,
+so its integration sheet reports the sealed installer payload as unavailable and keeps mutation
+buttons disabled. The dashboard can still use an installed Node.js 18+ executable during this
+developer-preview phase. Build the source without signing:
+
+```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+```
+
+This is a compile/package check, not a distributable artifact. Hardened-runtime build settings and
+`CodeSignOnCopy` make the helper ready for the later release-signing pipeline; they do not give
+this source build a Developer ID signature. There is no notarization ticket, DMG, or bundled Node
+runtime. The integration UI and local lifecycle manager are present, but fail closed without a
+signed runtime and its outer-sealed digest. For interactive development, open
+`macos/AWF.xcodeproj` in Xcode and use local signing. The dashboard process does not search
+inherited `PATH`. It checks an absolute `AWF_NODE_PATH`, bounded Volta/NVM locations, and fixed
+standard Node locations with a bounded Node 18+ probe.
+
+The dormant native hook path is activated only by an app-owned installation at the fixed per-user
+location. `activation.json` is a canonical UTF-8 record with exactly this shape and a trailing
+newline:
+
+```json
+{"v":1,"releaseId":"rel_0123456789abcdef0123456789abcdef","workerProtocol":1}
+```
+
+The `releaseId` is `rel_` plus 32 lowercase hexadecimal characters. It selects only this
+side-by-side layout; the manifest never stores an executable path:
+
+```text
+integration-v1/
+  awf-hook
+  activation.json
+  install-ledger.json
+  versions/
+    rel_<32 lowercase hex>/
+      awf-node
+```
+
+The helper validates the activation, version directory, runtime, and plugin-root worker before
+launch. It streams the provider's raw stdin directly to the worker without reading or persisting
+it, supplies only a closed worker environment, and gives the child process group a 2.25-second
+deadline with bounded termination, forced cleanup, and reaping. A failure before child handoff
+returns the fixed raw-free fail-open response. After handoff, no launcher retries the event or
+adds another JSON value because the child may already have consumed stdin or emitted a response.
+The native manager creates this layout only after validating the complete bundled payload. It
+publishes a new release and activation transactionally, keeps verified rollback candidates,
+reconciles definitely missing non-active records after interruption, and removes only
+digest-matched ledger-owned files. Unknown or changed residue is preserved. See the
+[runtime release sealing guide](docs/MACOS-RUNTIME-RELEASE.md) for the pinned Node preparation and
+inside-out signing order.
 
 An explicit research trace is still opt-in and is the only source that can be audited, exported,
 or replayed. To capture one workspace:
@@ -107,17 +357,52 @@ node bin/agent-waste-firewall.mjs replay ./public-semantic-trace.jsonl \
 The plugin packages use the standard `.codex-plugin/plugin.json`,
 `.claude-plugin/plugin.json`, and `hooks/hooks.json` locations. During development:
 
-- Claude Code can load the checkout with `claude --plugin-dir /absolute/path/to/agent-waste-firewall`.
-- Codex requires hook review and trust after the plugin is connected through a local marketplace.
-  Follow the official [Codex plugin development guide](https://learn.chatgpt.com/docs/build-plugins)
-  until the repository has a published marketplace entry.
+- Codex: connect the marketplace, install and enable AWF, then open `/hooks`. Review the AWF
+  commands and explicitly trust the exact hook configuration hash before running
+  `integration verify codex`. A hook change after an upgrade can produce a new hash and require
+  another review. Follow the official
+  [Codex plugin development guide](https://learn.chatgpt.com/docs/build-plugins).
+- Claude Code marketplace install: run
+  `claude plugin marketplace add thisisun/agent-waste-firewall`, then
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`, and run `/reload-plugins` in
+  an active session. Claude's trust boundary is the plugin source at load/install time; `/hooks`
+  is a read-only inspection view, not a second hook-approval step.
+- Claude Code checkout: run
+  `claude --plugin-dir /absolute/path/to/agent-waste-firewall`. This trusts and loads that checkout
+  for the new session only; it does not create a global installation and is not expected to appear
+  in the global `claude plugin list`. Run `/reload-plugins` after changing plugin hooks.
 
-No installer edits a user's global configuration in this MVP.
+The provider trust boundaries differ, and AWF does not bypass either one. Codex uses an explicit
+hook-hash review after installation, while Claude Code relies on source trust at plugin load or
+installation. No AWF command edits a user's global provider configuration in this MVP; global
+installation, enablement, hook review, and trust remain explicit user actions.
+
+If a fresh prompt is not observed, confirm that the plugin is enabled and reload or restart the
+provider. In Codex, re-open `/hooks` and check whether the current hash still needs trust. In
+Claude Code, use `/hooks` to inspect the loaded command and check whether `disableAllHooks` or the
+enterprise `allowManagedHooksOnly` policy excludes plugin hooks. Managed provider settings can
+prevent a local plugin from running even when its files are present.
+
+On the validation Mac used for this repository, the native supervisor's closed search path finds
+Codex `0.146.0` and Claude Code `2.1.220`. Both canonical user plugins are installed and enabled.
+A dashboard started before each qualifying event projected both providers as `active / observed`;
+standalone status remains deliberately unable to reuse retained activity. Both isolated provider
+acceptance gates also passed marketplace add/install/inventory, installed-launcher execution,
+closed-event, raw-canary, and cleanup checks. Isolated results remain registration/launcher
+evidence; the separate user-owned runs provide the live-delivery evidence.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
 outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE
 endpoints share one audited cursor snapshot so a generation change cannot mix old status with new
 events.
+
+The native preview does not widen that observation boundary. Its supervisor receives one bounded,
+closed `dashboard_ready` record, and its status client accepts only the closed
+`DashboardStatusV1` and `ProviderIntegrationStatusV1` shapes. The embedded WebKit store is
+non-persistent and navigation is restricted to the exact tokenized `127.0.0.1` dashboard origin.
+Raw prompts, tool inputs, outputs, transcripts, source content, and detector state are never sent
+to Swift. The preview is not App Sandbox-contained because it must launch an external Node
+executable; this is another reason it is a source preview, not a public security-hardened build.
 
 ## Modes
 
@@ -172,6 +457,10 @@ State files do not contain:
 - detector prose or recommendations;
 - source-file content.
 
+Each state file is hard-bounded to at most 512 recent tool events, 256 incidents, 512 file aliases,
+and eight hashes per file alias. These are safety ceilings; lower configured history limits still
+apply.
+
 Separately, every supported hook makes a best-effort publication to the private `LiveEventV1`
 spool. Each event is constructed from a closed allowlist of enums, bounded numeric counters and
 durations, issue/rule IDs, and one `session_<HMAC>` alias. It contains no free text, path, file name,
@@ -196,16 +485,28 @@ guarantee of anonymity: a distinctive event sequence can still reveal facts abou
 Hashes are pseudonymous detector identifiers, not encryption. Protect the local data directory as
 you would other developer-tool metadata.
 
-Session state older than 30 days is deleted during normal hook activity. Change this with
-`AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
-`agent-waste-firewall purge`, or all inactive session state with
+Hook state mutation performs no session-retention directory scan. While the dashboard process or
+macOS app monitor is running, a best-effort incremental janitor removes session state older than
+30 days. Each maintenance tick visits at most 64 directory entries and uses a soft 8 ms work
+budget; one filesystem operation can still exceed that soft budget. The next hourly marker is
+written only after the directory cursor reaches EOF. Closing the monitor or encountering an error
+closes the cursor without writing that completion marker, so a later monitor starts the sweep
+again. The janitor reads filesystem metadata rather than session-file content and reports only a
+closed status and numeric counters, without paths or entry names.
+
+Change the period with `AGENT_WASTE_FIREWALL_RETENTION_DAYS`. Remove expired state immediately with
+the full `agent-waste-firewall purge` scan, or remove all inactive session state with
 `agent-waste-firewall purge --all`. The same command removes expired or inactive semantic traces
 and orphan trace keys; `purge --all` also removes the live spool. Active hook state and an active
 trace are skipped and reported; run the command again after the coding-agent session stops. Live
-spool rotation removes its previous generation, key, and events. Stale locks and orphan
-atomic-write files are cleaned automatically. An unsupported detector-state schema is replaced
-when that session next produces a hook event, so older path-bearing state is not carried into the
-new schema.
+spool rotation removes its previous generation, key, and events. Session locks are always treated
+as active by both the janitor and explicit purge—even when their timestamps are old—because age
+alone cannot prove that a writer has stopped. Unlocked orphan atomic-write files are removed. If
+neither the GUI/app monitor nor a dashboard process is running, automatic session cleanup is
+delayed; use the explicit purge for immediate removal. A public beta still needs an OS-supervised
+cleanup trigger, proven orphan-lock recovery, and hard lifecycle and workload caps for unattended
+cleanup. An unsupported detector-state schema is replaced when that session next produces a hook
+event, so older path-bearing state is not carried into the new schema.
 
 Override the directory with `AGENT_WASTE_FIREWALL_DATA_DIR`. The implementation uses user-only
 directory and file permissions where the operating system supports them.
@@ -228,7 +529,7 @@ All configuration is optional:
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_EVENTS` | `4096` | Maximum events in the current live-spool generation |
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_BYTES` | `8388608` | Maximum serialized bytes in the current live-spool generation |
 | `AGENT_WASTE_FIREWALL_LIVE_MAX_AGE_MINUTES` | `1440` | Maximum age of one live-spool generation |
-| `AGENT_WASTE_FIREWALL_RETENTION_DAYS` | `30` | Local session-state retention period |
+| `AGENT_WASTE_FIREWALL_RETENTION_DAYS` | `30` | Local session-state retention period (1–3650 days) |
 
 ## Architecture
 
@@ -249,6 +550,8 @@ Codex / Claude hook event
  strict semantic serializer
           │
           ├──► bounded always-on LiveEventV1 spool ─► default loopback dashboard
+          │                                      ├──► browser
+          │                                      └──► native macOS preview
           └──► explicit trace ─► historical dashboard / audit / export / replay
 ```
 
@@ -259,9 +562,10 @@ See [core architecture](docs/ARCHITECTURE.md),
 [macOS product architecture](docs/MACOS-ARCHITECTURE.md),
 [macOS implementation status](docs/MACOS-IMPLEMENTATION.md),
 [macOS development guide](docs/DEVELOPMENT-GUIDE.md),
+[macOS runtime release sealing](docs/MACOS-RUNTIME-RELEASE.md),
 [GitHub landscape and reuse decision](docs/GITHUB-BENCHMARK-2026-07-29.md),
 [evaluation](docs/EVALUATION.md), the
-[latest local validation report](docs/VALIDATION-REPORT-2026-07-29.md), and the
+[latest local validation report](docs/VALIDATION-REPORT-2026-08-01.md), and the
 [first live pilot](docs/FIRST-PILOT.md).
 
 ## Honest limitations
@@ -273,21 +577,60 @@ See [core architecture](docs/ARCHITECTURE.md),
   signal until a later observation exposes the change.
 - Codex hosted tools such as web search may not emit local pre/post tool hooks.
 - Hook coverage is a useful guardrail, not a complete security boundary.
+- Provider detection is read-only evidence. Installation or enablement alone does not prove hook
+  delivery. The dashboard requires fresh post-start audited evidence. User-owned Codex
+  and Claude Code install/live-delivery and dashboard activity passed on the validation Mac;
+  clean-machine acceptance remains pending.
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
-- Windows hook loading has not been tested in this repository yet.
+- The native app is currently an unsigned source build. Its integration lifecycle and UI are
+  implemented, but the repository does not commit or ship a generated Node binary. The dashboard
+  therefore still uses an installed Node.js 18+ executable in source-preview builds. Developer ID
+  release signing, notarization, clean-machine provider delivery, and distribution packaging
+  remain incomplete.
+- A controlled 2026-07-30 current-head rerun on the inspected Apple-silicon Mac put every measured
+  inner hook path below the 100 ms p95 product target. Three 50-sample generations after five
+  warmups measured the external launcher at 64.670/49.438/48.692 ms without an active trace and
+  50.294/57.978/50.585 ms with one. The native inner path measured
+  60.054/60.040/60.271 ms without a trace and 66.668/60.684/60.999 ms with one.
+- Those measurements include the inner shell, real worker, and always-on live spool; the native
+  arm also includes an unsigned Debug helper and a temporary clone of the current Node runtime.
+  They exclude provider dispatch and the provider-created outer shell, do not include runtime
+  prewarming, and do not establish performance across broader supported Macs or a clean machine.
+  Earlier loaded-host and sealed-runtime baselines remain documented as historical variance in the
+  validation report.
+- The plugin-root macOS shim no longer searches inherited `PATH` after it starts. It can hand off
+  to a safe fixed per-user helper, which then validates activation; otherwise it retains the
+  external Node alpha fallback. Provider-spawned initial interpreter/loader startup, plus Codex's
+  outer login shell, remain trusted boundaries. The pinned payload and atomic
+  activation/repair/rollback implementation still require Developer ID/notarization and a
+  clean-machine end-to-end release gate before public beta.
+- The manager matches the bundled runtime to the digest sealed into the outer app and matches
+  installed helper/runtime bytes to its private ownership ledger. It performs bounded Node version
+  and V8 readiness probes and prewarms the staged runtime before activation. The release finalizer
+  separately checks nested signature integrity, hardened runtime, and the exact one-key entitlement
+  set; Developer ID identity and notarization remain release gates.
+- The pinned x64 input has not yet passed execution on an Intel Mac. Interactive native UI
+  automation, minimum-macOS runtime testing, Developer ID signing, notarization, Gatekeeper, and
+  clean-machine acceptance remain unverified. The fixed raw-free helper/worker compatibility
+  contract and post-sync process-kill lifecycle gate are implemented. VM/storage fault injection
+  is still required before making a sudden-power-loss durability claim.
+- Windows provider-hook execution is currently unsupported; the shipped hook launch path is
+  macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
 
 ## Roadmap
 
-1. Run an observe-only anonymized real-world pilot and publish precision/false-block results.
+1. Run an observe-only pilot with raw-free pseudonymous records and publish precision/false-block
+   results.
 2. Add read-only Codex and Claude usage adapters for actual token/time measurement.
 3. Add semantic tool-cycle and cross-session duplicate-task fingerprints without storing raw
    prompts.
-4. Package the working live projection with the
-   [documented native macOS shell](docs/MACOS-ARCHITECTURE.md).
-5. Add one-command installation only after safe upgrade/uninstall behavior is tested.
+4. Assemble the pinned per-architecture runtime, run the release sealing pipeline, and
+   sign/notarize the [macOS shell](docs/MACOS-ARCHITECTURE.md).
+5. Run clean-machine install/upgrade/rollback/uninstall acceptance, VM/storage power-loss fault
+   injection, and explicit provider setup.
 
 ## License
 

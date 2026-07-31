@@ -8,6 +8,48 @@
       ],
       "schema": "live-event-v1.schema.json"
     },
+    "dashboardReady": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "dashboard-ready-v1.schema.json"
+    },
+    "dashboardStatus": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "dashboard-status-v1.schema.json"
+    },
+    "providerIntegrationStatus": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "provider-integration-status-v1.schema.json"
+    },
+    "providerDeliveryVerification": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "provider-delivery-verification-v1.schema.json"
+    },
+    "codexHookPreflight": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "codex-hook-preflight-v1.schema.json"
+    },
+    "helperWorkerHandshake": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "helper-worker-handshake-v1.schema.json"
+    },
     "detectorState": {
       "current": 4,
       "supported": [

@@ -100,6 +100,7 @@ function recordFileHash(state, cwd, filePath, source, now, hashScope) {
   if (!last || last.hash !== digest) {
     entry.hashes.push({ hash: digest, source, at: now });
   }
+  delete state.files[pathAlias];
   state.files[pathAlias] = entry;
   return { pathAlias, digest, previous: last?.hash ?? null };
 }

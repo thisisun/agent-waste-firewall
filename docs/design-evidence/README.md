@@ -5,6 +5,12 @@ Browser-rendered screenshots used for the visual QA recorded in
 
 - `awf-dashboard-light.jpg`: English default, light theme
 - `awf-dashboard-dark.jpg`: English default, dark theme
+- `awf-summary-dashboard-light.png`: one-screen live summary, English default,
+  light theme, bounded activity graph
+- `awf-summary-dashboard-dark.png`: one-screen live summary, English default,
+  dark theme, bounded activity graph
+- `awf-summary-dashboard-dark-ko.png`: one-screen live summary, Korean
+  secondary mode without mixed-language copy, dark theme
 - `awf-expanded-compact-control.png`: expanded dashboard with the
   compact control
 - `awf-compact-review.png`: yellow review sentinel

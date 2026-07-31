@@ -77,10 +77,28 @@ raw provider tool names, workspace labels, file names, paths, detector prose, an
 are dropped before every write. A per-session lock directory prevents concurrent hook processes
 from overwriting each other. State is bounded:
 
-- recent tool events are capped;
+- recent tool events are capped at 512;
 - failure fingerprints are capped;
-- incidents are capped;
-- each file keeps only recent content hashes.
+- incidents are capped at 256;
+- file aliases are capped at 512 and each keeps only eight recent content hashes.
+
+Expired session-state cleanup is best-effort maintenance, not part of the detector decision.
+`StateStore.mutate` performs no retention scan. A dashboard-owned `StateRetentionJanitor` opens one
+directory cursor while the dashboard process or app monitor is running and advances it by at most
+64 entries or a soft 8 ms budget per maintenance tick. The entry limit is fixed for that tick, but
+the time budget is not a hard deadline: an individual filesystem operation may take longer.
+Cleanup acquires each session lock non-blockingly, revalidates private storage identities, reads
+file metadata rather than state-file content, and exposes only a closed status and numeric
+counters without paths or entry names.
+
+The janitor writes the canonical next-hour marker only after the cursor reaches EOF. Close,
+storage-identity failure, or another cleanup error closes the cursor and releases its owned
+maintenance lock without recording completion, so a later monitor restarts the sweep. This removes
+the periodic `O(session files)` scan from the hook hot path. `agent-waste-firewall purge` remains
+the explicit immediate full-scan path. Automatic session cleanup is delayed while neither the GUI
+app monitor nor a dashboard process is running. A public beta therefore still requires an
+OS-supervised unattended trigger plus hard lifecycle and workload caps; the current 8 ms value
+must not be described as such a cap.
 
 The transcript format is not a dependency because coding-agent transcript files are not stable
 public interfaces.

@@ -6,7 +6,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { runHookPayload } from "../src/hook-stdio.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "../src/helper-worker-handshake.mjs";
 import { LiveEventStore } from "../src/live-event-store.mjs";
+import { StateStore } from "../src/state-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,11 +33,15 @@ function setup(context) {
 }
 
 function run(env, payload) {
-  return spawnSync(process.execPath, [hook], {
-    encoding: "utf8",
-    env,
-    input: JSON.stringify(payload),
-  });
+  return spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      encoding: "utf8",
+      env,
+      input: JSON.stringify(payload),
+    },
+  );
 }
 
 test("publishes LiveEventV1 without an explicit trace recording", (context) => {
@@ -110,6 +117,58 @@ test("publishes a raw-free Claude failure event through the real hook", (context
   ]) {
     assert.equal(persisted.includes(canary), false);
   }
+});
+
+test("reuses one active trace lookup for decision mode and append", async (context) => {
+  const { dataDir, workspace, env } = setup(context);
+  const traceStore = new TraceStore({ root: dataDir, env });
+  traceStore.start({
+    workspace,
+    label: "single-lookup",
+    mode: "observe",
+  });
+  const activeFor = traceStore.activeFor.bind(traceStore);
+  let activeLookups = 0;
+  traceStore.activeFor = (...arguments_) => {
+    activeLookups += 1;
+    return activeFor(...arguments_);
+  };
+
+  const output = await runHookPayload(
+    {
+      session_id: "private-single-lookup-session",
+      cwd: workspace,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "git status --short" },
+    },
+    {
+      env,
+      traceStore,
+      store: new StateStore({ root: dataDir }),
+    },
+  );
+
+  assert.deepEqual(output, {});
+  assert.equal(activeLookups, 1);
+  assert.equal(traceStore.status().eventCount, 1);
+});
+
+test("fails open without persisting an oversized raw hook envelope", (context) => {
+  const { dataDir, workspace, env } = setup(context);
+  const canary = "SECRET-OVERSIZED-HOOK-CANARY";
+  const result = run(env, {
+    session_id: "oversized-session",
+    cwd: workspace,
+    hook_event_name: "UserPromptSubmit",
+    prompt: canary + "x".repeat(1024 * 1024),
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(typeof JSON.parse(result.stdout), "object");
+  assert.deepEqual(fs.readdirSync(dataDir), []);
+  assert.equal(result.stdout.includes(canary), false);
+  assert.equal(result.stderr.includes(canary), false);
 });
 
 test("an unavailable live spool never changes the hook response", (context) => {

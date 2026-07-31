@@ -67,9 +67,10 @@ flowchart LR
     T --> A["Audit, export, and offline replay"]
 ```
 
-The raw hook payload crosses exactly one trust boundary: agent process to hook worker over standard
-input. It is normalized in memory and is never sent to the macOS app, live event spool, dashboard,
-trace, analytics service, crash reporter, or log.
+The raw hook payload is passed on standard input through the provider-launched command path to the
+hook worker. AWF's launcher does not consume or persist it; the worker normalizes it in memory.
+Provider and shell startup are part of the trusted delivery path, while the macOS app, live event
+spool, dashboard, trace, analytics service, crash reporter, and logs never receive the raw payload.
 
 ## Runtime components
 
@@ -101,6 +102,16 @@ Provider rules:
 - Never forward a raw hook body to an HTTP endpoint, including a loopback endpoint.
 - Keep `Stop` observation-only. A monitor that automatically resumes a stopped agent can create the
   loop it is meant to prevent.
+
+The checked-in provider manifests invoke the plugin-root `/bin/sh -p` shim with a fixed trailing
+`codex` or `claude` argument; they do not contain an app-bundle path or a generated per-user
+command. On macOS, that shim may prefer the fixed per-user native helper only when the explicit
+provider and its corresponding root variable match the same plugin root. Codex's equal dual-root
+compatibility environment is therefore valid. A missing or unsafe helper, or a provider/root
+mismatch, leaves the portable external-Node alpha path available. Once the shim invokes the
+native helper, that helper
+validates activation and stdin has crossed the handoff boundary: activation failure must fail open
+without retrying the event through Node or appending a second JSON value.
 
 The implementation should make the provider boundary explicit:
 
@@ -140,11 +151,29 @@ The worker must:
 - make no network request;
 - make no model call;
 - have no install-time npm dependencies;
+- reject an input envelope larger than 1 MiB in memory and fail open without persisting it;
 - emit only provider JSON on standard output;
-- keep diagnostics on standard error and rate-limit them;
+- keep diagnostics on standard error and rate-limit in-worker warnings; the pre-runtime launcher
+  instead emits one fixed, raw-free warning for each event it cannot check;
 - fail open on crashes, timeouts, corrupt optional telemetry, or an unavailable UI;
 - use per-session locking so concurrent agents do not overwrite each other;
 - finish under 100 ms at p95 on supported Macs, measured from fixture-driven integration tests.
+
+The dedicated stdio entry imports trace persistence only when an active trace marker exists. It
+reuses the single validated active-trace lookup for the append, while the append lock rechecks that
+the recording was not stopped or switched before publication. Hook state mutation performs no
+session-retention directory scan. While the dashboard process or app monitor is running, its
+separate janitor advances one directory cursor by at most 64 entries or a soft 8 ms budget per
+tick. It reads safe filesystem metadata rather than session-file content and returns only closed
+status values and numeric counters without paths or entry names. The next hourly marker is written
+only at EOF; close or error abandons the cursor without recording completion so a later monitor
+restarts the sweep. Optional telemetry and retention maintenance never control whether the
+detector response is produced.
+
+With no GUI app monitor or dashboard process running, automatic session cleanup is delayed.
+`agent-waste-firewall purge` remains the immediate full-scan path. Before a public beta,
+unattended cleanup needs an OS-supervised trigger and hard lifecycle and workload caps; the
+current 8 ms budget is soft because one filesystem operation can exceed it.
 
 Blocking belongs only in `PreToolUse` or a deliberately configured prompt preflight, and only when
 evidence is high confidence. Post-tool warnings cannot undo a side effect.
@@ -165,9 +194,10 @@ Define separate data types for separate trust levels:
 `LiveEventV1` reuses the strict trace vocabulary and does not need an active export recording.
 The worker now writes it to a bounded, user-only local spool with hard ceilings of 4,096 events and
 8 MiB plus a 24-hour age trigger enforced on next access; configuration may only lower them. Each
-generation uses a fresh HMAC alias key. The future macOS app will consume only this audited stream.
-An explicit recording still creates a separate trace-scoped HMAC key and uses the stricter export
-lifecycle implemented in `TraceStore`.
+generation uses a fresh HMAC alias key. The macOS developer preview consumes only closed
+dashboard/provider projections derived from this audited stream through its loopback worker; it
+does not read detector state or raw spool records. An explicit recording still creates a separate
+trace-scoped HMAC key and uses the stricter export lifecycle implemented in `TraceStore`.
 
 Do not implement collection as “save the JSON and redact it later.” Construct each event from a
 closed allowlist and reject unknown fields before the first write.
@@ -218,12 +248,20 @@ Use `WKWebsiteDataStore.nonPersistent()` for the embedded dashboard so its rando
 not retained in normal WebKit history, cookies, or website data. Navigation must remain on the
 expected loopback origin and must not open arbitrary URLs inside the app.
 
+For an app-owned dashboard, the supervisor gives the child a private stdin lifeline and sets a
+fixed opt-in environment flag. EOF means the owning app has exited, so the loopback server closes
+without relying on a stale PID check. An ordinary stop closes that lifeline first, cancels any
+pending readiness read, waits briefly for graceful exit, then escalates through `SIGTERM` and
+`SIGKILL` with bounded waits. The flag is absent for standalone CLI dashboards, which must not
+exit merely because stdin is closed. A true owner-`SIGKILL`/power-loss harness and process-group
+handling for an unresponsive descendant tree remain release work.
+
 Visual state is a pure projection of the semantic stream:
 
 | State | Trigger | Sentinel |
 | --- | --- | --- |
-| `clear` | Connected, no active warning | Transparent eye with green accent |
-| `review` | Medium warning or weak evidence | Transparent eye with yellow accent |
+| `clear` | Connected, no active warning, and fresh audited provider activity | Transparent eye with green accent |
+| `review` | Medium warning, empty/retained stream, expired activity, or weak provider evidence | Transparent eye with yellow accent |
 | `danger` | High-confidence or blockable incident | Transparent eye with red accent |
 | `critical` | Repeated high-severity incidents without progress | Red eye and red translucent panel background |
 | `offline` | No recent validated event or worker health failure | Neutral gray; never imply safety |
@@ -270,7 +308,9 @@ AWF.app/
   Contents/
     MacOS/AWF
     Frameworks/
-    Helpers/awf-worker
+    Helpers/
+      awf-hook                 # implemented hardened Swift helper
+      awf-node                 # release-generated pinned runtime; not committed
     Resources/
       dashboard/
       plugins/
@@ -306,11 +346,69 @@ shell `PATH`, version manager, or Homebrew installation. The bundled runtime and
 helper must be signed as part of the app. Keep the portable source and CLI runnable with system
 Node for contributors.
 
-The public hook manifest should call a small stable launcher in an app-owned per-user integration
-directory, not an absolute path inside `/Applications/AWF.app`. The app can be moved, and
-provider trust should not change for every runtime upgrade. Install versions side by side, validate
-the new worker with `doctor`, then atomically switch a `current` pointer. Keep an installation
-ledger so repair, rollback, and uninstall touch only files created by AWF.
+The current alpha routes macOS/POSIX hooks through a plugin-root inner launcher and removes
+inherited `PATH` lookup from both that launcher and the native dashboard locator after they start.
+After `/bin/sh -p` has started and the launcher has control, it removes Node and dynamic-loader
+variables, validates the plugin-root worker, and accepts the manifest's fixed provider only when
+the corresponding `PLUGIN_ROOT` or `CLAUDE_PLUGIN_ROOT` matches that root. This avoids ambiguity
+when Codex exports both variables for compatibility. It then checks the fixed per-user native
+helper at
+`~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
+A safe native helper is preferred. If the helper or its integration directory is missing or
+unsafe, or the provider/root pair is mismatched, the shim falls back to the existing explicit,
+bounded external Node locations. After native invocation, success or failure terminates the shim;
+the raw stdin is never replayed and a second JSON response is never appended.
+
+This does not sanitize provider or initial interpreter/loader startup. Claude's exec-form hook
+adds no command-evaluation shell, but its provider-to-`/bin/sh` startup remains trusted. Codex
+additionally evaluates the command through inherited `$SHELL -lc`, which is outside AWF's boundary
+and direct launcher tests. See the
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
+This native-first dispatch closes a runtime-selection foundation gap; it does not satisfy the
+bundled-runtime release gate or harden provider/interpreter startup.
+
+The Xcode app now builds a hardened-runtime Swift `awf-hook` target and embeds it with
+`CodeSignOnCopy` at `Contents/Helpers/awf-hook`. Those settings fit the checked-in inside-out
+release-sealing pipeline; the current source artifact has no Developer ID signature or
+notarization. It also contains no generated `awf-node` payload. The activation UI and lifecycle
+manager are implemented, but fail closed until release assembly supplies a signed runtime and an
+outer-sealed post-sign digest.
+
+The fixed per-user integration has this exact activation record, including its trailing newline:
+
+```json
+{"v":1,"releaseId":"rel_0123456789abcdef0123456789abcdef","workerProtocol":1}
+```
+
+`releaseId` is exactly `rel_` followed by 32 lowercase hexadecimal characters. The manifest stores
+no path; the helper reconstructs and validates only this layout:
+
+```text
+~/Library/Application Support/io.github.thisisun.agent-waste-firewall/
+  integration-v1/
+    awf-hook
+    activation.json
+    install-ledger.json
+    versions/
+      rel_<32 lowercase hex>/
+        awf-node
+```
+
+The native helper also validates the absolute plugin root and its `scripts/hook.mjs`. It receives
+`hook --protocol 1 --provider <codex|claude> --plugin-root <absolute path>`, inherits the provider's
+standard handles without reading or copying raw stdin, and launches the worker with a closed
+environment plus `PATH=/usr/bin:/bin`. The worker child owns a separate process group and a
+2.25-second deadline. Deadline cleanup terminates, then forcibly kills if necessary, and reaps the
+owned group. Before child handoff, launch failures return the fixed raw-free fail-open response.
+After handoff, the helper may warn but cannot append another JSON value.
+
+The app installs this per-user tree rather than ask provider manifests to call an absolute path
+inside `/Applications/AWF.app`. The app can be moved, and provider trust does not need to change
+for every runtime upgrade. The implementation validates the whole payload before mutation, stages
+on the same volume, publishes versions side by side, validates the new active install, then
+atomically replaces the canonical regular-file activation manifest. A closed ownership ledger
+records helper/runtime digests; repair creates a new release, rollback selects only a verified
+candidate, and uninstall preserves unknown or changed residue.
 
 Do not choose the Mac App Store first. Provider plugin installation and execution of a bundled
 helper need to be proven under sandbox constraints. Start with hardened-runtime, Developer
@@ -324,6 +422,7 @@ milestone.
 | macOS app is not running | Hook still detects, warns, and can deny |
 | Semantic spool is unavailable | Skip presentation event, rate-limit stderr warning, do not block agent |
 | Hook worker crashes or exceeds its budget | Fail open; provider continues |
+| Native hook child exceeds 2.25 seconds | Terminate and reap its owned process group; do not retry stdin or append a second response |
 | Session state is corrupt | Quarantine/replace only that state; do not persist raw recovery input |
 | Provider adds fields | Ignore unknown input fields; contract tests detect breaking removals |
 | Multiple sessions run concurrently | Lock per session; aggregate only audited aliases in the app |
@@ -350,9 +449,13 @@ milestone.
 1. ~~Define and validate the documented `LiveEventV1` schema.~~ Completed.
 2. ~~Add a bounded semantic spool and tests while retaining the explicit trace path.~~ Completed.
 3. ~~Connect a generation-aware live-spool cursor to the shared dashboard projection.~~ Completed.
-4. Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.
-5. Add explicit install/repair/uninstall flows for each provider.
-6. Bundle and sign the worker runtime; add protocol compatibility checks.
+4. ~~Add the native shell with menu bar, `WKWebView`, sentinel, and read-only health checks.~~
+   Developer preview implemented; signed distribution and native UI acceptance remain pending.
+5. ~~Add explicit local install/repair/rollback/uninstall with atomic activation of the embedded
+   native helper.~~ Implemented with a closed ownership ledger and fail-closed native UI.
+6. ~~Pin and verify an architecture-specific Node payload and define post-sign sealing.~~ Node
+   `v24.18.0` preparation, finalization, and the fixed native helper/worker compatibility contract
+   are implemented; Developer ID signing, notarization, and clean-machine assembly remain.
 7. Add optional usage adapters only after the decision path is stable.
 8. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
 9. Consider `block` for public use only after the evaluation gates are met.
@@ -361,7 +464,10 @@ Current migration debt to address explicitly:
 
 - provider decoding and provider response encoding are not yet an isolated adapter interface;
 - the browser dashboard is a large combined asset module;
-- current manifests invoke `node` from the user's environment;
+- macOS/POSIX manifests still use a transitional plugin-root shell shim. The macOS shim can prefer
+  a safe fixed per-user helper. Release assembly must supply the generated signed Node payload
+  before the implemented installer can activate it; Windows provider-hook execution remains
+  unsupported;
 - Node remains the sole owner of detector state; the Swift app must never read or co-write those
   internal state JSON files.
 

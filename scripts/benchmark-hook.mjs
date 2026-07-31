@@ -29,6 +29,7 @@ function percentile(values, fraction) {
 const sampleCount = integerArgument("--samples", 100, 10_000);
 const warmupCount = integerArgument("--warmups", 10, 1_000);
 const p95LimitMs = integerArgument("--p95-ms", 100, 60_000);
+const activeSemanticTrace = !process.argv.includes("--no-trace");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "awf-hook-benchmark-"));
 const workspace = path.join(root, "workspace");
 const dataDir = path.join(root, "data");
@@ -36,22 +37,26 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const hook = path.join(projectRoot, "scripts", "hook.mjs");
+const launcher = path.join(projectRoot, "scripts", "hook-launcher.sh");
 fs.mkdirSync(workspace, { mode: 0o700 });
 fs.mkdirSync(path.join(workspace, ".git"), { mode: 0o700 });
 
 const env = {
   ...process.env,
+  HOME: path.join(root, "isolated-home"),
+  PLUGIN_ROOT: projectRoot,
+  AWF_NODE_PATH: process.execPath,
   AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
   AGENT_WASTE_FIREWALL_MODE: "observe",
-  AGENT_WASTE_FIREWALL_PLATFORM: "codex",
 };
 const traceStore = new TraceStore({ root: dataDir, env });
-traceStore.start({
-  workspace,
-  label: "hook-benchmark",
-  mode: "observe",
-});
+if (activeSemanticTrace) {
+  traceStore.start({
+    workspace,
+    label: "hook-benchmark",
+    mode: "observe",
+  });
+}
 
 function invokeHook(index) {
   const payload = {
@@ -64,11 +69,15 @@ function invokeHook(index) {
     tool_input: { command: "git status --short" },
   };
   const startedAt = performance.now();
-  const result = spawnSync(process.execPath, [hook], {
+  const result = spawnSync(
+    "/bin/sh",
+    ["-p", launcher, projectRoot, "codex"],
+    {
     encoding: "utf8",
     env,
     input: JSON.stringify(payload),
-  });
+    },
+  );
   const elapsedMs = performance.now() - startedAt;
   if (result.status !== 0) {
     throw new Error("Hook benchmark subprocess failed.");
@@ -98,12 +107,29 @@ try {
   if (liveStatus?.committedSeq !== expectedEventCount) {
     throw new Error("Always-on live spool did not publish every benchmark event.");
   }
+  const traceStatus = traceStore.status();
+  if (
+    activeSemanticTrace
+      ? traceStatus?.eventCount !== expectedEventCount
+      : traceStatus !== null
+  ) {
+    throw new Error(
+      activeSemanticTrace
+        ? "Explicit trace did not record every benchmark event."
+        : "No-trace benchmark unexpectedly created an explicit trace.",
+    );
+  }
   console.log(
     JSON.stringify(
       {
         sampleCount,
         warmupCount,
-        activeSemanticTrace: true,
+        executionPath: "external_node_launcher",
+        nativeHelperIncluded: false,
+        providerShellIncluded: false,
+        innerShellShimIncluded: true,
+        activeSemanticTrace,
+        traceEventCount: traceStatus?.eventCount ?? 0,
         alwaysOnLiveSpool: true,
         liveCommittedSequence: liveStatus.committedSeq,
         liveRetainedEventCount: liveStatus.eventCount,

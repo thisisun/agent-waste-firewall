@@ -1,0 +1,529 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/dashboard-status-v1.schema.json",
+  "title": "DashboardStatusV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "connected",
+    "source",
+    "sourceState",
+    "streamHealth",
+    "traceHealth",
+    "coverage",
+    "generation",
+    "streamAlias",
+    "mode",
+    "state",
+    "traceId",
+    "traceAlias",
+    "metrics",
+    "lastSequence",
+    "currentWarning",
+    "promptCoach"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "connected": {
+      "type": "boolean"
+    },
+    "source": {
+      "enum": [
+        "live",
+        "trace"
+      ]
+    },
+    "sourceState": {
+      "enum": [
+        "empty",
+        "active"
+      ]
+    },
+    "streamHealth": {
+      "enum": [
+        "healthy",
+        "stale",
+        "degraded"
+      ]
+    },
+    "traceHealth": {
+      "enum": [
+        "healthy",
+        "stale",
+        "degraded"
+      ]
+    },
+    "coverage": {
+      "enum": [
+        "complete",
+        "incomplete",
+        "unknown"
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "streamAlias": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^generation_[0-9a-f]{32}$"
+        }
+      ]
+    },
+    "mode": {
+      "enum": [
+        "observe",
+        "warn",
+        "block"
+      ]
+    },
+    "state": {
+      "enum": [
+        "idle",
+        "active",
+        "recording",
+        "stopped"
+      ]
+    },
+    "traceId": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^trace_[0-9a-f]{24}$"
+        }
+      ]
+    },
+    "traceAlias": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^(?:trace_[0-9a-f]{24}|session_[0-9a-f]{32})$"
+        }
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "events",
+        "incidents",
+        "avoidableCalls",
+        "elapsedMs"
+      ],
+      "properties": {
+        "events": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "incidents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "avoidableCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "elapsedMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "lastSequence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "currentWarning": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ruleId",
+            "severity",
+            "attribution",
+            "occurrences",
+            "issueIds"
+          ],
+          "properties": {
+            "ruleId": {
+              "enum": [
+                "prompt_contract",
+                "exact_tool_repeat",
+                "unchanged_reread",
+                "retry_after_same_failure",
+                "repeated_failure_result",
+                "status_polling_loop",
+                "edit_revert_oscillation"
+              ]
+            },
+            "severity": {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "attribution": {
+              "enum": [
+                "user_instruction",
+                "agent",
+                "environment",
+                "harness"
+              ]
+            },
+            "occurrences": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "issueIds": {
+              "$ref": "#/$defs/issueIds"
+            }
+          }
+        }
+      ]
+    },
+    "promptCoach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issueIds"
+      ],
+      "properties": {
+        "issueIds": {
+          "$ref": "#/$defs/issueIds"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "streamHealth": {
+            "const": "healthy"
+          }
+        },
+        "required": [
+          "streamHealth"
+        ]
+      },
+      "then": {
+        "properties": {
+          "traceHealth": {
+            "const": "healthy"
+          },
+          "coverage": {
+            "enum": [
+              "complete",
+              "incomplete"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "streamHealth": {
+            "const": "stale"
+          }
+        },
+        "required": [
+          "streamHealth"
+        ]
+      },
+      "then": {
+        "properties": {
+          "traceHealth": {
+            "const": "stale"
+          },
+          "coverage": {
+            "const": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "streamHealth": {
+            "const": "degraded"
+          }
+        },
+        "required": [
+          "streamHealth"
+        ]
+      },
+      "then": {
+        "properties": {
+          "traceHealth": {
+            "const": "degraded"
+          },
+          "coverage": {
+            "const": "unknown"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sourceState": {
+            "const": "empty"
+          }
+        },
+        "required": [
+          "sourceState"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "properties": {
+              "events": {
+                "const": 0
+              },
+              "incidents": {
+                "const": 0
+              },
+              "avoidableCalls": {
+                "const": 0
+              }
+            }
+          },
+          "lastSequence": {
+            "const": 0
+          },
+          "currentWarning": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "metrics": {
+            "properties": {
+              "events": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "currentWarning": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "currentWarning"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "properties": {
+              "incidents": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "live"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "traceId": {
+            "type": "null"
+          },
+          "traceAlias": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^session_[0-9a-f]{32}$"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "idle",
+              "active"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "generation": {
+                  "const": 0
+                }
+              },
+              "required": [
+                "generation"
+              ]
+            },
+            "then": {
+              "properties": {
+                "streamAlias": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "generation": {
+                  "minimum": 1
+                },
+                "streamAlias": {
+                  "type": "string",
+                  "pattern": "^generation_[0-9a-f]{32}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "sourceState": {
+                  "const": "empty"
+                }
+              },
+              "required": [
+                "sourceState"
+              ]
+            },
+            "then": {
+              "properties": {
+                "state": {
+                  "const": "idle"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "state": {
+                  "const": "active"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "else": {
+        "properties": {
+          "generation": {
+            "minimum": 1
+          },
+          "streamAlias": {
+            "type": "null"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "connected": {
+                  "const": true
+                }
+              },
+              "required": [
+                "connected"
+              ]
+            },
+            "then": {
+              "properties": {
+                "traceId": {
+                  "type": "string",
+                  "pattern": "^trace_[0-9a-f]{24}$"
+                },
+                "traceAlias": {
+                  "type": "string",
+                  "pattern": "^trace_[0-9a-f]{24}$"
+                },
+                "state": {
+                  "enum": [
+                    "recording",
+                    "stopped"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "traceId": {
+                  "type": "null"
+                },
+                "traceAlias": {
+                  "type": "null"
+                },
+                "state": {
+                  "const": "idle"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "issueIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 6,
+      "items": {
+        "enum": [
+          "broad",
+          "target",
+          "success",
+          "verify",
+          "stop",
+          "conflict"
+        ]
+      }
+    }
+  }
+}

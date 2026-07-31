@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/helper-worker-handshake-v1.schema.json",
+  "title": "HelperWorkerHandshakeV1",
+  "description": "Closed semantic shape for helper/worker compatibility. The shipped helper-worker-handshake-v1.json transport marker additionally requires compact UTF-8 JSON in schema key order with exactly one trailing LF byte.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "workerProtocol",
+    "runtime",
+    "runtimeMajor"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "workerProtocol": {
+      "const": 1
+    },
+    "runtime": {
+      "const": "node"
+    },
+    "runtimeMajor": {
+      "const": 24
+    }
+  }
+}

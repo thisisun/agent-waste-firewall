@@ -1,0 +1,993 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E00000000000000000000001 /* AWFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000001 /* AWFApp.swift */; };
+		E00000000000000000000002 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000002 /* AppModel.swift */; };
+		E00000000000000000000003 /* DashboardContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000003 /* DashboardContainerView.swift */; };
+		E00000000000000000000004 /* DashboardNavigationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000004 /* DashboardNavigationPolicy.swift */; };
+		E00000000000000000000005 /* DashboardWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000005 /* DashboardWebView.swift */; };
+		E00000000000000000000006 /* DashboardStatusClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000006 /* DashboardStatusClient.swift */; };
+		E00000000000000000000007 /* DashboardSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000007 /* DashboardSupervisor.swift */; };
+		E00000000000000000000008 /* RuntimeLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000008 /* RuntimeLocator.swift */; };
+		E00000000000000000000009 /* MenuBarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000009 /* MenuBarViews.swift */; };
+		E0000000000000000000000A /* ClosedJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000A /* ClosedJSON.swift */; };
+		E0000000000000000000000B /* DashboardEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000B /* DashboardEndpoint.swift */; };
+		E0000000000000000000000C /* DashboardStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000C /* DashboardStatus.swift */; };
+		E0000000000000000000000D /* SentinelPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000D /* SentinelPanelController.swift */; };
+		E0000000000000000000000E /* SentinelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000E /* SentinelView.swift */; };
+		E0000000000000000000000F /* SentinelVisualState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000000F /* SentinelVisualState.swift */; };
+		E00000000000000000000010 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000013 /* Localizable.strings */; };
+		E00000000000000000000011 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000014 /* assets */; };
+		E00000000000000000000012 /* bin in Resources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000015 /* bin */; };
+		E00000000000000000000013 /* src in Resources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000016 /* src */; };
+		E00000000000000000000014 /* DashboardNavigationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000017 /* DashboardNavigationPolicyTests.swift */; };
+		E00000000000000000000015 /* DashboardProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000018 /* DashboardProtocolTests.swift */; };
+		E00000000000000000000016 /* DashboardSupervisorIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000019 /* DashboardSupervisorIntegrationTests.swift */; };
+		E00000000000000000000017 /* RuntimeLocatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001A /* RuntimeLocatorTests.swift */; };
+		E00000000000000000000018 /* SemanticTestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001B /* SemanticTestFixtures.swift */; };
+		E00000000000000000000019 /* SentinelVisualStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001C /* SentinelVisualStateTests.swift */; };
+		E0000000000000000000001A /* AWFUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001D /* AWFUITests.swift */; };
+		E0000000000000000000001B /* AWF.icns in Resources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001E /* AWF.icns */; };
+		E0000000000000000000001C /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000001D /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000001E /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000020 /* main.swift */; };
+		E0000000000000000000001F /* NativeHookLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000021 /* NativeHookLauncherTests.swift */; };
+		E00000000000000000000020 /* awf-hook in Embed Helpers */ = {isa = PBXBuildFile; fileRef = C00000000000000000000004 /* awf-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		E00000000000000000000021 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000022 /* AppLanguage.swift */; };
+		E00000000000000000000022 /* NativeIntegrationFilesystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000023 /* NativeIntegrationFilesystem.swift */; };
+		E00000000000000000000023 /* NativeIntegrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000024 /* NativeIntegrationManager.swift */; };
+		E00000000000000000000024 /* AppLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000025 /* AppLanguageTests.swift */; };
+		E00000000000000000000025 /* NativeIntegrationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000026 /* NativeIntegrationManagerTests.swift */; };
+		E00000000000000000000026 /* NativeIntegrationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000027 /* NativeIntegrationPresentation.swift */; };
+		E00000000000000000000027 /* IntegrationManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000028 /* IntegrationManagerView.swift */; };
+		E00000000000000000000028 /* NativeIntegrationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000029 /* NativeIntegrationPresentationTests.swift */; };
+		E00000000000000000000029 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000002A /* main.swift */; };
+		E0000000000000000000002A /* RuntimeLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000008 /* RuntimeLocator.swift */; };
+		E0000000000000000000002B /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000002C /* NativeIntegrationFilesystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000023 /* NativeIntegrationFilesystem.swift */; };
+		E0000000000000000000002D /* NativeIntegrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000024 /* NativeIntegrationManager.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		L00000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B00000000000000000000001;
+			remoteInfo = AWF;
+		};
+		L00000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B00000000000000000000001;
+			remoteInfo = AWF;
+		};
+		L00000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B00000000000000000000004;
+			remoteInfo = "awf-hook";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F0000000000000000000000A /* Embed Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				E00000000000000000000020 /* awf-hook in Embed Helpers */,
+			);
+			name = "Embed Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		C00000000000000000000001 /* AWF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AWF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000002 /* AWFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000003 /* AWFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000004 /* awf-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "awf-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000005 /* AWFLifecycleCrashHarness */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AWFLifecycleCrashHarness; sourceTree = BUILT_PRODUCTS_DIR; };
+		D00000000000000000000001 /* AWFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWFApp.swift; sourceTree = "<group>"; };
+		D00000000000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		D00000000000000000000003 /* DashboardContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardContainerView.swift; sourceTree = "<group>"; };
+		D00000000000000000000004 /* DashboardNavigationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardNavigationPolicy.swift; sourceTree = "<group>"; };
+		D00000000000000000000005 /* DashboardWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWebView.swift; sourceTree = "<group>"; };
+		D00000000000000000000006 /* DashboardStatusClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStatusClient.swift; sourceTree = "<group>"; };
+		D00000000000000000000007 /* DashboardSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSupervisor.swift; sourceTree = "<group>"; };
+		D00000000000000000000008 /* RuntimeLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeLocator.swift; sourceTree = "<group>"; };
+		D00000000000000000000009 /* MenuBarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViews.swift; sourceTree = "<group>"; };
+		D0000000000000000000000A /* ClosedJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedJSON.swift; sourceTree = "<group>"; };
+		D0000000000000000000000B /* DashboardEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardEndpoint.swift; sourceTree = "<group>"; };
+		D0000000000000000000000C /* DashboardStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStatus.swift; sourceTree = "<group>"; };
+		D0000000000000000000000D /* SentinelPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentinelPanelController.swift; sourceTree = "<group>"; };
+		D0000000000000000000000E /* SentinelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentinelView.swift; sourceTree = "<group>"; };
+		D0000000000000000000000F /* SentinelVisualState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentinelVisualState.swift; sourceTree = "<group>"; };
+		D00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D00000000000000000000011 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		D00000000000000000000012 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
+		D00000000000000000000014 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; name = assets; path = ../assets; sourceTree = SOURCE_ROOT; };
+		D00000000000000000000015 /* bin */ = {isa = PBXFileReference; lastKnownFileType = folder; name = bin; path = ../bin; sourceTree = SOURCE_ROOT; };
+		D00000000000000000000016 /* src */ = {isa = PBXFileReference; lastKnownFileType = folder; name = src; path = ../src; sourceTree = SOURCE_ROOT; };
+		D00000000000000000000017 /* DashboardNavigationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardNavigationPolicyTests.swift; sourceTree = "<group>"; };
+		D00000000000000000000018 /* DashboardProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardProtocolTests.swift; sourceTree = "<group>"; };
+		D00000000000000000000019 /* DashboardSupervisorIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSupervisorIntegrationTests.swift; sourceTree = "<group>"; };
+		D0000000000000000000001A /* RuntimeLocatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeLocatorTests.swift; sourceTree = "<group>"; };
+		D0000000000000000000001B /* SemanticTestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticTestFixtures.swift; sourceTree = "<group>"; };
+		D0000000000000000000001C /* SentinelVisualStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentinelVisualStateTests.swift; sourceTree = "<group>"; };
+		D0000000000000000000001D /* AWFUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWFUITests.swift; sourceTree = "<group>"; };
+		D0000000000000000000001E /* AWF.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AWF.icns; sourceTree = "<group>"; };
+		D0000000000000000000001F /* NativeHookLauncherCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHookLauncherCore.swift; sourceTree = "<group>"; };
+		D00000000000000000000020 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		D00000000000000000000021 /* NativeHookLauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHookLauncherTests.swift; sourceTree = "<group>"; };
+		D00000000000000000000022 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
+		D00000000000000000000023 /* NativeIntegrationFilesystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationFilesystem.swift; sourceTree = "<group>"; };
+		D00000000000000000000024 /* NativeIntegrationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationManager.swift; sourceTree = "<group>"; };
+		D00000000000000000000025 /* AppLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguageTests.swift; sourceTree = "<group>"; };
+		D00000000000000000000026 /* NativeIntegrationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationManagerTests.swift; sourceTree = "<group>"; };
+		D00000000000000000000027 /* NativeIntegrationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationPresentation.swift; sourceTree = "<group>"; };
+		D00000000000000000000028 /* IntegrationManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationManagerView.swift; sourceTree = "<group>"; };
+		D00000000000000000000029 /* NativeIntegrationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationPresentationTests.swift; sourceTree = "<group>"; };
+		D0000000000000000000002A /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F00000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A00000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000004 /* AWF */,
+				A00000000000000000000010 /* AWFHookLauncher */,
+				A00000000000000000000011 /* AWFLifecycleCrashHarness */,
+				A0000000000000000000000C /* AWFTests */,
+				A0000000000000000000000D /* AWFUITests */,
+				A0000000000000000000000E /* Bundled Worker */,
+				A00000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000001 /* AWF.app */,
+				C00000000000000000000004 /* awf-hook */,
+				C00000000000000000000005 /* AWFLifecycleCrashHarness */,
+				C00000000000000000000002 /* AWFTests.xctest */,
+				C00000000000000000000003 /* AWFUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000004 /* AWF */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000005 /* App */,
+				A00000000000000000000006 /* Dashboard */,
+				A00000000000000000000007 /* Engine */,
+				A00000000000000000000008 /* MenuBar */,
+				A00000000000000000000009 /* Protocol */,
+				A0000000000000000000000A /* Sentinel */,
+				A0000000000000000000000F /* Integration */,
+				A0000000000000000000000B /* Resources */,
+			);
+			path = AWF;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000005 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000001 /* AWFApp.swift */,
+				D00000000000000000000002 /* AppModel.swift */,
+				D00000000000000000000022 /* AppLanguage.swift */,
+				D00000000000000000000003 /* DashboardContainerView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000006 /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000004 /* DashboardNavigationPolicy.swift */,
+				D00000000000000000000005 /* DashboardWebView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000007 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000006 /* DashboardStatusClient.swift */,
+				D00000000000000000000007 /* DashboardSupervisor.swift */,
+				D00000000000000000000008 /* RuntimeLocator.swift */,
+			);
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000008 /* MenuBar */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000009 /* MenuBarViews.swift */,
+			);
+			path = MenuBar;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000009 /* Protocol */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000000A /* ClosedJSON.swift */,
+				D0000000000000000000000B /* DashboardEndpoint.swift */,
+				D0000000000000000000000C /* DashboardStatus.swift */,
+			);
+			path = Protocol;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000A /* Sentinel */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000000D /* SentinelPanelController.swift */,
+				D0000000000000000000000E /* SentinelView.swift */,
+				D0000000000000000000000F /* SentinelVisualState.swift */,
+			);
+			path = Sentinel;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000010 /* Info.plist */,
+				D0000000000000000000001E /* AWF.icns */,
+				D00000000000000000000013 /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000F /* Integration */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000001F /* NativeHookLauncherCore.swift */,
+				D00000000000000000000023 /* NativeIntegrationFilesystem.swift */,
+				D00000000000000000000024 /* NativeIntegrationManager.swift */,
+				D00000000000000000000027 /* NativeIntegrationPresentation.swift */,
+				D00000000000000000000028 /* IntegrationManagerView.swift */,
+			);
+			path = Integration;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000C /* AWFTests */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000017 /* DashboardNavigationPolicyTests.swift */,
+				D00000000000000000000018 /* DashboardProtocolTests.swift */,
+				D00000000000000000000019 /* DashboardSupervisorIntegrationTests.swift */,
+				D0000000000000000000001A /* RuntimeLocatorTests.swift */,
+				D0000000000000000000001B /* SemanticTestFixtures.swift */,
+				D0000000000000000000001C /* SentinelVisualStateTests.swift */,
+				D00000000000000000000021 /* NativeHookLauncherTests.swift */,
+				D00000000000000000000025 /* AppLanguageTests.swift */,
+				D00000000000000000000026 /* NativeIntegrationManagerTests.swift */,
+				D00000000000000000000029 /* NativeIntegrationPresentationTests.swift */,
+			);
+			path = AWFTests;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000D /* AWFUITests */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000001D /* AWFUITests.swift */,
+			);
+			path = AWFUITests;
+			sourceTree = "<group>";
+		};
+		A0000000000000000000000E /* Bundled Worker */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000014 /* assets */,
+				D00000000000000000000015 /* bin */,
+				D00000000000000000000016 /* src */,
+			);
+			name = "Bundled Worker";
+			sourceTree = "<group>";
+		};
+		A00000000000000000000010 /* AWFHookLauncher */ = {
+			isa = PBXGroup;
+			children = (
+				D00000000000000000000020 /* main.swift */,
+			);
+			path = AWFHookLauncher;
+			sourceTree = "<group>";
+		};
+		A00000000000000000000011 /* AWFLifecycleCrashHarness */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000002A /* main.swift */,
+			);
+			path = AWFLifecycleCrashHarness;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B00000000000000000000001 /* AWF */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000002 /* Build configuration list for PBXNativeTarget "AWF" */;
+			buildPhases = (
+				F00000000000000000000001 /* Sources */,
+				F00000000000000000000002 /* Frameworks */,
+				F00000000000000000000003 /* Resources */,
+				F0000000000000000000000A /* Embed Helpers */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				M00000000000000000000003 /* PBXTargetDependency */,
+			);
+			name = AWF;
+			productName = AWF;
+			productReference = C00000000000000000000001 /* AWF.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B00000000000000000000002 /* AWFTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000003 /* Build configuration list for PBXNativeTarget "AWFTests" */;
+			buildPhases = (
+				F00000000000000000000004 /* Sources */,
+				F00000000000000000000005 /* Frameworks */,
+				F00000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				M00000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = AWFTests;
+			productName = AWFTests;
+			productReference = C00000000000000000000002 /* AWFTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B00000000000000000000003 /* AWFUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000004 /* Build configuration list for PBXNativeTarget "AWFUITests" */;
+			buildPhases = (
+				F00000000000000000000007 /* Sources */,
+				F00000000000000000000008 /* Frameworks */,
+				F00000000000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				M00000000000000000000002 /* PBXTargetDependency */,
+			);
+			name = AWFUITests;
+			productName = AWFUITests;
+			productReference = C00000000000000000000003 /* AWFUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		B00000000000000000000004 /* awf-hook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000005 /* Build configuration list for PBXNativeTarget "awf-hook" */;
+			buildPhases = (
+				F0000000000000000000000B /* Sources */,
+				F0000000000000000000000C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "awf-hook";
+			productName = "awf-hook";
+			productReference = C00000000000000000000004 /* awf-hook */;
+			productType = "com.apple.product-type.tool";
+		};
+		B00000000000000000000005 /* AWFLifecycleCrashHarness */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000006 /* Build configuration list for PBXNativeTarget "AWFLifecycleCrashHarness" */;
+			buildPhases = (
+				F0000000000000000000000E /* Sources */,
+				F0000000000000000000000D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AWFLifecycleCrashHarness;
+			productName = AWFLifecycleCrashHarness;
+			productReference = C00000000000000000000005 /* AWFLifecycleCrashHarness */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					B00000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					B00000000000000000000002 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = B00000000000000000000001;
+					};
+					B00000000000000000000003 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = B00000000000000000000001;
+					};
+					B00000000000000000000004 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					B00000000000000000000005 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = K00000000000000000000001 /* Build configuration list for PBXProject "AWF" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				ko,
+			);
+			mainGroup = A00000000000000000000002;
+			productRefGroup = A00000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B00000000000000000000001 /* AWF */,
+				B00000000000000000000004 /* awf-hook */,
+				B00000000000000000000005 /* AWFLifecycleCrashHarness */,
+				B00000000000000000000002 /* AWFTests */,
+				B00000000000000000000003 /* AWFUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F00000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0000000000000000000001B /* AWF.icns in Resources */,
+				E00000000000000000000010 /* Localizable.strings in Resources */,
+				E00000000000000000000011 /* assets in Resources */,
+				E00000000000000000000012 /* bin in Resources */,
+				E00000000000000000000013 /* src in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E00000000000000000000001 /* AWFApp.swift in Sources */,
+				E00000000000000000000002 /* AppModel.swift in Sources */,
+				E00000000000000000000003 /* DashboardContainerView.swift in Sources */,
+				E00000000000000000000004 /* DashboardNavigationPolicy.swift in Sources */,
+				E00000000000000000000005 /* DashboardWebView.swift in Sources */,
+				E00000000000000000000006 /* DashboardStatusClient.swift in Sources */,
+				E00000000000000000000007 /* DashboardSupervisor.swift in Sources */,
+				E00000000000000000000008 /* RuntimeLocator.swift in Sources */,
+				E00000000000000000000009 /* MenuBarViews.swift in Sources */,
+				E0000000000000000000000A /* ClosedJSON.swift in Sources */,
+				E0000000000000000000000B /* DashboardEndpoint.swift in Sources */,
+				E0000000000000000000000C /* DashboardStatus.swift in Sources */,
+				E0000000000000000000000D /* SentinelPanelController.swift in Sources */,
+				E0000000000000000000000E /* SentinelView.swift in Sources */,
+				E0000000000000000000000F /* SentinelVisualState.swift in Sources */,
+				E0000000000000000000001C /* NativeHookLauncherCore.swift in Sources */,
+				E00000000000000000000021 /* AppLanguage.swift in Sources */,
+				E00000000000000000000022 /* NativeIntegrationFilesystem.swift in Sources */,
+				E00000000000000000000023 /* NativeIntegrationManager.swift in Sources */,
+				E00000000000000000000026 /* NativeIntegrationPresentation.swift in Sources */,
+				E00000000000000000000027 /* IntegrationManagerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E00000000000000000000014 /* DashboardNavigationPolicyTests.swift in Sources */,
+				E00000000000000000000015 /* DashboardProtocolTests.swift in Sources */,
+				E00000000000000000000016 /* DashboardSupervisorIntegrationTests.swift in Sources */,
+				E00000000000000000000017 /* RuntimeLocatorTests.swift in Sources */,
+				E00000000000000000000018 /* SemanticTestFixtures.swift in Sources */,
+				E00000000000000000000019 /* SentinelVisualStateTests.swift in Sources */,
+				E0000000000000000000001F /* NativeHookLauncherTests.swift in Sources */,
+				E00000000000000000000024 /* AppLanguageTests.swift in Sources */,
+				E00000000000000000000025 /* NativeIntegrationManagerTests.swift in Sources */,
+				E00000000000000000000028 /* NativeIntegrationPresentationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F00000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0000000000000000000001A /* AWFUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0000000000000000000001D /* NativeHookLauncherCore.swift in Sources */,
+				E0000000000000000000001E /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E00000000000000000000029 /* main.swift in Sources */,
+				E0000000000000000000002A /* RuntimeLocator.swift in Sources */,
+				E0000000000000000000002B /* NativeHookLauncherCore.swift in Sources */,
+				E0000000000000000000002C /* NativeIntegrationFilesystem.swift in Sources */,
+				E0000000000000000000002D /* NativeIntegrationManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		M00000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B00000000000000000000001 /* AWF */;
+			targetProxy = L00000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		M00000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B00000000000000000000001 /* AWF */;
+			targetProxy = L00000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		M00000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B00000000000000000000004 /* awf-hook */;
+			targetProxy = L00000000000000000000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		D00000000000000000000013 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				D00000000000000000000011 /* en */,
+				D00000000000000000000012 /* ko */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		G00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		G00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		H00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AWF/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		H00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AWF/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		I00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AWF.app/Contents/MacOS/AWF";
+			};
+			name = Debug;
+		};
+		I00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AWF.app/Contents/MacOS/AWF";
+			};
+			name = Release;
+		};
+		J00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = AWF;
+			};
+			name = Debug;
+		};
+		J00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = AWF;
+			};
+			name = Release;
+		};
+		N00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.hook";
+				PRODUCT_NAME = "awf-hook";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		N00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.thisisun.agent-waste-firewall.hook";
+				PRODUCT_NAME = "awf-hook";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		O00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = AWFLifecycleCrashHarness;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		O00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = AWFLifecycleCrashHarness;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		K00000000000000000000001 /* Build configuration list for PBXProject "AWF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G00000000000000000000001 /* Debug */,
+				G00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000002 /* Build configuration list for PBXNativeTarget "AWF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				H00000000000000000000001 /* Debug */,
+				H00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000003 /* Build configuration list for PBXNativeTarget "AWFTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				I00000000000000000000001 /* Debug */,
+				I00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000004 /* Build configuration list for PBXNativeTarget "AWFUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J00000000000000000000001 /* Debug */,
+				J00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000005 /* Build configuration list for PBXNativeTarget "awf-hook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				N00000000000000000000001 /* Debug */,
+				N00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000006 /* Build configuration list for PBXNativeTarget "AWFLifecycleCrashHarness" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				O00000000000000000000001 /* Debug */,
+				O00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A00000000000000000000001 /* Project object */;
+}

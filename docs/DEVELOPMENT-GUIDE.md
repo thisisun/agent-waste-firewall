@@ -4,6 +4,9 @@ This guide turns the [macOS product architecture](MACOS-ARCHITECTURE.md) into an
 plan. English is the source language for public GitHub documentation; Korean README content should
 summarize and link to the English source.
 
+Native commands in this guide assume a GitHub checkout. The published npm artifact is the portable
+plugin/CLI package and intentionally excludes `macos/`.
+
 ## Working principles
 
 1. Keep the hook path local, deterministic, dependency-free, and independent of the GUI.
@@ -26,8 +29,14 @@ Current portable core:
 Native shell:
 
 - a supported macOS development machine;
-- the current stable Xcode capable of targeting macOS 13 or newer;
+- the current stable Xcode capable of targeting macOS 13.5 or newer;
+- Node.js 18 or newer for the current developer preview;
 - an Apple Developer Program identity only for signed/notarized release builds.
+
+When the fixed native helper is not selected, the external-runtime hook fallback rejects symlink
+candidates in this alpha. For a provider launched from a Homebrew- or Volta-only environment, set
+`AWF_NODE_PATH` to the underlying absolute regular Node executable; a symlink path alone fails
+open.
 
 Run the current baseline before changing anything:
 
@@ -37,10 +46,39 @@ npm run check
 npm test
 npm run test:coverage
 node bin/agent-waste-firewall.mjs doctor
+node bin/agent-waste-firewall.mjs integration status --json
 node bin/agent-waste-firewall.mjs replay fixtures/repeated-test-loop.jsonl
 ```
 
 Do not introduce Swift or runtime packaging failures into the existing cross-platform Node checks.
+
+Treat engine readiness and provider activity as separate facts. `doctor` may return
+`engineReady: true` because the local files, runtime, and spool are healthy while
+`providerInstalled` and `monitoringActive` describe two narrower facts. The one-shot CLI does not
+promote retained events to current activity, so an installed plugin can coexist with
+`monitoringActive: false` and `monitoring: attention`. `integration status --json` returns the
+exact closed `ProviderIntegrationStatusV1` shape: two allowlisted provider records, optional
+numeric versions, and closed state/activity enums. It must never include executable paths,
+provider command output, configuration text, or probe errors. Synchronous and asynchronous probes
+receive only the explicit caller environment after allowlist projection. The shipped CLI and
+dashboard paths run Codex and Claude concurrently; each provider's version and plugin-list steps
+share one three-second result budget. Timeout and thrown-error detail collapse to the same closed
+`unknown` state. Dashboard shutdown aborts and kills in-flight default provider children.
+
+Provider hook launch boundaries differ. Both checked-in manifests still call the plugin-root shell
+shim and pass a fixed provider argument. The shim accepts that argument only when its
+provider-specific root variable resolves to the same plugin root. This is required because Codex
+exports both root variables for compatibility. Claude execs `/bin/sh -p` without an additional
+command-evaluation shell. Provider and
+initial interpreter/loader startup remain outside the launcher's post-start scrubbing boundary.
+Codex additionally evaluates its command string through inherited `$SHELL -lc`, which is also
+outside AWF's boundary. On macOS the shim prefers the fixed per-user native helper only when an
+explicit provider and its exact root match; missing, unsafe, or mismatched native state
+preserves the external Node alpha fallback. Once native stdin handoff occurs, neither the shim nor
+the helper may replay the event through Node or append a second JSON response. Direct external
+launcher acceptance and latency benchmarks do not exercise provider dispatch, hostile initial
+loader state, the native helper, or that outer Codex shell. See the
+[Codex command-runner source](https://github.com/openai/codex/blob/main/codex-rs/hooks/src/engine/command_runner.rs#L125-L164).
 
 ## Milestone plan
 
@@ -64,10 +102,11 @@ Deliverables:
 - fixtures for every valid event and adversarial privacy canaries;
 - rotation to a new unlinkable live generation when a retention boundary is reached.
 
-The language-neutral JSON Schema, version registry, and synthetic positive, productive-progress,
-privacy, and incompatible-version fixtures live under `protocol/`. Runtime validation remains
-dependency-free. When the Swift validator is introduced, run it against the same conformance corpus;
-do not make the hook runtime depend on a schema package.
+The language-neutral JSON Schemas, version registry, and synthetic positive,
+productive-progress, privacy, and incompatible-version fixtures live under `protocol/`. Runtime
+validation remains dependency-free. The native preview now has closed Swift readiness/status
+decoders; keep their conformance tests aligned with the same public corpus without making the hook
+runtime depend on a schema package.
 
 Acceptance:
 
@@ -80,6 +119,20 @@ Acceptance:
 ### M1 — Native read-only shell
 
 Goal: make the current live monitor feel like a real Mac app without changing enforcement.
+
+Implementation status: an unsigned macOS 13.5+ developer preview is source-buildable. It implements
+the SwiftUI lifecycle, menu bar, restricted local `WKWebView`, app-owned dashboard subprocess, and
+transparent `NSPanel` sentinel. The app also embeds a separate hardened-runtime Swift `awf-hook`
+under `Contents/Helpers`. The source tree now includes the native integration UI plus transactional
+install/upgrade/repair/rollback/uninstall and a pinned runtime release pipeline. Ordinary source
+builds still depend on an installed Node.js runtime because generated `awf-node` payloads are not
+committed; the integration UI fails closed when its sealed payload is absent. The native sentinel
+decodes `ProviderIntegrationStatusV1` and
+remains yellow until fresh audited provider activity is observed; retained or expired activity
+cannot make it green. Native coverage includes runtime discovery, the real bundled JavaScript
+worker, the helper's closed activation/environment rules, direct stdin handoff, and fail-open
+behavior. M1 acceptance is still incomplete because native UI acceptance, Developer ID signing,
+notarization, and clean-machine tests remain pending.
 
 Deliverables:
 
@@ -103,9 +156,32 @@ Acceptance:
 
 Goal: make failures understandable and recoverable.
 
+Implementation status: the read-only provider reality gate is implemented. It probes Codex and
+Claude Code with bounded, non-shell subprocesses, projects the result into
+`ProviderIntegrationStatusV1`, and exposes the same closed meaning through `doctor`,
+`integration status [--json]`, and loopback dashboard provider cards. Dashboard activity is
+derived only from audited `LiveEventV1` records that arrive after the dashboard server starts.
+Evidence expires after five minutes. Retained pre-start spool events and historical trace events
+must not impersonate current activity. Provider installation without fresh observed delivery
+therefore remains `installed_unverified`, not `active`. Provider subprocesses inherit only a
+closed discovery environment. The shipped CLI/dashboard probes run providers concurrently and
+give each provider one shared three-second version/list budget. Restart policy, notifications,
+start-at-login, and a complete diagnostics bundle remain pending. The native helper/worker
+compatibility contract is implemented as a canonical closed marker plus exact single-process
+worker arguments. An incompatible marker or runtime fails open before monitoring is claimed.
+
+The bounded `integration verify <codex|claude> --timeout 60 [--json]` command is the narrower
+live-delivery witness. It takes a read-only live-spool baseline, waits for a fresh audited prompt
+event from the selected provider, and returns the closed `ProviderDeliveryVerificationV1`
+contract. It does not call a provider CLI, install or enable a plugin, launch a provider, repair an
+integration, or write provider configuration. Retained prompt events, other-provider events, and
+tool events cannot satisfy the check. A timeout means no qualifying post-baseline event was
+observed; it does not prove that a provider is broken. The event is local semantic evidence rather
+than cryptographic provider attestation.
+
 Deliverables:
 
-- worker/protocol version handshake;
+- worker/protocol version handshake (implemented for the native hook path);
 - provider integration status checks;
 - spool validation, backpressure, retention, and recovery;
 - bounded dashboard restart policy;
@@ -123,6 +199,102 @@ Acceptance:
 ### M3 — Integration manager
 
 Goal: make installation safe and reversible for non-technical users.
+
+Implementation status: read-only detection, a bounded live-delivery witness, isolated Codex and
+Claude acceptance runners, and the dormant native-helper target are available. User-owned Codex
+install, review/trust, fresh delivery, and live-dashboard projection passed on the validation Mac;
+Claude Code and app-owned installation management remain incomplete. The provider runners cover
+the supported prompt, tool, failure, and observation-only Stop paths with closed-event production,
+raw-canary exclusion, and owned temporary-tree cleanup. Productive non-nonce counterexamples are
+allowed while partial raw persistence fails the gates. The runners use private temporary provider
+state and do not modify global configuration.
+
+The isolated gate deliberately does not invoke `/hooks` or approve provider trust. Installation,
+enablement, hook review, and trust are user-controlled actions, and a successful install must not
+be reported as active monitoring until fresh audited delivery is observed in the live dashboard.
+Provider probes receive a closed environment allowlist rather than the whole parent environment.
+The acceptance runner validates a system-temp parent, creates a fresh child itself, and recursively
+removes only that owned child.
+
+Run the acceptance gates on a Mac with the provider CLIs:
+
+```bash
+npm run acceptance:providers
+```
+
+A pass establishes that the isolated package/install/direct-launcher path and privacy cleanup
+worked on that machine. Codex additionally requires a real model-free app-server `hooks/list`
+result whose exact four hook source paths bind to the validated installed cache root. This is
+provider-registration evidence, not provider-driven delivery. Claude remains direct-launcher-only
+and reports `providerDelivery: "not_tested"` explicitly. Codex's separate user-owned trust and
+live-delivery gate is recorded in
+[the 2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md). Claude user-owned trust and
+delivery, plus app-owned upgrade, repair, rollback, and uninstall, remain open acceptance gates.
+
+For Codex, run the model-free static discovery gate before any automated live pilot:
+
+```bash
+node bin/agent-waste-firewall.mjs integration preflight codex --workspace . --timeout 3
+```
+
+This uses app-server only for `initialize`, `initialized`, and `hooks/list`. It never sends
+`thread/start`, `turn/start`, or prompt content. `CodexHookPreflightV1` reduces raw discovery
+metadata to fixed counts and states; paths, commands, hashes, plugin IDs, warnings/errors, stderr,
+and raw RPC are discarded. The in-memory matcher pins AWF to the exact provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`. A custom-marketplace ID is deliberately
+non-equivalent and returns `provider_plugin_not_found`. `ready` requires Codex to report the
+expected manifest-shaped metadata for exactly four enabled, trusted hooks. It attests neither the
+installed files nor the Codex binary and does not prove later delivery. Real model-free evidence
+includes the current-user absent-plugin result and an isolated marketplace acceptance where
+Codex discovered all four exact hooks before direct launcher execution. That isolated gate accepts
+exact trusted or untrusted metadata and therefore proves registration, not a user-owned `ready`
+or live-delivery pass.
+
+Then start one of these in a normal terminal and submit a new harmless short prompt in a separate
+conversation of that provider:
+
+```bash
+node bin/agent-waste-firewall.mjs integration verify codex --timeout 60
+node bin/agent-waste-firewall.mjs integration verify claude --timeout 60 --json
+```
+
+The JSON form reserves stdout for one final closed result and emits a fixed
+`AWF_READY provider=<codex|claude> timeoutSeconds=<1..300>` readiness line on stderr after the
+baseline. Automated callers must wait for that line before submitting the fresh prompt.
+`waitedMs` includes the operator's response time and polling delay. It is a delivery-witness wait,
+not provider dispatch, outer-shell, or hook latency.
+
+Provider-specific trust and troubleshooting:
+
+- Codex: connect the marketplace, install and enable AWF, review the AWF command hooks in `/hooks`,
+  and trust the exact current hook hash. A changed hook after an upgrade can require re-review.
+- Claude Code marketplace: run
+  `claude plugin marketplace add thisisun/agent-waste-firewall`, then
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`, and run `/reload-plugins`.
+  Trust is attached to the plugin source at load/install time. Claude's `/hooks` is a read-only
+  inspection view, not an approval UI.
+- Claude Code development checkout: `claude --plugin-dir /absolute/path/to/agent-waste-firewall`
+  loads the checkout only for that new session. It is not a global installation and is not expected
+  in the global `claude plugin list`; use `/reload-plugins` after hook changes.
+- If nothing arrives, check plugin enablement and provider reload/restart. For Codex, check the
+  current hook hash in `/hooks`. For Claude Code, inspect `/hooks` and account for
+  `disableAllHooks` and enterprise `allowManagedHooksOnly`. Managed policy can exclude local plugin
+  hooks even when plugin files are present.
+
+Do not run `integration verify` from the same provider turn whose `UserPromptSubmit` event you are
+trying to witness: that event precedes the command's baseline. The watcher belongs in a terminal,
+and the qualifying prompt belongs in a separate provider conversation after the watcher starts.
+Do not claim a user-owned live-delivery pass until that manual sequence is completed and recorded.
+Codex and Claude Code each have a machine-specific user-owned live-delivery pass in the
+[2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md). The Claude prompt hook arrived
+before a later external model-account authentication failure, which reported zero usage.
+
+Do not automate a provider turn merely because a temporary blocking hook was written. Project
+trust can prevent that hook layer from being discovered, allowing the prompt to reach a model.
+Any future automated live gate must first use a model-free provider discovery surface such as
+`hooks/list`, require an exact closed set of loaded/enabled/trusted hook identities, and abort
+before `turn/start` on any mismatch. Provider stdout, hook commands, paths, and raw entries must
+not enter the persisted report.
 
 Deliverables for each provider:
 
@@ -266,32 +438,53 @@ cursor frame. Generation changes emit a snapshot reset, and health distinguishes
 degraded, and incomplete-coverage states without exposing an unaudited event.
 
 Steady-state reads validate only appended events and do not take the publish lock. A complete
-bounded-generation audit runs every 30 seconds, while retention-only maintenance runs every second
-while the dashboard is open. Tests cover concurrent publication/tailing, rotation, resume IDs,
-sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical expiry cleanup.
+bounded-generation audit runs every 30 seconds, while live-spool retention-only maintenance runs
+every second while the dashboard is open. Tests cover concurrent publication/tailing, rotation,
+resume IDs, sequence gaps, drop markers, corruption, invalid UTF-8, reconnect, and physical expiry
+cleanup.
+
+Session-state retention is separate from live-spool rotation. Hook mutation performs no session
+retention scan. A dashboard-owned janitor keeps one directory cursor open across ticks and visits
+at most 64 entries or uses a soft 8 ms work budget per tick. It must use non-blocking per-session
+locks, revalidate the private storage identity, avoid reading session-file content, and return only
+closed status values and numeric counters without paths or entry names. Only EOF may publish the
+next hourly marker. Close or error must close the cursor and release owned locks without writing
+that marker, so a later monitor restarts the sweep. The explicit `purge` command remains an
+immediate full scan.
+
+The soft time budget is not a hard deadline because one filesystem operation may overrun it. When
+the GUI app monitor and dashboard process are both absent, automatic session cleanup is delayed.
+Before public beta, add an OS-supervised unattended trigger and hard lifecycle and workload caps
+without putting a directory scan back into the hook path.
 
 Do not let Swift invent detector meaning. Swift receives typed IDs and numbers, then maps IDs to
 localized copy and visual state.
 
-### Step 4: scaffold the Xcode project
+### Step 4: scaffold the Xcode project — developer preview implemented
 
-Create one macOS application target, one unit-test target, and one UI-test target under `macos/`.
-Suggested modules:
+The project contains a macOS application target, a hardened command-line `awf-hook` target, unit
+and UI test targets, and a shared scheme under `macos/`. Current modules:
 
 ```text
-App/              lifecycle, commands, window routing
-Engine/           worker discovery, version handshake, dashboard supervisor
-Integrations/     Codex and Claude install/status adapters
+App/              lifecycle, window routing, observable presentation state
+Engine/           Node/worker discovery, dashboard supervisor, status client
 MenuBar/          compact state and actions
+Protocol/         closed readiness/status decoders and stream regression guard
 Sentinel/         NSPanel controller and state renderer
-Dashboard/        WKWebView and local navigation policy
-Settings/         mode, startup, retention, notifications, privacy
-Resources/        localized copy and packaged audited web assets
+Dashboard/        WKWebView and exact local navigation policy
+Integration/      native activation, secure runtime plan, child lifecycle
+Resources/        Info.plist and English/Korean localized copy
+AWFHookLauncher/  minimal native helper entry point
+AWFTests/         protocol, navigation, runtime, supervisor, and projection tests
+AWFUITests/       initial app-lifecycle smoke test
 ```
 
-Use protocol-based Swift interfaces around the file watcher, engine supervisor, integration
-manager, and notification sender. Unit tests can then use temporary directories and fake clocks
-without launching provider tools.
+`assets/`, `bin/`, and `src/` are copied into the application as folder resources. `awf-hook` is
+copied into `Contents/Helpers` with hardened-runtime build settings and `CodeSignOnCopy`. There are
+no external Swift packages. This is signing-ready structure, not a Developer ID-signed artifact.
+The integration-management sheet, local activation lifecycle, and fixed helper/worker
+compatibility contract are implemented. Settings, a notification sender, signed distribution, and
+clean-machine provider acceptance remain later milestones.
 
 The Swift process must not read or mutate `StateStore` JSON. That state contains detector-internal
 metadata not approved for presentation and must have one writer: the Node worker.
@@ -300,25 +493,101 @@ metadata not approved for presentation and must have one writer: the Node worker
 
 Developer preview:
 
-- discover Node 18+ explicitly;
-- show the resolved executable and version in health UI;
+- bundles the reviewed JavaScript worker source, dashboard source, and visual assets;
+- embeds the hardened Swift `awf-hook` helper in `Contents/Helpers` without claiming a signed
+  release;
+- discovers Node 18+ explicitly with a bounded direct `--version` probe, no interactive shell, and
+  no inherited `PATH`;
+- accepts `AWF_NODE_PATH` only as an absolute regular executable path;
+- checks Volta, at most 64 strict NVM versions, and fixed standard locations;
+- still needs to show the resolved executable and version in health UI;
 - never assume an interactive shell `PATH`;
 - fail with an actionable install message.
 
-Public beta:
+The provider manifests invoke their plugin-root shell shim with a fixed trailing `codex` or
+`claude` argument. On macOS the shim accepts that argument only when the corresponding
+provider-root variable matches its own plugin root, then prefers the fixed per-user
+`~/Library/Application Support/io.github.thisisun.agent-waste-firewall/integration-v1/awf-hook`.
+Codex may export both root variables with the same value; explicit provider selection keeps that
+supported environment unambiguous. An absent or unsafe helper, or a provider/root mismatch,
+preserves the external Node alpha fallback. Once invoked, the helper validates activation and the
+shim exits after that attempt:
+activation failure fails open without handing the same stdin to Node or appending a second JSON
+response.
 
-- pin a runtime version and checksum;
-- assemble the helper from reviewed source;
-- place it in the app bundle;
-- avoid dynamic downloads on first launch;
-- sign the helper and its nested libraries;
-- expose `--version`, `doctor --json`, and a protocol version;
-- keep stdout machine-readable and stderr diagnostic.
+The activation file is canonical UTF-8 with a trailing newline and no alternate key order or
+unknown fields:
 
-The hook should launch the packaged worker through a stable app-owned launcher. The app may be
-absent. Install the next runtime into a versioned directory, run its health check, atomically switch
-the active version, and retain one known-good version for rollback. Record the exact installed
-files in a private ownership ledger; uninstall must remove only those entries.
+```json
+{"v":1,"releaseId":"rel_0123456789abcdef0123456789abcdef","workerProtocol":1}
+```
+
+The exact installation layout is:
+
+```text
+integration-v1/
+  awf-hook
+  activation.json
+  install-ledger.json
+  versions/
+    rel_<32 lowercase hex>/
+      awf-node
+```
+
+The manifest never stores a path. The helper reconstructs the version directory from the closed
+release ID, validates the runtime and absolute plugin-root `scripts/hook.mjs`, and accepts only
+`hook --protocol 1 --provider <codex|claude> --plugin-root <absolute path>`. Raw stdin remains on
+the inherited standard handle and is never read, copied, or persisted by the helper. The worker
+receives only the closed environment allowlist and `PATH=/usr/bin:/bin`. Its separate process group
+has a 2.25-second deadline followed by bounded termination, forced cleanup when needed, and reaping.
+Before child handoff the helper can emit the one fixed raw-free `{}` fail-open response; after
+handoff it must not add a second JSON value.
+
+Implemented release inputs and lifecycle:
+
+- `runtime/node-runtime-v1.json` pins thin Node.js `v24.18.0` arm64/x64 artifacts, official archive
+  digests, extracted executable digests, minimum macOS 13.5, and the complete license digest;
+- `prepare:macos-runtime` defaults to an explicit local archive and permits network download only
+  through `--download`; it parses the verified tar through a closed root/path allowlist and emits
+  only `awf-node`, `LICENSE`, and canonical `payload.json`;
+- `finalize:macos-runtime` runs after signing the nested runtime and before signing the outer app.
+  It rejects an already-signed outer app, verifies exact architecture/version, nested signature,
+  hardened runtime, the exact `allow-jit=true` entitlement allowlist, and a fixed V8/JIT readiness
+  probe, then writes the post-sign digest and complete Node license to fixed app paths, each
+  through an atomic replacement;
+- the native manager validates the entire payload before destination mutation, publishes
+  side-by-side releases and canonical activation atomically, retains verified rollback candidates,
+  reconciles definitely missing non-active crash records, prunes only digest-matched non-retained
+  ledger-owned releases before the bounded ledger fills, and makes half-completed owned removals
+  retryable. Rollback persists a canonical release-ID-only intent so a retry adopts an already
+  published target instead of toggling back;
+- `AWFLifecycleCrashHarness` is a test-only executable. The Node driver sends real `SIGKILL`s only
+  after a closed checkpoint marker, retries the lifecycle operation, scans hidden files and
+  binaries for raw canaries, requires known transactions to converge, and preserves unknown
+  transaction residue. The target is never embedded in `AWF.app` or the npm package;
+- the integration sheet shows closed English/Korean state, keeps raw errors and real paths out of
+  presentation, and requires inline confirmation for every mutation.
+
+Public beta work still required:
+
+- Developer ID-sign and notarize the complete per-architecture chain and exercise the documented
+  release pipeline on clean supported Macs;
+- add VM/storage power-loss and stricter TOCTOU durability tests beyond the completed post-sync
+  subprocess `SIGKILL` gate;
+- repeat both user-owned provider delivery gates on a clean machine; and
+  prove upgrade, rollback, and uninstall without silently changing either provider's trust.
+
+Sign from the inside out (`awf-node`, `awf-hook`, app, distribution container), never use
+`codesign --deep` for signing, and include Node's complete bundled third-party `LICENSE`.
+Follow [MACOS-RUNTIME-RELEASE.md](MACOS-RUNTIME-RELEASE.md) for the exact preparation and sealing
+commands.
+Apple documents standalone command-line tools under the app's executable-code locations and
+requires every distributed executable to be signed for notarization. See
+[Apple bundle structure](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html),
+[distribution signing](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/),
+[notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution),
+[Node release status](https://nodejs.org/en/about/previous-releases), and the
+[Node license](https://github.com/nodejs/node/blob/main/LICENSE).
 
 ## Test strategy
 
@@ -366,6 +635,12 @@ Cover:
 - install plan generation and uninstall ownership checks;
 - notification rate limiting;
 - start-at-login state projection.
+- canonical native activation acceptance and unknown-key/path counterexamples;
+- helper/runtime/worker ownership, mode, symlink, and executable rejection;
+- raw stdin direct handoff without persistence;
+- closed native worker environment;
+- child deadline, process-group termination, forced cleanup, and reaping;
+- no Node retry or second JSON after native handoff.
 
 ### Native UI tests
 
@@ -380,6 +655,22 @@ Cover:
 - VoiceOver labels and keyboard navigation;
 - integration repair flow;
 - local data purge confirmation.
+
+### Native lifecycle crash gate
+
+The shared `AWF` test action builds the standalone `AWFLifecycleCrashHarness`, but normal run,
+profile, analyze, and archive actions do not. CI first proves that the executable is absent from
+`AWF.app`, then runs:
+
+```bash
+npm run test:native-crash -- --harness /absolute/path/to/AWFLifecycleCrashHarness
+```
+
+The gate covers fresh install, upgrade, repair, rollback, uninstall, final-ledger publication,
+repeated release-publication crashes at ledger capacity, invalid controls before mutation, known
+transaction cleanup, unknown-residue preservation, and a hidden-tree binary canary scan. A pass
+means one bounded retry converged after each emitted post-sync checkpoint. It does not simulate
+storage-controller reordering or sudden power loss.
 
 ### Failure and performance tests
 
@@ -432,21 +723,84 @@ Before requesting review:
 npm run check
 npm test
 npm run test:coverage
-npm run benchmark:hook
+npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms 100
+npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms 100
 npm run benchmark:live-spool
 npm run benchmark:live-dashboard
 npm run benchmark:dashboard
 ```
 
-After the native target exists, also run:
+The unsigned source build and unit-only test commands are:
 
 ```bash
+AWF_DERIVED_DATA="${TMPDIR%/}/awf-derived-data"
+
 xcodebuild \
   -project macos/AWF.xcodeproj \
   -scheme AWF \
+  -configuration Debug \
   -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
+  build
+
+xcodebuild \
+  -project macos/AWF.xcodeproj \
+  -scheme AWF \
+  -configuration Debug \
+  -destination 'platform=macOS' \
+  -derivedDataPath "$AWF_DERIVED_DATA" \
+  -only-testing:AWFTests \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  DEVELOPMENT_TEAM= \
   test
+
+npm run benchmark:native-hook -- \
+  --helper "$AWF_DERIVED_DATA/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 100
+
+npm run benchmark:native-hook -- \
+  --helper "$AWF_DERIVED_DATA/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+  --no-trace \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 100
+
+npm run benchmark:provider-shell -- \
+  --provider codex \
+  --shell /bin/zsh \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 150
+
+npm run benchmark:provider-shell -- \
+  --provider claude \
+  --samples 100 \
+  --warmups 10 \
+  --p95-ms 150
 ```
+
+Both hook benchmarks create an active semantic trace by default. `--no-trace` measures the same
+always-on live-spool path without an active exported trace; run both modes because neither result
+substitutes for the other. Native timing starts at the inner shell and therefore excludes provider
+dispatch and a provider-created outer shell. The benchmark's temporary runtime clone and unsigned
+Debug helper are not release-signing evidence, and install-time runtime prewarming is reported
+separately from steady-state hook latency.
+
+The provider-shell benchmark is a separate repeatable boundary. It validates each complete
+checked-in manifest. Codex includes isolated login-shell semantics and the real equal dual-root
+compatibility environment; Claude exercises the exact exec-form arguments. It still does not
+launch a provider process or include provider dispatch, and its closed result says so explicitly.
+It must not be used as user-owned live-delivery evidence.
+
+These commands intentionally do not sign the app. They prove neither Developer ID distribution nor
+notarization. Run `AWFUITests` separately on an interactive macOS test host; the pull-request job
+does not execute UI automation.
 
 PR description checklist:
 
@@ -461,14 +815,21 @@ PR description checklist:
 
 ## Continuous integration
 
-Recommended GitHub Actions jobs:
+Current and recommended GitHub Actions jobs:
 
 1. Node checks and tests on macOS and Linux with the minimum and current supported Node versions.
 2. Privacy/schema adversarial suite on every pull request.
-3. Xcode build and unit tests on a pinned macOS runner.
+3. Unsigned Xcode build, `AWFTests`, and the native hook benchmark on the macOS runner. The product
+   target remains 100 ms p95; the shared runner uses a separate 350 ms multi-process startup
+   regression budget, and provider dispatch plus the provider-created outer shell require separate
+   clean-machine evidence.
 4. UI smoke tests on protected branches or nightly runs.
 5. Unsigned reproducible artifact assembly for pull requests.
 6. Signed/notarized release only from a protected tag environment.
+
+The portable shared-runner steps keep their configured p95 budget, retain a failed first sample in
+the job log, and retry once. The step fails after two consecutive misses; this bounds scheduler
+variance handling without silently raising the product or runner budget.
 
 Release secrets must be unavailable to forked pull requests. Pin third-party Actions by commit SHA,
 grant the workflow minimum permissions, and generate provenance/checksums after the final signed
@@ -515,9 +876,15 @@ The beta is done when a non-technical user can:
 6. continue working if the app is closed or crashes;
 7. inspect the evidence without exposing prompt, command, output, path, or source text;
 8. purge local data and uninstall the integration;
-9. reproduce the published evaluation on anonymized semantic fixtures.
+9. reproduce the published evaluation on synthetic, raw-free semantic fixtures.
 
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
-dashboard projection, and fixture-driven publication tests are implemented. The next implementation
-work is the native read-only shell; it must consume this contract without reading detector state or
-inventing detector meaning.
+dashboard projection, fixture-driven publication tests, and closed provider reality gate are
+implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates,
+bounded delivery witness, and reversible local integration manager are also implemented. Both
+providers now have machine-specific user-owned live-delivery/dashboard passes. The next
+integration work is Developer ID release assembly, clean-machine lifecycle testing, and VM/storage
+power-loss fault injection beyond the completed subprocess `SIGKILL` gate. Explicit `TraceStore`
+append/metadata crash consistency is a separate follow-up before treating recorded traces as
+power-loss durable. This work must preserve each provider's trust model and must not infer
+successful monitoring from installation or retained historical events.

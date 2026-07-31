@@ -8,8 +8,12 @@ import test from "node:test";
 import { configFromEnv } from "../src/config.mjs";
 import { startDashboard } from "../src/dashboard-server.mjs";
 import { handleHook } from "../src/engine.mjs";
+import { LiveEventStore } from "../src/live-event-store.mjs";
 import { StateStore } from "../src/state-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
+
+const childProcessTimeoutMultiplier =
+  process.env.NODE_V8_COVERAGE ? 3 : 1;
 
 function requestStatus(url, headers) {
   return new Promise((resolve, reject) => {
@@ -53,6 +57,25 @@ function withTimeout(promise, timeoutMs, message) {
       },
     );
   });
+}
+
+async function waitUntil(predicate, timeoutMs, message) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error(message);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readStreamUntil(reader, marker) {
@@ -159,10 +182,16 @@ test("serves a token-protected loopback dashboard and semantic SSE", async (cont
     /48 lowercase hexadecimal/u,
   );
   const token = "a".repeat(48);
+  const loadedDashboardAssets = [];
+  const dashboardAssetFixture = Buffer.alloc(128, 0x57);
   const dashboard = await startDashboard({
     store: traceStore,
     port: 0,
     token,
+    dashboardAssetLoader(pathname) {
+      loadedDashboardAssets.push(pathname);
+      return dashboardAssetFixture;
+    },
   });
   context.after(() => dashboard.close());
   const origin = `http://127.0.0.1:${dashboard.port}`;
@@ -205,18 +234,77 @@ test("serves a token-protected loopback dashboard and semantic SSE", async (cont
     assert.equal(response.status, 200);
     assert.ok((await response.text()).length > 100);
   }
-  for (const asset of [
+  assert.deepEqual(loadedDashboardAssets, []);
+  const imageAssets = [
     "/assets/guardian-mark.webp",
     "/assets/paper-grid.webp",
     "/assets/sentinel-eye-clear.webp",
     "/assets/sentinel-eye-warn.webp",
     "/assets/sentinel-eye-critical.webp",
-  ]) {
+  ];
+  for (const asset of imageAssets) {
+    const stat = fs.lstatSync(
+      new URL(`../assets/${path.basename(asset)}`, import.meta.url),
+    );
+    assert.equal(stat.isFile(), true);
+    assert.equal(stat.isSymbolicLink(), false);
+    assert.ok(stat.size > 100);
     const response = await fetch(`${origin}${asset}`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("content-type"), "image/webp");
-    assert.ok((await response.arrayBuffer()).byteLength > 100);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(
+      response.headers.get("content-length"),
+      String(dashboardAssetFixture.byteLength),
+    );
+    assert.deepEqual(
+      Buffer.from(await response.arrayBuffer()),
+      dashboardAssetFixture,
+    );
   }
+  assert.deepEqual(loadedDashboardAssets, imageAssets);
+
+  const slowToken = "c".repeat(48);
+  const slowDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-slow-asset-"),
+  );
+  context.after(() =>
+    fs.rmSync(slowDataDir, { recursive: true, force: true })
+  );
+  const slowStore = new LiveEventStore({
+    root: slowDataDir,
+    env: {
+      ...env,
+      AGENT_WASTE_FIREWALL_DATA_DIR: slowDataDir,
+    },
+  });
+  const slowDashboard = await startDashboard({
+    store: slowStore,
+    port: 0,
+    token: slowToken,
+    dashboardAssetLoadTimeoutMs: 20,
+    dashboardAssetLoader() {
+      return new Promise(() => {});
+    },
+  });
+  context.after(() => slowDashboard.close());
+  const slowOrigin = `http://127.0.0.1:${slowDashboard.port}`;
+  const [slowAsset, liveStatus] = await Promise.all([
+    fetch(`${slowOrigin}/assets/guardian-mark.webp`),
+    fetch(`${slowOrigin}/api/status?token=${slowToken}`),
+  ]);
+  assert.equal(slowAsset.status, 503);
+  assert.deepEqual(await slowAsset.json(), {
+    error: "asset_unavailable",
+  });
+  assert.equal(liveStatus.status, 200);
+
+  const missingAsset = await fetch(
+    `${origin}/assets/not-listed.webp?token=${token}`,
+  );
+  assert.equal(missingAsset.status, 404);
+  assert.deepEqual(loadedDashboardAssets, imageAssets);
 
   const statusResponse = await fetch(`${origin}/api/status?token=${token}`);
   const status = await statusResponse.json();
@@ -349,6 +437,85 @@ test("serves a token-protected loopback dashboard and semantic SSE", async (cont
     dashboard.close(),
     1_000,
     "Dashboard close waited for an active SSE connection.",
+  );
+});
+
+test("dashboard close kills in-flight default provider probes", async (context) => {
+  if (process.platform === "win32") return;
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-provider-abort-"),
+  );
+  const dataDir = path.join(directory, "data");
+  fs.mkdirSync(dataDir, { mode: 0o700 });
+  const pids = [];
+  context.after(() => {
+    for (const pid of pids) {
+      if (processIsAlive(pid)) process.kill(pid, "SIGKILL");
+    }
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  for (const provider of ["codex", "claude"]) {
+    const executable = path.join(directory, provider);
+    const pidFile = path.join(directory, `${provider}.pid`);
+    fs.writeFileSync(
+      executable,
+      "#!/bin/sh\n" +
+        `printf '%s' "$$" > ${JSON.stringify(pidFile)}\n` +
+        "trap '' TERM\n" +
+        "exec /bin/sleep 60\n",
+      { mode: 0o700 },
+    );
+  }
+  const token = "d".repeat(48);
+  const store = new LiveEventStore({
+    root: dataDir,
+    env: { AGENT_WASTE_FIREWALL_DATA_DIR: dataDir },
+  });
+  const dashboard = await startDashboard({
+    store,
+    port: 0,
+    token,
+    env: {
+      PATH: directory,
+      HOME: directory,
+      AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+    },
+  });
+  context.after(() => dashboard.close());
+  const request = fetch(
+    `http://127.0.0.1:${dashboard.port}/api/integrations?token=${token}`,
+  ).catch(() => null);
+  await waitUntil(
+    () =>
+      ["codex", "claude"].every((provider) =>
+        fs.existsSync(path.join(directory, `${provider}.pid`))
+      ),
+    2_000 * childProcessTimeoutMultiplier,
+    "Provider probes did not start.",
+  );
+  for (const provider of ["codex", "claude"]) {
+    pids.push(
+      Number.parseInt(
+        fs.readFileSync(path.join(directory, `${provider}.pid`), "utf8"),
+        10,
+      ),
+    );
+  }
+
+  await withTimeout(
+    dashboard.close(),
+    2_000 * childProcessTimeoutMultiplier,
+    "Dashboard close did not settle after aborting provider probes.",
+  );
+  await waitUntil(
+    () => pids.every((pid) => !processIsAlive(pid)),
+    2_000 * childProcessTimeoutMultiplier,
+    "Provider child survived dashboard shutdown.",
+  );
+  await withTimeout(
+    request,
+    2_000 * childProcessTimeoutMultiplier,
+    "Integration request did not settle.",
   );
 });
 
@@ -657,4 +824,46 @@ test("never forwards tampered explicit-trace metadata to status or SSE", async (
   );
   assert.equal(streamText.includes(canary), false);
   await reader.cancel();
+});
+
+test("runs bounded state retention beside monitoring and closes it exactly once", async (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-dashboard-state-janitor-"),
+  );
+  context.after(() =>
+    fs.rmSync(dataDir, { recursive: true, force: true }),
+  );
+  let ticks = 0;
+  let closes = 0;
+  const stateJanitor = {
+    tick() {
+      ticks += 1;
+      if (ticks === 1) throw new Error("closed-test-error");
+    },
+    close() {
+      closes += 1;
+    },
+  };
+  const token = "7".repeat(48);
+  const dashboard = await startDashboard({
+    root: dataDir,
+    source: "live",
+    port: 0,
+    token,
+    maintenanceIntervalMs: 25,
+    stateJanitor,
+  });
+
+  await waitUntil(
+    () => ticks >= 2,
+    500,
+    "state retention did not run with dashboard maintenance",
+  );
+  const response = await fetch(
+    `http://127.0.0.1:${dashboard.port}/api/status?token=${token}`,
+  );
+  assert.equal(response.status, 200);
+  await dashboard.close();
+  await dashboard.close();
+  assert.equal(closes, 1);
 });

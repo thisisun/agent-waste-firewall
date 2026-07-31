@@ -1,0 +1,20 @@
+{
+  "name": "agent-waste-firewall",
+  "interface": {
+    "displayName": "AWF — Agent Waste Firewall"
+  },
+  "plugins": [
+    {
+      "name": "agent-waste-firewall",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

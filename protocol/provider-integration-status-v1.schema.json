@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thisisun/agent-waste-firewall/protocol/provider-integration-status-v1.schema.json",
+  "title": "ProviderIntegrationStatusV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "kind",
+    "providers"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "kind": {
+      "const": "provider_integration_status"
+    },
+    "providers": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/providerStatus"
+            },
+            {
+              "properties": {
+                "provider": {
+                  "const": "codex"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/providerStatus"
+            },
+            {
+              "properties": {
+                "provider": {
+                  "const": "claude"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "properties": {
+        "major": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        },
+        "patch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999
+        }
+      }
+    },
+    "providerStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "state",
+        "version",
+        "activity"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "codex",
+            "claude"
+          ]
+        },
+        "state": {
+          "enum": [
+            "not_detected",
+            "needs_install",
+            "needs_enable",
+            "installed_unverified",
+            "active",
+            "unknown"
+          ]
+        },
+        "version": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/version"
+            }
+          ]
+        },
+        "activity": {
+          "enum": [
+            "not_observed",
+            "observed",
+            "unknown"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "not_detected"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "needs_install",
+                  "needs_enable",
+                  "installed_unverified",
+                  "active"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "$ref": "#/$defs/version"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "active"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "activity": {
+                "const": "observed"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "activity": {
+                "const": "observed"
+              }
+            },
+            "required": [
+              "activity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "active",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

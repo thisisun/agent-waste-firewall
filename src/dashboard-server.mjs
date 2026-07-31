@@ -14,27 +14,81 @@ import {
   projectTraceDashboardEvent,
   projectTraceDashboardStatus,
 } from "./dashboard-projection.mjs";
+import { validateDashboardStatus } from "./dashboard-status-schema.mjs";
 import { DashboardTraceCursor } from "./dashboard-trace-cursor.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
+import {
+  providerIntegrationStatusAsync,
+  validateProviderIntegrationStatus,
+} from "./provider-integration-status.mjs";
 import { TraceStore } from "./trace-store.mjs";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const DASHBOARD_TOKEN = /^[0-9a-f]{48}$/u;
-const GUARDIAN_MARK = fs.readFileSync(
-  new URL("../assets/guardian-mark.webp", import.meta.url),
-);
-const PAPER_GRID = fs.readFileSync(
-  new URL("../assets/paper-grid.webp", import.meta.url),
-);
-const SENTINEL_EYE_CLEAR = fs.readFileSync(
-  new URL("../assets/sentinel-eye-clear.webp", import.meta.url),
-);
-const SENTINEL_EYE_WARN = fs.readFileSync(
-  new URL("../assets/sentinel-eye-warn.webp", import.meta.url),
-);
-const SENTINEL_EYE_CRITICAL = fs.readFileSync(
-  new URL("../assets/sentinel-eye-critical.webp", import.meta.url),
-);
+const PROVIDER_CACHE_MS = 15_000;
+const PROVIDER_ACTIVITY_FRESH_MS = 5 * 60 * 1_000;
+const DASHBOARD_ASSET_LOAD_TIMEOUT_MS = 1_000;
+const UNKNOWN_PROVIDER_INTEGRATION = validateProviderIntegrationStatus({
+  v: 1,
+  kind: "provider_integration_status",
+  providers: [
+    {
+      provider: "codex",
+      state: "unknown",
+      version: null,
+      activity: "unknown",
+    },
+    {
+      provider: "claude",
+      state: "unknown",
+      version: null,
+      activity: "unknown",
+    },
+  ],
+});
+const DASHBOARD_ASSET_URLS = new Map([
+  [
+    "/assets/guardian-mark.webp",
+    new URL("../assets/guardian-mark.webp", import.meta.url),
+  ],
+  [
+    "/assets/paper-grid.webp",
+    new URL("../assets/paper-grid.webp", import.meta.url),
+  ],
+  [
+    "/assets/sentinel-eye-clear.webp",
+    new URL("../assets/sentinel-eye-clear.webp", import.meta.url),
+  ],
+  [
+    "/assets/sentinel-eye-warn.webp",
+    new URL("../assets/sentinel-eye-warn.webp", import.meta.url),
+  ],
+  [
+    "/assets/sentinel-eye-critical.webp",
+    new URL("../assets/sentinel-eye-critical.webp", import.meta.url),
+  ],
+]);
+const DASHBOARD_ASSET_CACHE = new Map();
+
+function dashboardAsset(pathname) {
+  if (DASHBOARD_ASSET_CACHE.has(pathname)) {
+    return DASHBOARD_ASSET_CACHE.get(pathname);
+  }
+  const url = DASHBOARD_ASSET_URLS.get(pathname);
+  if (!url) return null;
+  const pending = fs.promises.readFile(url).then(
+    (body) => {
+      DASHBOARD_ASSET_CACHE.set(pathname, body);
+      return body;
+    },
+    (error) => {
+      DASHBOARD_ASSET_CACHE.delete(pathname);
+      throw error;
+    },
+  );
+  DASHBOARD_ASSET_CACHE.set(pathname, pending);
+  return pending;
+}
 
 function json(response, status, value) {
   const body = `${JSON.stringify(value)}\n`;
@@ -67,6 +121,41 @@ function safePort(value) {
     throw new Error("Dashboard port must be between 0 and 65535.");
   }
   return parsed;
+}
+
+function safeAssetLoadTimeout(value) {
+  if (value === undefined) return DASHBOARD_ASSET_LOAD_TIMEOUT_MS;
+  const parsed = Number(value);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < 1 ||
+    parsed > DASHBOARD_ASSET_LOAD_TIMEOUT_MS
+  ) {
+    throw new Error("Dashboard asset timeout must be between 1 and 1000 ms.");
+  }
+  return parsed;
+}
+
+async function readDashboardAsset(load, pathname, timeoutMs) {
+  let timeout = null;
+  try {
+    const unavailable = new Promise((_, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error("Dashboard asset unavailable.")),
+        timeoutMs,
+      );
+    });
+    const body = await Promise.race([
+      Promise.resolve().then(() => load(pathname)),
+      unavailable,
+    ]);
+    if (!Buffer.isBuffer(body)) {
+      throw new Error("Dashboard asset unavailable.");
+    }
+    return body;
+  } finally {
+    if (timeout !== null) clearTimeout(timeout);
+  }
 }
 
 function safeToken(value) {
@@ -158,6 +247,31 @@ function liveStatusPayload(cursor, snapshot = null) {
   return projectLiveDashboardStatus(snapshot ?? cursor.readSnapshot());
 }
 
+function withProviderActivity(status, activityByProvider) {
+  return validateProviderIntegrationStatus({
+    v: 1,
+    kind: "provider_integration_status",
+    providers: status.providers.map((provider) => {
+      const activity = activityByProvider[provider.provider] ?? "unknown";
+      let state = provider.state;
+      if (activity === "observed") {
+        state =
+          state === "installed_unverified" || state === "active"
+            ? "active"
+            : "unknown";
+      } else if (state === "active") {
+        state = "installed_unverified";
+      }
+      return {
+        provider: provider.provider,
+        state,
+        version: provider.version,
+        activity,
+      };
+    }),
+  });
+}
+
 function parseResumeCursor(value, source) {
   const text = String(value ?? "");
   if (text === "") {
@@ -192,6 +306,7 @@ function serveEventStream(
   cursor,
   {
     activeStreams,
+    observeProviderEvents,
     projectEvent,
     snapshotStatus,
     source,
@@ -283,6 +398,13 @@ function serveEventStream(
         response.write(`data: ${statusText}\n\n`);
         lastStatusText = statusText;
       }
+      if (source === "live" && typeof observeProviderEvents === "function") {
+        observeProviderEvents(
+          window.events,
+          window.streamAlias,
+          frame.snapshot?.initialized ?? true,
+        );
+      }
       for (const event of window.events) {
         const eventId =
           source === "live"
@@ -334,6 +456,14 @@ export async function startDashboard(options = {}) {
   if (source !== "live" && source !== "trace") {
     throw new Error("Dashboard source must be live or trace.");
   }
+  const stateJanitor = options.stateJanitor ?? null;
+  if (
+    stateJanitor !== null &&
+    (typeof stateJanitor.tick !== "function" ||
+      typeof stateJanitor.close !== "function")
+  ) {
+    throw new TypeError("Dashboard state janitor is invalid.");
+  }
   let store;
   let traceId = null;
   let cursor;
@@ -354,7 +484,7 @@ export async function startDashboard(options = {}) {
     cursor.readEvents();
     projectEvent = projectLiveDashboardEvent;
     snapshotStatus = (snapshot) =>
-      liveStatusPayload(cursor, snapshot);
+      validateDashboardStatus(liveStatusPayload(cursor, snapshot));
   } else {
     store =
       options.store ??
@@ -372,13 +502,146 @@ export async function startDashboard(options = {}) {
     cursor.readEvents();
     projectEvent = projectTraceDashboardEvent;
     snapshotStatus = (snapshot) =>
-      traceStatusPayload(store, traceId, cursor, snapshot);
+      validateDashboardStatus(
+        traceStatusPayload(store, traceId, cursor, snapshot),
+      );
   }
+  const integrationNow =
+    typeof options.integrationClock === "function"
+      ? options.integrationClock
+      : () => Date.now();
+  const loadDashboardAsset =
+    typeof options.dashboardAssetLoader === "function"
+      ? options.dashboardAssetLoader
+      : dashboardAsset;
+  const dashboardAssetLoadTimeoutMs = safeAssetLoadTimeout(
+    options.dashboardAssetLoadTimeoutMs,
+  );
+  const initialProviderEvents =
+    source === "live" ? cursor.readEvents() : [];
+  const initialProviderSnapshot =
+    source === "live" ? cursor.currentSnapshot() : null;
+  let providerActivityAlias =
+    source === "live" ? cursor.streamAlias : null;
+  let providerActivitySequence =
+    source === "live"
+      ? initialProviderEvents.at(-1)?.seq ?? 0
+      : 0;
+  let providerBaselineEstablished =
+    source !== "live" || initialProviderSnapshot?.initialized === true;
+  const providerLastObservedAt = {
+    codex: null,
+    claude: null,
+  };
+  const observeProviderEvents = (
+    events,
+    streamAlias,
+    initialized = true,
+  ) => {
+    if (source !== "live" || !Array.isArray(events)) return;
+    const now = Number(integrationNow());
+    if (!Number.isFinite(now)) return;
+    if (!providerBaselineEstablished) {
+      if (!initialized) return;
+      providerActivityAlias = streamAlias;
+      providerActivitySequence = events.at(-1)?.seq ?? 0;
+      providerBaselineEstablished = true;
+      return;
+    }
+    if (streamAlias !== providerActivityAlias) {
+      providerActivityAlias = streamAlias;
+      providerActivitySequence = 0;
+    }
+    for (const event of events) {
+      if (
+        event.seq > providerActivitySequence &&
+        (event.platform === "codex" || event.platform === "claude")
+      ) {
+        providerLastObservedAt[event.platform] = now;
+      }
+    }
+    providerActivitySequence = Math.max(
+      providerActivitySequence,
+      events.at(-1)?.seq ?? 0,
+    );
+  };
+  const currentProviderActivity = () => {
+    if (source !== "live") {
+      return { codex: "unknown", claude: "unknown" };
+    }
+    const now = Number(integrationNow());
+    if (!Number.isFinite(now)) {
+      return { codex: "unknown", claude: "unknown" };
+    }
+    return Object.fromEntries(
+      ["codex", "claude"].map((provider) => {
+        const observedAt = providerLastObservedAt[provider];
+        const age = observedAt === null ? null : now - observedAt;
+        return [
+          provider,
+          age !== null &&
+          age >= 0 &&
+          age <= PROVIDER_ACTIVITY_FRESH_MS
+            ? "observed"
+            : "not_observed",
+        ];
+      }),
+    );
+  };
   let actualPort = port;
   const urlHost = host === "::1" ? "[::1]" : host;
   const activeStreams = new Set();
   const activeSockets = new Set();
   let maintenanceInterval = null;
+  let providerCache = null;
+  let providerCacheAt = 0;
+  let providerProbe = null;
+  const providerAbortController = new AbortController();
+  const readProviderIntegration = () => {
+    if (providerAbortController.signal.aborted) {
+      return Promise.resolve(UNKNOWN_PROVIDER_INTEGRATION);
+    }
+    const now = Number(integrationNow());
+    if (
+      providerCache &&
+      Number.isFinite(now) &&
+      now - providerCacheAt >= 0 &&
+      now - providerCacheAt < PROVIDER_CACHE_MS
+    ) {
+      return Promise.resolve(
+        withProviderActivity(providerCache, currentProviderActivity()),
+      );
+    }
+    if (providerProbe) {
+      return providerProbe.then((status) =>
+        withProviderActivity(status, currentProviderActivity())
+      );
+    }
+    providerProbe = providerIntegrationStatusAsync({
+      env: options.env ?? process.env,
+      runner: options.providerRunner,
+      activityByProvider: {
+        codex: "not_observed",
+        claude: "not_observed",
+      },
+      signal: providerAbortController.signal,
+    })
+      .then((status) => {
+        providerCache = status;
+        const completedAt = Number(integrationNow());
+        providerCacheAt = Number.isFinite(completedAt)
+          ? completedAt
+          : Date.now();
+        return status;
+      })
+      .catch(() => UNKNOWN_PROVIDER_INTEGRATION)
+      .finally(() => {
+        providerProbe = null;
+      });
+    return providerProbe.then((status) =>
+      withProviderActivity(status, currentProviderActivity())
+    );
+  };
 
   const server = http.createServer((request, response) => {
     try {
@@ -407,24 +670,23 @@ export async function startDashboard(options = {}) {
         asset(response, "text/javascript; charset=utf-8", DASHBOARD_JS);
         return;
       }
-      if (requestUrl.pathname === "/assets/guardian-mark.webp") {
-        asset(response, "image/webp", GUARDIAN_MARK);
-        return;
-      }
-      if (requestUrl.pathname === "/assets/paper-grid.webp") {
-        asset(response, "image/webp", PAPER_GRID);
-        return;
-      }
-      if (requestUrl.pathname === "/assets/sentinel-eye-clear.webp") {
-        asset(response, "image/webp", SENTINEL_EYE_CLEAR);
-        return;
-      }
-      if (requestUrl.pathname === "/assets/sentinel-eye-warn.webp") {
-        asset(response, "image/webp", SENTINEL_EYE_WARN);
-        return;
-      }
-      if (requestUrl.pathname === "/assets/sentinel-eye-critical.webp") {
-        asset(response, "image/webp", SENTINEL_EYE_CRITICAL);
+      if (DASHBOARD_ASSET_URLS.has(requestUrl.pathname)) {
+        readDashboardAsset(
+          loadDashboardAsset,
+          requestUrl.pathname,
+          dashboardAssetLoadTimeoutMs,
+        ).then(
+          (body) => {
+            if (!response.destroyed && !response.writableEnded) {
+              asset(response, "image/webp", body);
+            }
+          },
+          () => {
+            if (!response.destroyed && !response.writableEnded) {
+              json(response, 503, { error: "asset_unavailable" });
+            }
+          },
+        );
         return;
       }
       if (!authorized(requestUrl, token)) {
@@ -439,9 +701,17 @@ export async function startDashboard(options = {}) {
         json(response, 200, snapshotStatus());
         return;
       }
+      if (requestUrl.pathname === "/api/integrations") {
+        readProviderIntegration().then(
+          (status) => json(response, 200, status),
+          () => json(response, 200, UNKNOWN_PROVIDER_INTEGRATION),
+        );
+        return;
+      }
       if (requestUrl.pathname === "/events") {
         serveEventStream(request, response, cursor, {
           activeStreams,
+          observeProviderEvents,
           projectEvent,
           snapshotStatus,
           source,
@@ -468,7 +738,10 @@ export async function startDashboard(options = {}) {
   });
   const address = server.address();
   actualPort = typeof address === "object" && address ? address.port : port;
-  if (source === "live" && typeof store.maintain === "function") {
+  if (
+    (source === "live" && typeof store.maintain === "function") ||
+    stateJanitor
+  ) {
     const requestedInterval = Number(options.maintenanceIntervalMs);
     const maintenanceIntervalMs =
       Number.isSafeInteger(requestedInterval) &&
@@ -476,7 +749,30 @@ export async function startDashboard(options = {}) {
         ? requestedInterval
         : 1000;
     maintenanceInterval = setInterval(
-      () => store.maintain(),
+      () => {
+        if (stateJanitor) {
+          try {
+            stateJanitor.tick();
+          } catch {
+            // State retention is observation-only and must not stop monitoring.
+          }
+        }
+        if (source !== "live" || typeof store.maintain !== "function") {
+          return;
+        }
+        try {
+          store.maintain();
+          const events = cursor.readEvents();
+          const snapshot = cursor.currentSnapshot();
+          observeProviderEvents(
+            events,
+            snapshot.streamAlias,
+            snapshot.initialized,
+          );
+        } catch {
+          // A later audited poll may recover; never terminate the dashboard loop.
+        }
+      },
       maintenanceIntervalMs,
     );
     maintenanceInterval.unref?.();
@@ -485,9 +781,17 @@ export async function startDashboard(options = {}) {
   let closePromise = null;
   const close = () => {
     if (closePromise) return closePromise;
+    providerAbortController.abort();
     if (maintenanceInterval) {
       clearInterval(maintenanceInterval);
       maintenanceInterval = null;
+    }
+    if (stateJanitor) {
+      try {
+        stateJanitor.close();
+      } catch {
+        // Closing state retention must not strand dashboard sockets.
+      }
     }
     closePromise = new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));

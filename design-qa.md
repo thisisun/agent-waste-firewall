@@ -1,147 +1,126 @@
 # Design QA
 
-Date: 2026-07-28
+Date: 2026-07-29
 
 ## Source visual truth
 
-The following 2556 × 1179 references define the art direction. They are visual
-language references, not application wireframes, so the comparison targets
-palette, typography, image treatment, contrast, spacing, and editorial rhythm
-rather than literal component positions.
+The supplied frames define the visual language rather than the dashboard layout:
+fluorescent green, white paper/grid and near-black green surfaces, editorial
+monospace typography, square rules, and a green statue as the observing motif.
 
-- External user-supplied reference, not checked in: `IMG_3131.PNG`
-- External user-supplied reference, not checked in: `IMG_3132.PNG`
-- External user-supplied reference, not checked in: `IMG_3133.PNG`
-- External user-supplied reference, not checked in: `IMG_3135.PNG`
-- `assets/sentinel-eye-clear.webp` (1254 × 1254, transparent WebP)
-- `assets/sentinel-eye-warn.webp` (1254 × 1254, transparent WebP)
-- `assets/sentinel-eye-critical.webp` (1254 × 1254, transparent WebP)
+- `IMG_3131.PNG` (user-supplied external reference)
+- `IMG_3132.PNG` (user-supplied external reference)
+- `IMG_3133.PNG` (user-supplied external reference)
+- `IMG_3135.PNG` (user-supplied external reference)
+- `assets/guardian-mark.webp`
+- `assets/sentinel-eye-clear.webp`
+- `assets/sentinel-eye-warn.webp`
+- `assets/sentinel-eye-critical.webp`
+
+The external references are not checked into the repository.
 
 ## Implementation evidence
 
-- Implementation: `http://127.0.0.1:4329/`
-- Light screenshot:
-  `docs/design-evidence/awf-dashboard-light.jpg`
-- Dark screenshot:
-  `docs/design-evidence/awf-dashboard-dark.jpg`
-- Light side-by-side comparison, retained locally but not distributed because
-  it contains the external reference: `/tmp/awf-qa-light-comparison-final.png`
-- Dark side-by-side comparison, retained locally but not distributed because
-  it contains the external reference: `/tmp/awf-qa-dark-comparison-final.png`
-- Expanded dashboard with the compact control:
-  `docs/design-evidence/awf-expanded-compact-control.png`
-- Compact review state:
-  `docs/design-evidence/awf-compact-review.png`
-- Compact critical state:
-  `docs/design-evidence/awf-compact-critical.png`
-- Critical source/implementation comparison:
-  `docs/design-evidence/awf-critical-comparison.png`
+- Local implementation:
+  `http://127.0.0.1:43292/` with the dashboard's per-run token
+- English default, light:
+  `docs/design-evidence/awf-summary-dashboard-light.png`
+- English default, dark:
+  `docs/design-evidence/awf-summary-dashboard-dark.png`
+- Korean secondary, dark:
+  `docs/design-evidence/awf-summary-dashboard-dark-ko.png`
+- Ephemeral light comparison: `awf-summary-light-comparison-final.png`
+- Ephemeral dark comparison: `awf-summary-dark-comparison-final.png`
+- Ephemeral narrow graph comparison: `awf-graph-before-after.png`
 
-The browser CSS viewport was 821 × 987 at device-pixel-ratio 2. The captured
-browser content raster is 806 × 969. Each reference was proportionally resized
-and center-cropped to 806 × 969 before it was placed next to the implementation
-in a 1612 × 969 comparison image.
+The ephemeral comparison boards are not distributed. The accepted desktop captures use a
+1180 × 760 CSS viewport and a 1180 × 760
+normalized raster. The narrow side-panel check uses a 509 × 987 CSS viewport.
+Comparison boards place an 1180 × 760 contained reference beside the matching
+1180 × 760 implementation in a 2360 × 760 raster.
 
-The compact-state browser viewport was 1280 × 720 with browser
-`devicePixelRatio` 2. Browser screenshots were CSS-density normalized to
-1280 × 720 for compact states and 1265 × 712 for the expanded page with its
-scrollbar. The focused critical comparison downsamples the 1280 × 720
-implementation to 632 × 356 and places it beside a 632 × 356 target frame
-containing the 1254 × 1254 source asset at the same relative scale. The
-combined evidence raster is 1264 × 420.
+## State checked
 
-## States and interactions checked
+- Live, complete, healthy local source
+- Warn protection mode with a high-severity repeated-failure signal
+- 8 observed semantic events, 4 detected signals, and 3 potentially avoidable
+  calls
+- English mode with English-only product copy
+- Korean mode with Korean-only product copy, excluding the AWF brand, the `EN`
+  language control, and the audited anonymous session alias
+- Light and dark themes
+- Current-signal detail drawer open and closed
+- 1180 × 760 one-screen desktop layout
+- 509 × 987 responsive side-panel layout
 
-- English is the default language and Korean is an explicit secondary option.
-- Light is the default theme and dark is an explicit secondary option.
-- Theme and language controls update their pressed state and visible copy.
-- Korean mode updates the live warning and prompt-coach copy without revealing
-  or retaining raw prompt content.
-- The live status, event stream, warning panel, and prompt coach render realistic
-  demo data.
-- The `COMPACT` control leaves only the sentinel visible; selecting the sentinel
-  restores the full dashboard.
-- Medium severity produces the yellow `REVIEW` asset and title/favicon state.
-- A repeated high-severity signal produces the red `CRITICAL` asset, localized
-  title, and pulsing deep-red full background.
-- English and Korean update the compact control, visible status, accessible
-  announcement, and document title.
-- The page has no browser-console errors and no horizontal overflow at the
-  checked viewport.
+## Interaction and accessibility checks
 
-## Full-view and focused comparison
+- Every metric and summary card opens a native right-side `dialog`.
+- Opening the current-signal detail focuses `#detail-close`.
+- Closing the dialog returns focus to the signal trigger.
+- The language and theme controls update visible copy, document state, and
+  pressed state.
+- The desktop document height equals the 760 px viewport height.
+- The 509 px responsive view has no horizontal overflow and permits vertical
+  scrolling.
+- Activity and session-load canvases remain bounded at 132 px and 64 px after
+  repeated theme and language changes.
+- Switching EN → 한국어 → EN keeps the prompt-contract score at `1 / 5`.
+- Canvas charts have visible text readouts and accessible image labels.
+- Browser runtime logs contain no warnings or errors.
+- Raw prompts, commands, outputs, transcript text, and source content never
+  enter the dashboard projection.
 
-Full-page light and dark captures were inspected alongside the matching source
-frames in the saved comparison images. A focused inspection covered:
+## Comparison findings and history
 
-- the transparent guardian statue and magnifying glass in the hero;
-- the white paper/grid surface and near-black green dark surface;
-- the fluorescent emerald accent (`#00e58b`);
-- the square editorial panels, dividers, and monospaced hierarchy;
-- theme and language controls;
-- warning, live-event, and prompt-coach density at tablet width.
-- compact sentinel scale, transparent edges, eye legibility, status label,
-  yellow/red state distinction, and deep-red critical background.
-
-No pink or magenta pixels are used by the interface palette. The guardian mark
-is a real transparent WebP asset, so it has no colored backdrop or CSS-drawn
-substitute.
-
-## Findings
-
-- P0: none.
-- P1: none.
-- P2, pass 1: at an 821 px viewport, the mode panel inherited a 560 px maximum
-  width and the warning/coach stack stayed in two narrow columns.
-- Fix: the 860 px breakpoint now makes the mode panel full-width and collapses
-  the warning/coach stack to one column.
-- P2, pass 2: resolved. The mode panel measured 766 px, equal to its app
-  container; the side stack measured one 766 px column; document and viewport
-  widths matched, so there was no horizontal overflow.
-- P3, accepted: the references include a bespoke techno display face. The
-  implementation uses dependency-free system monospace fonts to preserve the
-  local-first, offline-friendly distribution while matching the typewriter
-  references closely.
-- P3, residual test gap: the in-app browser's temporary viewport capability
-  reported success but continued to render at 1280 × 720, so a separate mobile
-  screenshot was not accepted as evidence. The compact sizing has explicit
-  width/height breakpoints and automated DOM coverage, but a true mobile visual
-  capture remains follow-up polish rather than a blocker for this minimized
-  desktop-sidecar interaction.
-
-## Compact sentinel comparison history
-
-- Pass 1 asset review: the first red render used a magenta-adjacent key color
-  that could leave a pink fringe after transparency removal.
-- Fix: regenerate the red statue and magnifying glass against a green
-  chroma-key field, then apply a soft matte and despill before export.
-- Pass 2 evidence: `awf-critical-comparison.png` shows the final red
-  asset and browser implementation together. The eye remains legible, the
-  transparent edge has no pink halo, and the slight deep-red background
-  difference is the intended critical pulse between `#7a0714` and `#b7152a`.
-- Final code review found two non-visual P2 issues: the status endpoint exposed
-  an unused user-defined recording label, and deduplicated escalation events
-  temporarily inflated the live incident metric.
-- Fix: remove the label from the browser payload and add a closed `0 | 1`
-  `incidentCountDelta` projection so critical escalation still updates the
-  sentinel without changing the server-owned count. Integration tests cover a
-  sensitive label and the `[1, 1, 0, 0]` notified/deduplicated escalation
-  sequence.
-- P0/P1/P2 after pass 2: none.
+- Pass 1: the earlier oversized marketing line, “ONE SCREEN. ZERO BLIND
+  SPOTS.”, consumed the masthead and repeated what the layout should prove.
+- Fix: replace it with the functional `LIVE SESSION` title, keep the AWF brand
+  eyebrow, and retain only a short locale-matched local/raw-free subline.
+- Pass 2: the reduced masthead returns space to the charts and signal summary.
+  All five overview panels remain visible at 1180 × 760.
+- Pass 3, P1: at the 509 × 987 side-panel width, percentage-height canvases
+  fed their device-pixel dimensions back into an auto grid row. The activity
+  chart grew to 3136 px and the session-load chart to 850 px, hiding the
+  remaining summary.
+- Fix: replace percentage heights with bounded 96–132 px and 48–64 px tracks,
+  use intrinsic grid rows, and reduce the responsive trend-panel minimum to
+  210 px.
+- Pass 4: the focused before/after comparison shows the chart contained within
+  one card. The final measured heights are 132 px and 64 px, with no horizontal
+  overflow.
+- Pass 5, P2: the English masthead used a Korean subtitle while the Korean
+  masthead used an English subtitle and eyebrow. Changing language also cleared
+  the prompt-contract score because warning rendering replaced the independent
+  prompt-coach state.
+- Fix: localize all masthead, footer, event badge, live-time, degraded-state,
+  and browser-title copy per locale. Decouple warning rendering from
+  prompt-coach state.
+- Pass 6: English visible text contains Korean only in the `한국어` selector.
+  Korean visible text contains Latin characters only in the AWF brand, `EN`
+  selector, and anonymous alias. The prompt score remains `1 / 5` through both
+  language switches.
+- The light comparison matches the reference's paper grid, hard editorial
+  rules, green statue treatment, fluorescent accent, and restrained mono
+  hierarchy.
+- The dark comparison matches the reference's near-black green field and vivid
+  green foreground without introducing pink or magenta.
+- Accepted variance: the references use a bespoke display face. AWF keeps
+  dependency-free system monospace fonts to preserve offline, local-first
+  distribution.
 
 ## Final visual review
 
-- Typography: clear English-first hierarchy, compact Korean subcopy, and
-  readable mono labels.
-- Spacing: large editorial whitespace in the hero, consistent panel insets, and
-  a stable single-column tablet flow.
-- Color: white/light and deep-green/dark surfaces use the requested fluorescent
-  green consistently; pink is absent.
-- Imagery: the original guardian mark is crisp, transparent, and sized for both
-  brand and hero placements. The three compact sentinel assets are real
-  transparent WebP images rather than CSS or SVG substitutes.
-- Copy and accessibility: controls have localized labels and pressed states;
-  the sentinel is a labeled button with a polite live announcement, descriptive
-  alternate text, keyboard focus, and reduced-motion handling.
+- Hierarchy: brand, functional session title, live status, four metrics, three
+  graphs/summaries, and two action cards read in that order.
+- Density: the desktop summary is complete without scrolling; details remain
+  available on demand. The narrow view no longer lets either graph dominate
+  the page.
+- Color: light and dark modes use the requested green consistently; severity
+  uses yellow/red only for state communication.
+- Imagery: transparent statue and magnifying-glass assets remain crisp with no
+  colored backing plate.
+- Copy: English and Korean modes are internally consistent, and the removed
+  slogan no longer appears in shipped dashboard copy.
 
 final result: passed

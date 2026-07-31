@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "connected": true,
+  "source": "live",
+  "sourceState": "active",
+  "streamHealth": "healthy",
+  "traceHealth": "healthy",
+  "coverage": "incomplete",
+  "generation": 7,
+  "streamAlias": "generation_0123456789abcdef0123456789abcdef",
+  "mode": "warn",
+  "state": "active",
+  "traceId": null,
+  "traceAlias": "session_0123456789abcdef0123456789abcdef",
+  "metrics": {
+    "events": 4,
+    "incidents": 2,
+    "avoidableCalls": 1,
+    "elapsedMs": 1200
+  },
+  "lastSequence": 44,
+  "currentWarning": {
+    "ruleId": "exact_tool_repeat",
+    "severity": "high",
+    "attribution": "agent",
+    "occurrences": 3,
+    "issueIds": []
+  },
+  "promptCoach": {
+    "issueIds": []
+  }
+}

@@ -41,8 +41,12 @@ jobs:
         include:
           - os: macos-latest
             hook_p95_ms: 150
+            provider_shell: /bin/zsh
+            provider_shell_p95_ms: 200
           - os: ubuntu-latest
             hook_p95_ms: 100
+            provider_shell: /bin/bash
+            provider_shell_p95_ms: 200
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -52,5 +56,151 @@ jobs:
       - run: npm ci --ignore-scripts
       # Process startup on shared macOS runners has materially higher variance than local
       # execution. The product target remains 100 ms; CI uses a separate runner budget.
-      - run: npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}
+      # Both shared-runner checks retain the first failed sample and retry once. Two
+      # consecutive failures are required so one scheduler burst does not create a false gate.
+      - name: Benchmark default hook path
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:hook -- --no-trace --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Default hook benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark explicit trace hook path
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:hook -- --samples 100 --warmups 10 --p95-ms ${{ matrix.hook_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Explicit trace hook benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Codex outer-shell semantics without provider dispatch
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider codex \
+              --shell ${{ matrix.provider_shell }} \
+              --no-trace \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Provider-shell benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Codex outer-shell semantics with explicit trace
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider codex \
+              --shell ${{ matrix.provider_shell }} \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Provider-shell trace benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Claude exec-form semantics without provider dispatch
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider claude \
+              --no-trace \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Claude provider-shell benchmark attempt $attempt failed."
+          done
+          exit 1
+      - name: Benchmark Claude exec-form semantics with explicit trace
+        run: |
+          for attempt in 1 2; do
+            if npm run benchmark:provider-shell -- \
+              --provider claude \
+              --samples 50 \
+              --warmups 5 \
+              --p95-ms ${{ matrix.provider_shell_p95_ms }}; then
+              exit 0
+            fi
+            echo "::warning::Claude provider-shell trace benchmark attempt $attempt failed."
+          done
+          exit 1
       - run: npm run benchmark:dashboard -- --events 15000 --requests 100 --sessions 16 --p95-ms 100
+
+  native-macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Pin native worker Node
+        run: |
+          node_path="$(command -v node)"
+          "$node_path" --version
+          echo "AWF_NODE_PATH=$node_path" >> "$GITHUB_ENV"
+      - run: xcodebuild -version
+      # Pull requests build without a keychain identity. This is not a signed release artifact.
+      - name: Build unsigned native developer preview
+        run: |
+          xcodebuild \
+            -project macos/AWF.xcodeproj \
+            -scheme AWF \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/awf-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            build
+          test -x \
+            "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook"
+      # UI automation remains a separate interactive/nightly release gate.
+      - name: Run native unit target
+        run: |
+          xcodebuild \
+            -project macos/AWF.xcodeproj \
+            -scheme AWF \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/awf-derived-data" \
+            -only-testing:AWFTests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM= \
+            test
+      - name: Run SIGKILL lifecycle crash recovery
+        run: |
+          awf_harness="$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWFLifecycleCrashHarness"
+          awf_app="$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app"
+          test -x "$awf_harness"
+          awf_bundled="$(find "$awf_app/Contents" -name AWFLifecycleCrashHarness -print -quit)"
+          test -z "$awf_bundled"
+          npm run test:native-crash -- --harness "$awf_harness"
+      - name: Benchmark default native hook path
+        # The product target remains 100 ms p95 on a supported local Mac.
+        # Shared runners showed materially higher multi-process startup variance,
+        # so CI keeps a separate regression budget.
+        run: |
+          npm run benchmark:native-hook -- \
+            --helper "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+            --no-trace \
+            --samples 50 \
+            --warmups 5 \
+            --p95-ms 350
+      - name: Benchmark explicit trace native hook path
+        run: |
+          npm run benchmark:native-hook -- \
+            --helper "$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app/Contents/Helpers/awf-hook" \
+            --samples 50 \
+            --warmups 5 \
+            --p95-ms 350

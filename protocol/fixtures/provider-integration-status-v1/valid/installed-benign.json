@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "kind": "provider_integration_status",
+  "providers": [
+    {
+      "provider": "codex",
+      "state": "installed_unverified",
+      "version": {
+        "major": 0,
+        "minor": 146,
+        "patch": 0
+      },
+      "activity": "not_observed"
+    },
+    {
+      "provider": "claude",
+      "state": "needs_install",
+      "version": {
+        "major": 2,
+        "minor": 1,
+        "patch": 4
+      },
+      "activity": "not_observed"
+    }
+  ]
+}

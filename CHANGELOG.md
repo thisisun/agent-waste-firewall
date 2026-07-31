@@ -8,6 +8,24 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
+- Require an exact provider/root match before either native or portable hook dispatch, require an
+  explicit provider for the public `hook` CLI, and reject unattributed worker input before reading
+  stdin. Debug fail-open diagnostics are now fixed strings and never include exception text.
+- Recognize Claude Code's current top-level installed-plugin array only when it contains the exact
+  canonical AWF marketplace ID. Name-only, conflicting-ID, look-alike-marketplace, unrelated
+  plugin, and ambiguous Codex-array counterexamples remain uninstalled or unknown.
+- Keep the Codex and Claude manifests on their plugin-root shell shims. Each audited manifest now
+  passes its provider explicitly, and the shim accepts it only when the matching provider-root
+  variable resolves to the same plugin root. This handles Codex's dual compatibility variables
+  without misclassifying Claude and prefers a safe fixed per-user `integration-v1/awf-hook`; a
+  missing, unsafe, or mismatched native path preserves the bounded external Node alpha fallback.
+  Once invoked, the helper validates
+  activation and any failure fails open without retrying the same stdin through Node or appending
+  a second JSON response. After startup, both paths exclude
+  inherited `PATH` and Node/loader injection variables from the worker. Provider and initial
+  interpreter/loader startup remain trusted; Codex has the additional inherited `$SHELL -lc`
+  boundary. The launcher emits one fixed, raw-free stderr warning for an unchecked event.
+  Windows provider-hook execution remains unsupported.
 - Add best-effort `LiveEventV1` publication for every supported hook, independent of explicit
   recording.
 - Add a private, concurrent-writer-safe live spool with hard 4,096-event/8 MiB ceilings and a
@@ -15,11 +33,64 @@
 - Scope live session aliases to a fresh per-generation HMAC key and restrict persisted events to a
   closed enum, bounded-number, rule/issue-ID, and alias allowlist.
 - Add local redacted state, 30-day retention, reporting, purging, and JSONL replay.
+- Move session retention out of the hook hot path into a dashboard-owned incremental janitor with
+  a 64-entry/soft-8-ms tick budget, private-storage identity checks, conservative active-lock
+  handling, and hard ceilings for persisted tool events, incidents, and file aliases.
 - Add observe, warn, and high-confidence block modes.
 - Add workspace-scoped live recording with a per-trace HMAC key and strict semantic JSONL schema.
 - Add privacy audit, safe export, and repository-free semantic replay across all three modes.
 - Add a token-protected, loopback-only English-default live dashboard with Korean localization
   and a prompt-contract coach.
+- Add a closed, raw-free `ProviderIntegrationStatusV1` reality gate and
+  `integration status [--json]` CLI. `doctor` now separates `engineReady`, `providerInstalled`,
+  and `monitoringActive`, and the dashboard shows provider installation/activity cards without
+  treating an empty healthy spool as active monitoring.
+- Add the closed, raw-free `ProviderDeliveryVerificationV1` contract and bounded
+  `integration verify <codex|claude> --timeout 60 [--json]` watcher. It accepts only a fresh
+  post-baseline audited prompt event, never changes provider configuration, and is explicitly a
+  delivery witness rather than cryptographic provider attestation.
+- Keep JSON stdout to one final verification record and emit a fixed, raw-free `AWF_READY` line on
+  stderr only after the audited baseline is established.
+- Define delivery `waitedMs` as operator-and-polling-inclusive observation wait and explicitly
+  prohibit reporting it as provider dispatch, outer-shell, or hook latency.
+- Add the closed, raw-free `CodexHookPreflightV1` contract and model-free
+  `integration preflight codex` gate. It sends only app-server initialization and `hooks/list`,
+  pins recognition to the exact provider ID
+  `agent-waste-firewall@agent-waste-firewall`, requires the exact four AWF hooks to be reported
+  with manifest-shaped metadata as enabled and trusted, and discards paths, commands, hashes,
+  plugin IDs, provider diagnostics, stderr, and raw RPC. Custom-marketplace IDs intentionally
+  return `provider_plugin_not_found`. `ready` does not attest installed files, the Codex binary,
+  or later delivery. The isolated Codex acceptance now requires a real model-free `hooks/list`
+  discovery of all four exact installed hooks before direct launcher execution; it accepts exact
+  trusted or untrusted metadata and therefore is registration evidence, not a user-owned
+  `ready` or live-delivery pass.
+- Detect provider state without modifying global configuration. Installation, enablement, hook
+  review, and trust remain user-controlled. Current activity requires a new audited event after
+  dashboard startup and expires after five minutes; retained spool and trace events do not count.
+- Add an isolated `npm run acceptance:codex` gate for temporary marketplace add, plugin
+  install/list, installed-launcher prompt/pre-tool/post-tool/Stop execution, closed-event production,
+  boundary/interior raw-canary scanning, and cleanup. Its separate model-free `hooks/list` step
+  establishes installed-root-bound provider registration evidence. The direct-launcher step does
+  not establish provider delivery, and neither step claims user-owned `/hooks` trust or a live
+  provider-delivery pass.
+- Add an isolated `npm run acceptance:claude` gate for local marketplace add/install,
+  list/details, installed-launcher execution across prompt/pre-tool/post-tool/failure/Stop,
+  closed-event and raw-canary auditing, and owned-root cleanup. Its closed report fixes provider
+  delivery to `not_tested` and never bypasses trust or managed hook policy.
+- Add a repository-root Claude Code marketplace entry and source provenance for the plugin
+  manifest. Document Claude's source-trust/load boundary, read-only `/hooks` view,
+  `/reload-plugins`, and session-only `--plugin-dir` behavior separately from Codex hook-hash
+  trust.
+- Restrict provider probe environments to a closed configuration-discovery allowlist and make the
+  acceptance runner delete only a fresh child it owns beneath the validated system temp tree.
+- Run the shipped CLI and dashboard provider probes concurrently, give each provider one shared
+  three-second version/list budget, hard-kill timed-out default subprocesses, thread only the
+  caller's allowlisted discovery environment, and keep timeout or probe errors inside closed
+  `unknown` states. Dashboard shutdown cancels and kills in-flight default probes.
+- Load and cache allowlisted dashboard images asynchronously on first request, return a bounded
+  raw-free `503` when storage cannot materialize one, and keep status/SSE responsive.
+- Package the repository-local `.agents` marketplace descriptor so a published npm artifact can
+  expose the Codex plugin without an external path.
 - Add a compact magnifying-glass sentinel with allowlisted green, yellow, red, and critical-red
   visual states mirrored in the browser title and favicon.
 - Add high-cost release verification classification and earlier repeat warnings.
@@ -37,8 +108,61 @@
 - Add a reproducible saturated-spool benchmark covering cold audit, warm status, concurrent hook
   publication, rotation, and SSE visibility.
 - Add reproducible hook and dashboard latency gates for macOS and Linux CI.
+- Add a separate provider-shell benchmark that validates the exact checked-in manifests, measures
+  Codex through an isolated `$SHELL -lc` plus the inner shim with its real equal dual-root
+  compatibility environment, exercises Claude's exact exec form, and labels provider process
+  creation and dispatch as excluded. CI gates trace and no-trace paths for both providers.
+- Split portable and native hook benchmarks into default no-trace and explicit-trace scenarios so
+  CI measures the always-on product path without dropping the stricter recording-path regression
+  gate. Shared portable runners retain one failed sample and retry once at the same budget, so a
+  scheduler burst is visible without passing a persistent regression.
 - Reject non-loopback `Host` and cross-origin dashboard requests and compare access tokens with a
   fixed-length constant-time operation.
 - Handle malformed local request targets without crashing, close active SSE connections on
   shutdown, recover streams after trace rotation, and display audited-trace failures as a red
   degraded state.
+- Publish closed `DashboardReadyV1` and `DashboardStatusV1` contracts with JSON Schemas, synthetic
+  conformance fixtures, dependency-free Node validators, and strict Swift decoders.
+- Add an unsigned macOS 13.5+ developer-preview Xcode project with SwiftUI/AppKit menu-bar lifecycle,
+  a non-persistent restricted `WKWebView`, app-owned loopback dashboard supervision, English/Korean
+  localization, and a transparent floating `NSPanel` sentinel.
+- Add a separate hardened-runtime Swift `awf-hook` target and embed it with `CodeSignOnCopy` under
+  `Contents/Helpers`. The helper validates a canonical, path-free activation record, a versioned
+  per-user runtime, the plugin-root worker, and a closed child environment. It streams raw stdin
+  directly, applies a 2.25-second child deadline with process-group cleanup, and preserves the
+  no-retry/no-second-JSON boundary after handoff.
+- Add a closed helper/worker compatibility contract for the native hook path. The helper validates
+  the exact protocol marker before handing off provider stdin, and the single worker process checks
+  fixed protocol/runtime arguments before reading input. Missing, incompatible, or unknown fields
+  fail open without publishing a live event; the portable Node 18+ fallback remains unchanged.
+- Bundle the reviewed `assets`, `bin`, and `src` trees into the developer-preview app while retaining
+  an explicit installed-Node.js requirement for source builds. Add an English-default,
+  Korean-localized integration sheet plus transactional install, upgrade, repair, rollback, and
+  conservative uninstall backed by a closed ownership ledger.
+- Add a test-only Swift lifecycle executable and dependency-free Node crash driver. The CI gate
+  covers 30 isolated install, upgrade, repair, rollback, uninstall, capacity, control, privacy, and
+  residue scenarios with 34 verified post-sync `SIGKILL` exits; neither the app nor npm package
+  ships the harness.
+- Make interrupted owned release removal retryable, prune only digest-matched non-retained
+  ledger-owned releases before capacity is exhausted, finish an uninstall interrupted after ledger
+  removal, and clean recognized stale transactions on repair/rollback while preserving unknown
+  residue. Persist a canonical release-ID-only rollback intent so retrying after publication
+  adopts the completed target rather than toggling activation back.
+- Pin thin arm64/x64 Node.js `v24.18.0` release inputs and add dependency-free archive preparation
+  and app finalization. The finalizer requires hardened runtime, the exact one-key
+  `allow-jit=true` entitlement set, exact version, a fixed V8/JIT readiness probe, complete license,
+  and a post-sign digest before outer-app signing.
+- Keep generated Node binaries out of the source tree and npm package. No Developer ID signature,
+  notarization, distribution package, or public-beta runtime is claimed.
+- Add native unit and UI test targets and an unsigned macOS pull-request build/unit job. UI
+  automation, Developer ID signing, notarization, and clean-machine acceptance remain release
+  gates.
+- Add the transparent green guardian mark as the native app icon, remove a `MenuBarExtra`
+  write-back loop that caused runaway CPU/memory, and launch the worker with a closed environment
+  allowlist. The native worker can discover the Codex executable bundled with the ChatGPT app
+  without widening its environment. Node discovery validates major version 18+ with a bounded
+  direct probe. The minimized native sentinel decodes the closed provider contract and requires
+  recent observed provider activity before it turns green.
+- Remove inherited `PATH` lookup from the native Node locator. Prefer an explicit override, then
+  Volta, a strict 64-entry NVM scan, and fixed standard paths, while retaining the bounded Node 18+
+  version probe.

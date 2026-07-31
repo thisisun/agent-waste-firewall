@@ -265,8 +265,9 @@ shell:
    [`MACOS-ARCHITECTURE.md`](./MACOS-ARCHITECTURE.md).
 
 All five corrective steps and the generation-aware browser dashboard consumer are now implemented.
-The linked validation report carries the current measurements; the values above remain historical
-evidence for why the architecture changed.
+The linked report is the 2026-07-29 milestone snapshot; current measurements are recorded in
+[`VALIDATION-REPORT-2026-07-30.md`](./VALIDATION-REPORT-2026-07-30.md). The values above remain
+historical evidence for why the architecture changed.
 
 ## Go / no-go
 

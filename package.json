@@ -15,6 +15,7 @@
     "agent-waste-firewall": "./bin/agent-waste-firewall.mjs"
   },
   "files": [
+    ".agents/",
     ".claude-plugin/",
     ".codex-plugin/",
     "assets/",
@@ -22,6 +23,8 @@
     "hooks/",
     "fixtures/",
     "protocol/",
+    "runtime/node-runtime-v1.json",
+    "runtime/node-runtime.entitlements",
     "scripts/",
     "src/",
     "docs/",
@@ -34,13 +37,22 @@
     "SECURITY.md"
   ],
   "scripts": {
+    "acceptance:claude": "node scripts/claude-provider-acceptance.mjs",
+    "acceptance:codex": "node scripts/provider-acceptance.mjs",
+    "acceptance:providers": "npm run acceptance:codex && npm run acceptance:claude",
     "benchmark:dashboard": "node scripts/benchmark-dashboard.mjs",
     "benchmark:hook": "node scripts/benchmark-hook.mjs",
+    "benchmark:native-hook": "node scripts/benchmark-native-hook.mjs",
+    "benchmark:provider-shell": "node scripts/benchmark-provider-shell.mjs",
     "benchmark:live-dashboard": "node scripts/benchmark-live-dashboard.mjs",
     "benchmark:live-spool": "node scripts/benchmark-live-spool.mjs",
+    "benchmark:state-retention": "node scripts/benchmark-state-retention.mjs",
+    "prepare:macos-runtime": "node scripts/prepare-macos-runtime.mjs",
+    "finalize:macos-runtime": "node scripts/finalize-macos-runtime.mjs",
     "check": "node scripts/check.mjs",
     "prepublishOnly": "npm run check && npm test",
     "test": "node --test",
+    "test:native-crash": "node test-support/native-integration-crash-safety.mjs",
     "test:coverage": "node --test --experimental-test-coverage"
   },
   "engines": {

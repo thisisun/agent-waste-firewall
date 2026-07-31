@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "connected": true,
+  "source": "trace",
+  "sourceState": "active",
+  "streamHealth": "healthy",
+  "traceHealth": "healthy",
+  "coverage": "complete",
+  "generation": 1,
+  "streamAlias": null,
+  "mode": "observe",
+  "state": "stopped",
+  "traceId": "trace_0123456789abcdef01234567",
+  "traceAlias": "session_0123456789abcdef0123456789abcdef",
+  "metrics": {
+    "events": 1,
+    "incidents": 0,
+    "avoidableCalls": 0,
+    "elapsedMs": 100
+  },
+  "lastSequence": 1,
+  "currentWarning": null,
+  "promptCoach": {
+    "issueIds": []
+  }
+}

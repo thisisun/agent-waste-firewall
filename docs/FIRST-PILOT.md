@@ -31,6 +31,54 @@ Stop when: Stop and report after the same failure repeats twice, or before any d
 remote migration, signing, credential access, upload, push, or submission.
 ```
 
+## Confirm fresh hook delivery
+
+Complete the selected provider's explicit plugin trust flow before the pilot:
+
+- Codex: install and enable AWF, open `/hooks`, review the commands, and trust the exact current
+  hook hash. An upgrade that changes a hook can require another review.
+- Claude Code marketplace install: trust the source at load/install time, run
+  `claude plugin marketplace add thisisun/agent-waste-firewall`, then
+  `claude plugin install agent-waste-firewall@agent-waste-firewall`, and run `/reload-plugins`.
+  Claude's `/hooks` is a read-only inspection view.
+- Claude Code development checkout:
+  `claude --plugin-dir /absolute/path/to/agent-waste-firewall` loads that checkout for one new
+  session only. It is not a global installation and is not expected in the global plugin list.
+
+In a normal terminal, start the read-only watcher:
+
+```bash
+agent-waste-firewall integration preflight codex --workspace . --timeout 3
+agent-waste-firewall integration verify codex --timeout 60
+# or
+agent-waste-firewall integration verify claude --timeout 60 --json
+```
+
+For Codex, require the model-free preflight to return `ready` before any automated live pilot. It
+sends only `initialize`, `initialized`, and `hooks/list`; it never starts a thread or model turn.
+The result contains no paths, commands, hashes, provider errors, or raw RPC. Static readiness is a
+prerequisite, not delivery proof. The matcher accepts only the canonical provider plugin ID
+`agent-waste-firewall@agent-waste-firewall`; a custom-marketplace ID intentionally returns
+`provider_plugin_not_found`. Even `ready` verifies only Codex-reported manifest-shaped metadata
+and trust state, not the installed files, Codex binary, or later delivery. Real model-free
+evidence includes an absent-plugin result in the current user environment and successful
+four-hook discovery in an isolated marketplace install. The isolated gate accepts exact trusted
+or untrusted metadata, so this pilot must still establish a user-owned `ready` result.
+
+For `--json`, wait for
+`AWF_READY provider=<codex|claude> timeoutSeconds=<1..300>` on stderr; stdout remains one final
+closed result.
+
+Then submit a new harmless short prompt in a separate conversation of that provider. Only a fresh
+post-baseline audited prompt event can return `observed`; retained events and tool activity do not
+count. The command never installs, enables, launches, or configures a provider. It is a local
+delivery witness, not cryptographic proof of provider identity. A timeout is inconclusive. If
+nothing arrives, check plugin enablement and reload/restart; also check Codex hook-hash trust or
+Claude Code's `disableAllHooks` and managed `allowManagedHooksOnly` policy.
+
+The reported `waitedMs` includes the operator's response time and polling delay. It is observation
+wait only, not provider dispatch, outer-shell, or hook latency.
+
 ## Run
 
 ```bash

@@ -26,3 +26,24 @@ test("rejects live spool limits that could disable bounded retention", () => {
   assert.equal(config.liveMaxBytes, 8 * 1024 * 1024);
   assert.equal(config.liveMaxAgeMinutes, 24 * 60);
 });
+
+test("bounds session retention to a finite supported period", () => {
+  assert.equal(
+    configFromEnv({
+      AGENT_WASTE_FIREWALL_RETENTION_DAYS: "3650",
+    }).retentionDays,
+    3650,
+  );
+  assert.equal(
+    configFromEnv({
+      AGENT_WASTE_FIREWALL_RETENTION_DAYS: "3651",
+    }).retentionDays,
+    30,
+  );
+  const stateLimits = configFromEnv({
+    AGENT_WASTE_FIREWALL_MAX_TOOL_EVENTS: "513",
+    AGENT_WASTE_FIREWALL_MAX_INCIDENTS: "257",
+  });
+  assert.equal(stateLimits.maxToolEvents, 160);
+  assert.equal(stateLimits.maxIncidents, 100);
+});
