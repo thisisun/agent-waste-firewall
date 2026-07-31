@@ -43,6 +43,20 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B00000000000000000000005"
+               BuildableName = "AWFLifecycleCrashHarness"
+               BlueprintName = "AWFLifecycleCrashHarness"
+               ReferencedContainer = "container:AWF.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "B00000000000000000000002"
                BuildableName = "AWFTests.xctest"
                BlueprintName = "AWFTests"

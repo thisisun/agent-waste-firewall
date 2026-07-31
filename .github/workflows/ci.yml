@@ -178,6 +178,14 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM= \
             test
+      - name: Run SIGKILL lifecycle crash recovery
+        run: |
+          awf_harness="$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWFLifecycleCrashHarness"
+          awf_app="$RUNNER_TEMP/awf-derived-data/Build/Products/Debug/AWF.app"
+          test -x "$awf_harness"
+          awf_bundled="$(find "$awf_app/Contents" -name AWFLifecycleCrashHarness -print -quit)"
+          test -z "$awf_bundled"
+          npm run test:native-crash -- --harness "$awf_harness"
       - name: Benchmark default native hook path
         # The product target remains 100 ms p95 on a supported local Mac.
         # Shared runners showed materially higher multi-process startup variance,

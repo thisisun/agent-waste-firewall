@@ -217,12 +217,18 @@ enum NativeIntegrationMutationResult: String, Equatable, Sendable {
 }
 
 enum NativeIntegrationCheckpoint: String, Equatable, Sendable {
+    case afterStagingComplete
     case afterLedgerPublish
     case afterReleasePublish
     case afterHelperPublish
     case afterActivationPublish
     case afterValidation
+    case afterFinalLedgerPublish
     case afterHelperRemoval
+    case afterActivationRemoval
+    case afterRuntimeRemoval
+    case afterReleaseRemoval
+    case afterLedgerRemoval
 }
 
 final class NativeIntegrationManager: @unchecked Sendable {
@@ -370,6 +376,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
     func repair() throws -> NativeIntegrationMutationResult {
         let prepared = try preparePayload()
         return try withMutationLock {
+            try cleanupKnownTransactions()
             let snapshot = try inspectThrowing()
             if snapshot.condition == .healthy {
                 return .noChange
@@ -384,6 +391,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
         }
         return try withMutationLock {
             try requireInstalledStructure()
+            try cleanupKnownTransactions()
             let activationData = try NativeIntegrationFilesystem
                 .readSecureData(
                     at: layout.activation,
@@ -420,6 +428,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
                     ).utf8
                 )
             )
+            try checkpointHandler(.afterStagingComplete)
             var published:
                 NativeIntegrationFilesystem.PublishedEntry?
             do {
@@ -463,6 +472,18 @@ final class NativeIntegrationManager: @unchecked Sendable {
                 layout.integrationRoot
             )
 
+            guard NativeIntegrationFilesystem.entryExists(layout.ledger) else {
+                guard
+                    !NativeIntegrationFilesystem.entryExists(layout.helper),
+                    !NativeIntegrationFilesystem.entryExists(
+                        layout.activation
+                    )
+                else {
+                    return .uninstalledWithResidue
+                }
+                try cleanupKnownTransactions()
+                return try finishUninstallDirectories(residue: false)
+            }
             let ledger: NativeIntegrationLedger
             do {
                 ledger = try readLedger()
@@ -516,6 +537,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
                         try NativeIntegrationFilesystem.unlinkFileIfPresent(
                             layout.activation
                         )
+                        try checkpointHandler(.afterActivationRemoval)
                     } else {
                         residue = true
                         ownedResidue = true
@@ -531,11 +553,20 @@ final class NativeIntegrationManager: @unchecked Sendable {
                     layout.versions
                 )
                 for release in ledger.releases {
-                    if try !NativeIntegrationFilesystem.removeReleaseIfOwned(
-                        versionsURL: layout.versions,
-                        releaseID: release.releaseId,
-                        expectedSHA256: release.runtimeSHA256
-                    ) {
+                    let removed = try NativeIntegrationFilesystem
+                        .removeReleaseIfOwned(
+                            versionsURL: layout.versions,
+                            releaseID: release.releaseId,
+                            expectedSHA256: release.runtimeSHA256,
+                            afterRuntimeRemoval: {
+                                try self.checkpointHandler(
+                                    .afterRuntimeRemoval
+                                )
+                            }
+                        )
+                    if removed {
+                        try checkpointHandler(.afterReleaseRemoval)
+                    } else {
                         residue = true
                         ownedResidue = true
                     }
@@ -546,28 +577,9 @@ final class NativeIntegrationManager: @unchecked Sendable {
                 try NativeIntegrationFilesystem.unlinkFileIfPresent(
                     layout.ledger
                 )
+                try checkpointHandler(.afterLedgerRemoval)
             }
-
-            if NativeIntegrationFilesystem.entryExists(layout.versions),
-               try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
-                   layout.versions
-               )
-            {
-                residue = true
-            }
-            if NativeIntegrationFilesystem.entryExists(layout.transactions),
-               try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
-                   layout.transactions
-               )
-            {
-                residue = true
-            }
-            if try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
-                layout.integrationRoot
-            ) {
-                residue = true
-            }
-            return residue ? .uninstalledWithResidue : .uninstalled
+            return try finishUninstallDirectories(residue: residue)
         }
     }
 
@@ -816,6 +828,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
             layout.helper
         )
         do {
+            try checkpointHandler(.afterStagingComplete)
             ledgerPublish = try NativeIntegrationFilesystem.publishFile(
                 stagedURL: stagedLedger,
                 installedURL: layout.ledger
@@ -1134,8 +1147,53 @@ final class NativeIntegrationManager: @unchecked Sendable {
             }
             staleReleaseIDs.insert(release.releaseId)
         }
-        let reconciledRecords = ledger.releases.filter {
+        var reconciledRecords = ledger.releases.filter {
             !staleReleaseIDs.contains($0.releaseId)
+        }
+        if reconciledRecords.count >=
+            NativeIntegrationLedger.maximumReleaseCount
+        {
+            var retainedReleaseIDs = Set<String>()
+            if let activeReleaseID,
+               reconciledRecords.contains(where: {
+                   $0.releaseId == activeReleaseID
+               })
+            {
+                retainedReleaseIDs.insert(activeReleaseID)
+            }
+            for release in reconciledRecords.reversed()
+            where retainedReleaseIDs.count <
+                NativeIntegrationLedger.retainedReleaseCount
+            {
+                if validInstalledRuntime(release) {
+                    retainedReleaseIDs.insert(release.releaseId)
+                }
+            }
+
+            var capacityRecords: [NativeIntegrationLedger.Release] = []
+            for release in reconciledRecords {
+                if retainedReleaseIDs.contains(release.releaseId) {
+                    capacityRecords.append(release)
+                    continue
+                }
+                let removed = try NativeIntegrationFilesystem
+                    .removeReleaseIfOwned(
+                        versionsURL: layout.versions,
+                        releaseID: release.releaseId,
+                        expectedSHA256: release.runtimeSHA256,
+                        afterRuntimeRemoval: {
+                            try self.checkpointHandler(
+                                .afterRuntimeRemoval
+                            )
+                        }
+                    )
+                if removed {
+                    try checkpointHandler(.afterReleaseRemoval)
+                } else {
+                    capacityRecords.append(release)
+                }
+            }
+            reconciledRecords = capacityRecords
         }
         guard reconciledRecords != ledger.releases else {
             return ledger
@@ -1205,9 +1263,16 @@ final class NativeIntegrationManager: @unchecked Sendable {
                     .removeReleaseIfOwned(
                         versionsURL: layout.versions,
                         releaseID: release.releaseId,
-                        expectedSHA256: release.runtimeSHA256
+                        expectedSHA256: release.runtimeSHA256,
+                        afterRuntimeRemoval: {
+                            try self.checkpointHandler(
+                                .afterRuntimeRemoval
+                            )
+                        }
                     )
-                if !removed {
+                if removed {
+                    try checkpointHandler(.afterReleaseRemoval)
+                } else {
                     finalRecords.append(release)
                 }
             }
@@ -1228,6 +1293,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
                 stagedURL: staged,
                 installedURL: layout.ledger
             )
+            try checkpointHandler(.afterFinalLedgerPublish)
             if published.kind == .swapped {
                 try NativeIntegrationFilesystem.unlinkFileIfPresent(
                     published.stagedURL
@@ -1235,6 +1301,32 @@ final class NativeIntegrationManager: @unchecked Sendable {
             }
         }
         try cleanupTransaction(transaction)
+    }
+
+    private func finishUninstallDirectories(
+        residue initialResidue: Bool
+    ) throws -> NativeIntegrationMutationResult {
+        var residue = initialResidue
+        if NativeIntegrationFilesystem.entryExists(layout.versions),
+           try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
+               layout.versions
+           )
+        {
+            residue = true
+        }
+        if NativeIntegrationFilesystem.entryExists(layout.transactions),
+           try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
+               layout.transactions
+           )
+        {
+            residue = true
+        }
+        if try !NativeIntegrationFilesystem.removeDirectoryIfEmpty(
+            layout.integrationRoot
+        ) {
+            residue = true
+        }
+        return residue ? .uninstalledWithResidue : .uninstalled
     }
 
     private func replaceLedger(

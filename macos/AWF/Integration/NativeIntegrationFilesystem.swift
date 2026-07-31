@@ -451,7 +451,8 @@ enum NativeIntegrationFilesystem {
     static func removeReleaseIfOwned(
         versionsURL: URL,
         releaseID: String,
-        expectedSHA256: String
+        expectedSHA256: String,
+        afterRuntimeRemoval: () throws -> Void = {}
     ) throws -> Bool {
         try requireSimpleName(releaseID)
         let versionsDescriptor = try openDirectory(versionsURL)
@@ -484,7 +485,10 @@ enum NativeIntegrationFilesystem {
         }
         if runtimeDescriptor < 0 {
             if errno == ENOENT {
-                return false
+                return try removeReleaseDirectoryIfEmpty(
+                    versionsDescriptor: versionsDescriptor,
+                    releaseID: releaseID
+                )
             }
             throw NativeIntegrationFailure.unsafeLayout
         }
@@ -512,21 +516,12 @@ enum NativeIntegrationFilesystem {
             throw NativeIntegrationFailure.unsafeLayout
         }
         try sync(descriptor: releaseDescriptor)
+        try afterRuntimeRemoval()
 
-        let removeResult = releaseID.withCString {
-            unlinkat(versionsDescriptor, $0, AT_REMOVEDIR)
-        }
-        if removeResult == 0 {
-            try sync(descriptor: versionsDescriptor)
-            return true
-        }
-        if errno == ENOTEMPTY || errno == EEXIST {
-            return false
-        }
-        if errno == ENOENT {
-            return true
-        }
-        throw NativeIntegrationFailure.unsafeLayout
+        return try removeReleaseDirectoryIfEmpty(
+            versionsDescriptor: versionsDescriptor,
+            releaseID: releaseID
+        )
     }
 
     static func removeDirectoryIfEmpty(_ url: URL) throws -> Bool {
@@ -629,6 +624,26 @@ enum NativeIntegrationFilesystem {
             throw NativeIntegrationFailure.unsafeLayout
         }
         return descriptor
+    }
+
+    private static func removeReleaseDirectoryIfEmpty(
+        versionsDescriptor: Int32,
+        releaseID: String
+    ) throws -> Bool {
+        let removeResult = releaseID.withCString {
+            unlinkat(versionsDescriptor, $0, AT_REMOVEDIR)
+        }
+        if removeResult == 0 {
+            try sync(descriptor: versionsDescriptor)
+            return true
+        }
+        if errno == ENOTEMPTY || errno == EEXIST {
+            return false
+        }
+        if errno == ENOENT {
+            return true
+        }
+        throw NativeIntegrationFailure.unsafeLayout
     }
 
     private static func requireSimpleName(_ value: String) throws {

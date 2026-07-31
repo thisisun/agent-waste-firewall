@@ -25,6 +25,7 @@ dispatch and reported zero automated usage.
 | Dashboard Codex activity | Pass: `active` / `observed`, version `0.146.0` |
 | Dashboard Claude activity | Pass: `active` / `observed`, final version `2.1.220` |
 | Claude model completion | Not claimed: external account authentication stopped the request after hook dispatch |
+| Native lifecycle process-crash recovery | Pass: 30 isolated scenarios, 34 verified `SIGKILL` exits, all closed checks true |
 
 The two Codex acceptance requests incurred the following provider-reported usage:
 
@@ -51,7 +52,8 @@ and native launchers both pass exact protocol arguments; zero, unknown, stale, o
 arguments fail open with a fixed provider-visible warning before stdin is read, and no live event
 is published. The native path still starts the Node worker only once per event.
 
-The current candidate passed `npm run check`, all 357 JavaScript tests, and all 94 native unit
+The current candidate passed `npm run check` across 74 JavaScript and 61 JSON files, all 357
+JavaScript tests, and all 101 native unit
 tests. A real Debug helper plus an explicit Node.js `v24.18.0` runtime then processed all 55
 expected semantic events in each 5-warmup/50-sample run:
 
@@ -80,6 +82,29 @@ use a fixed string instead of exception text. Current Claude top-level plugin ar
 installed collection only when the entry carries the exact canonical marketplace ID; name-only,
 conflicting-ID, look-alike-marketplace, unrelated-plugin, and ambiguous Codex-array cases are
 covered by productive counterexamples.
+
+## Native lifecycle process-crash follow-up
+
+The candidate adds a standalone test-only Swift executable that compiles the production lifecycle
+manager and blocks only after a closed post-sync checkpoint marker. A dependency-free Node parent
+validates that exact marker, sends `SIGKILL`, verifies the signal exit, and retries from a new
+process. The complete local run passed 30 isolated scenarios and 34 killed child processes:
+
+- fresh install, upgrade, and repair at all six staging/publication/validation checkpoints;
+- final-ledger publication, rollback at three checkpoints, and uninstall at five removal
+  checkpoints;
+- six consecutive release-publication crashes beyond the four-record transient ledger capacity,
+  followed by a healthy bounded recovery;
+- invalid checkpoint rejection before product-root mutation; and
+- known transaction cleanup, unknown transaction preservation, and binary/hidden-file raw-canary
+  exclusion throughout the product tree.
+
+Every final check was true, including temporary-root cleanup. `npm pack --dry-run --json` contained
+neither `macos/` nor `test-support/`, and the built `AWF.app` contained no crash harness. The test
+uses synthetic executable payloads that satisfy the manager's bounded runtime probes; it validates
+lifecycle publication and recovery, not a signed Node release payload. Because the kill is sent
+after the checkpoint's preceding filesystem synchronization, this is post-sync process-crash
+evidence. It is not proof against storage-controller reordering, VM reset, or sudden power loss.
 
 ## Acceptance sequence
 
@@ -132,8 +157,9 @@ the AWF data root, and `trace list` returned no explicit trace.
   It is local semantic evidence, not cryptographic provider identity or a model-completion claim.
 - The dashboard result covers its loopback SSE activity projection and integration endpoint. It
   does not close native UI automation.
-- The run did not verify Claude model completion, clean-machine setup, upgrade or rollback,
-  release signing, notarization, or broader supported-Mac behavior.
+- The run did not verify Claude model completion, clean-machine provider setup or user-owned
+  lifecycle operations, signed release payload recovery, VM/storage power loss, release signing,
+  notarization, or broader supported-Mac behavior.
 
 The operator procedure and safety boundary are documented in
 [First live pilot](FIRST-PILOT.md#confirm-fresh-hook-delivery). The closed preflight and delivery

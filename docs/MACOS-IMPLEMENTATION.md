@@ -100,7 +100,12 @@ plugin/CLI package and intentionally excludes `macos/`.
   install, upgrade, repair, rollback, and conservative uninstall. It uses a private canonical
   ownership ledger, same-volume staging, process and `flock` locking, descriptor-relative atomic
   publication, side-by-side releases, three retained verified releases plus one bounded transient
-  slot, crash reconciliation, and digest-matched deletion.
+  slot, crash reconciliation, capacity-safe digest-matched owned-release pruning, and retryable
+  owned deletion after interruption.
+- A standalone test-only `AWFLifecycleCrashHarness` exposes closed post-sync checkpoints without
+  entering the app bundle. Its dependency-free Node driver verifies 30 isolated lifecycle
+  scenarios with 34 real `SIGKILL` exits, bounded retry convergence, hidden-tree raw-canary
+  exclusion, and conservative preservation of unknown residue.
 - `runtime/node-runtime-v1.json` pins thin Node.js `v24.18.0` arm64/x64 archives and their
   executable and license digests. The dependency-free preparation step rejects unapproved archive
   paths and extracts only `node` and the complete `LICENSE`. The release finalizer verifies the
@@ -154,8 +159,8 @@ or sandbox claim should be inferred from an unsigned Debug build.
 
 ## Source build and verification status
 
-The 2026-07-30 current baseline passed `npm run check` across 72 JavaScript and 55 JSON files,
-`npm test` with 340/340 tests, and the complete coverage command with 94.58% line,
+The current 2026-08-01 candidate passed `npm run check` across 74 JavaScript and 61 JSON files,
+`npm test` with 357/357 tests, and the earlier complete coverage command with 94.58% line,
 81.93% branch, and 95.21% function coverage. The earlier controlled inner-path run on the
 inspected Apple-silicon Mac measured three independent 50-sample generations after five warmups;
 the current provider-manifest boundary rerun is recorded separately in the dated validation
@@ -211,7 +216,7 @@ xcodebuild \
 This command verifies source compilation, the embedded executable
 `Contents/Helpers/awf-hook`, guardian-mark app icon, Info.plist processing, localization, and
 folder-resource assembly. It does not create a signed release. The local `AWFTests` target passed
-92/92 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
+101/101 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
 bounded Finder-style NVM discovery, a real bundled-worker launch, exact native provider and
 activation contracts, raw stdin streaming, filesystem identity revalidation, timeout/signal
 process-group cleanup, closed status/provider fetches, exact protocol decoding, navigation
@@ -221,7 +226,8 @@ XCTest support libraries are built for macOS 14 while the targets retain a 13.5 
 minimum-version runtime acceptance still requires a macOS 13.5 host.
 
 The configured GitHub jobs cover the Node matrix, dashboard benchmarks, unsigned native
-build/unit target, and a real native hook-path benchmark. The native CI benchmark uses a 350 ms
+build/unit target, the test-only 30-scenario/34-`SIGKILL` lifecycle gate, and a real native
+hook-path benchmark. The native CI benchmark uses a 350 ms
 shared-runner regression budget while the product target remains 100 ms p95; only the inspected
 Apple-silicon local inner paths have established the latter so far. The UI target
 compiles. An isolated local app launch connected the English/light dashboard and exposed the native

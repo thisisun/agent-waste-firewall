@@ -205,8 +205,10 @@ final class NativeIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(result.stdout, input)
         XCTAssertEqual(result.stderr, "")
         XCTAssertFalse(
-            try persistedContents(in: productRoot)
-                .contains("STREAM-ONLY-CANARY")
+            try persistedDataContains(
+                Data("STREAM-ONLY-CANARY".utf8),
+                in: productRoot
+            )
         )
     }
 
@@ -530,6 +532,90 @@ final class NativeIntegrationManagerTests: XCTestCase {
         )
     }
 
+    func testLedgerCapacityPrunesOldestOwnedReleaseBeforeUpgrade()
+        throws
+    {
+        let first = makeManager(
+            payload: try makePayload(label: "capacity-first")
+        )
+        XCTAssertEqual(try first.install(), .installed)
+        XCTAssertEqual(
+            try makeManager(
+                payload: try makePayload(label: "capacity-second")
+            ).install(),
+            .upgraded
+        )
+        XCTAssertEqual(
+            try makeManager(
+                payload: try makePayload(label: "capacity-third")
+            ).install(),
+            .upgraded
+        )
+        let ledger = try readLedger()
+        let oldestReleaseID = ledger.releases[0].releaseId
+        _ = try appendOwnedCrashRelease(to: ledger)
+
+        let recovery = makeManager(
+            payload: try makePayload(label: "capacity-recovery")
+        )
+        XCTAssertEqual(try recovery.install(), .upgraded)
+
+        let recovered = try readLedger()
+        XCTAssertEqual(
+            recovered.releases.count,
+            NativeIntegrationLedger.retainedReleaseCount
+        )
+        XCTAssertEqual(recovery.inspect().condition, .healthy)
+        XCTAssertTrue(recovery.inspect().canRollback)
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: releaseURL(oldestReleaseID).path
+            )
+        )
+    }
+
+    func testCapacityPruningPreservesUnknownReleaseResidue()
+        throws
+    {
+        let first = makeManager(
+            payload: try makePayload(label: "protected-first")
+        )
+        XCTAssertEqual(try first.install(), .installed)
+        XCTAssertEqual(
+            try makeManager(
+                payload: try makePayload(label: "protected-second")
+            ).install(),
+            .upgraded
+        )
+        XCTAssertEqual(
+            try makeManager(
+                payload: try makePayload(label: "protected-third")
+            ).install(),
+            .upgraded
+        )
+        let ledger = try readLedger()
+        let oldestReleaseID = ledger.releases[0].releaseId
+        let unknown = releaseURL(oldestReleaseID)
+            .appendingPathComponent("unknown-user-file")
+        try Data("preserve\n".utf8).write(to: unknown)
+        _ = try appendOwnedCrashRelease(to: ledger)
+
+        let recovery = makeManager(
+            payload: try makePayload(label: "protected-recovery")
+        )
+        XCTAssertThrowsError(try recovery.install()) { error in
+            XCTAssertEqual(
+                error as? NativeIntegrationFailure,
+                .unsafeLayout
+            )
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unknown.path))
+        XCTAssertEqual(
+            makeManager(payload: nil).inspect().condition,
+            .healthy
+        )
+    }
+
     func testEmptyReconciliationKeepsLedgerUntilTransactionRollback()
         throws
     {
@@ -736,6 +822,125 @@ final class NativeIntegrationManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: ledgerURL.path))
     }
 
+    func testUninstallRetryRemovesAnEmptyHalfDeletedRelease()
+        throws
+    {
+        let payload = try makePayload(label: "half-delete")
+        let manager = makeManager(payload: payload)
+        XCTAssertEqual(try manager.install(), .installed)
+        let releaseID = try XCTUnwrap(manager.inspect().activeReleaseID)
+        try FileManager.default.removeItem(at: runtimeURL(releaseID))
+
+        XCTAssertEqual(try manager.uninstall(), .uninstalled)
+        XCTAssertEqual(manager.inspect(), .notInstalled)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: integrationRoot.path)
+        )
+    }
+
+    func testUninstallHalfDeletePreservesUnknownResidue()
+        throws
+    {
+        let payload = try makePayload(label: "half-delete-residue")
+        let manager = makeManager(payload: payload)
+        XCTAssertEqual(try manager.install(), .installed)
+        let releaseID = try XCTUnwrap(manager.inspect().activeReleaseID)
+        try FileManager.default.removeItem(at: runtimeURL(releaseID))
+        let unknown = releaseURL(releaseID)
+            .appendingPathComponent("unknown-user-file")
+        try Data("preserve\n".utf8).write(to: unknown)
+
+        XCTAssertEqual(
+            try manager.uninstall(),
+            .uninstalledWithResidue
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unknown.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ledgerURL.path))
+    }
+
+    func testUninstallRetryFinishesAfterLedgerRemoval()
+        throws
+    {
+        let payload = try makePayload(label: "ledger-tail")
+        let manager = makeManager(payload: payload)
+        XCTAssertEqual(try manager.install(), .installed)
+        let interrupted = makeManager(
+            payload: payload,
+            checkpointHandler: { checkpoint in
+                if checkpoint == .afterLedgerRemoval {
+                    throw NativeIntegrationFailure.injectedFailure
+                }
+            }
+        )
+        XCTAssertThrowsError(try interrupted.uninstall()) { error in
+            XCTAssertEqual(
+                error as? NativeIntegrationFailure,
+                .injectedFailure
+            )
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ledgerURL.path))
+
+        XCTAssertEqual(try manager.uninstall(), .uninstalled)
+        XCTAssertEqual(manager.inspect(), .notInstalled)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: integrationRoot.path)
+        )
+    }
+
+    func testRollbackCleansARecognizedInterruptedTransaction()
+        throws
+    {
+        let first = makeManager(
+            payload: try makePayload(label: "rollback-clean-first")
+        )
+        XCTAssertEqual(try first.install(), .installed)
+        let second = makeManager(
+            payload: try makePayload(label: "rollback-clean-second")
+        )
+        XCTAssertEqual(try second.install(), .upgraded)
+        let stale = transactionsURL.appendingPathComponent(
+            "txn_00000000000000000000000000000000",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: stale,
+            withIntermediateDirectories: false
+        )
+        try setMode(0o700, at: stale)
+        let stagedActivation = stale.appendingPathComponent("activation.new")
+        try Data("staged\n".utf8).write(to: stagedActivation)
+        try setMode(0o600, at: stagedActivation)
+
+        XCTAssertEqual(try second.rollback(), .rolledBack)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertEqual(second.inspect().condition, .healthy)
+    }
+
+    func testHealthyRepairCleansARecognizedInterruptedTransaction()
+        throws
+    {
+        let manager = makeManager(
+            payload: try makePayload(label: "repair-clean")
+        )
+        XCTAssertEqual(try manager.install(), .installed)
+        let stale = transactionsURL.appendingPathComponent(
+            "txn_00000000000000000000000000000000",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: stale,
+            withIntermediateDirectories: false
+        )
+        try setMode(0o700, at: stale)
+        let stagedActivation = stale.appendingPathComponent("activation.new")
+        try Data("staged\n".utf8).write(to: stagedActivation)
+        try setMode(0o600, at: stagedActivation)
+
+        XCTAssertEqual(try manager.repair(), .noChange)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertEqual(manager.inspect().condition, .healthy)
+    }
+
     func testAdjacentRawCanaryIsNeverCopiedIntoInstallTree() throws {
         let payload = try makePayload(label: "privacy")
         let canary = payload.helperURL.deletingLastPathComponent()
@@ -747,8 +952,10 @@ final class NativeIntegrationManagerTests: XCTestCase {
             .installed
         )
         XCTAssertFalse(
-            try persistedContents(in: productRoot)
-                .contains("RAW-INSTALL-CANARY-b11f7606")
+            try persistedDataContains(
+                Data("RAW-INSTALL-CANARY-b11f7606".utf8),
+                in: productRoot
+            )
         )
     }
 
@@ -776,6 +983,13 @@ final class NativeIntegrationManagerTests: XCTestCase {
     private var versionsURL: URL {
         integrationRoot.appendingPathComponent(
             "versions",
+            isDirectory: true
+        )
+    }
+
+    private var transactionsURL: URL {
+        integrationRoot.appendingPathComponent(
+            ".transactions",
             isDirectory: true
         )
     }
@@ -858,6 +1072,37 @@ final class NativeIntegrationManagerTests: XCTestCase {
         )
     }
 
+    private func appendOwnedCrashRelease(
+        to ledger: NativeIntegrationLedger
+    ) throws -> NativeIntegrationLedger {
+        let releaseID = "rel_ffffffffffffffffffffffffffffffff"
+        let source = try XCTUnwrap(ledger.releases.first)
+        let destination = releaseURL(releaseID)
+        try FileManager.default.createDirectory(
+            at: destination,
+            withIntermediateDirectories: false
+        )
+        try setMode(0o700, at: destination)
+        try FileManager.default.copyItem(
+            at: runtimeURL(source.releaseId),
+            to: runtimeURL(releaseID)
+        )
+        try setMode(0o700, at: runtimeURL(releaseID))
+        let saturated = try NativeIntegrationLedger(
+            helperSHA256: ledger.helperSHA256,
+            releases: ledger.releases + [
+                NativeIntegrationLedger.Release(
+                    releaseId: releaseID,
+                    runtimeSHA256: source.runtimeSHA256,
+                    workerProtocol: source.workerProtocol
+                ),
+            ]
+        )
+        try saturated.canonicalData.write(to: ledgerURL, options: .atomic)
+        try setMode(0o600, at: ledgerURL)
+        return saturated
+    }
+
     private func bundledHelper() throws -> URL {
         let helper = Bundle.main.bundleURL
             .appendingPathComponent("Contents", isDirectory: true)
@@ -927,30 +1172,30 @@ final class NativeIntegrationManagerTests: XCTestCase {
         )
     }
 
-    private func persistedContents(in directory: URL) throws -> String {
+    private func persistedDataContains(
+        _ needle: Data,
+        in directory: URL
+    ) throws -> Bool {
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else {
-            return ""
+            return false
         }
-        var contents = ""
         for case let file as URL in enumerator {
             let values = try file.resourceValues(
                 forKeys: [.isRegularFileKey]
             )
-            guard
-                values.isRegularFile == true,
-                file.lastPathComponent != "awf-hook",
-                file.lastPathComponent != "awf-node"
-            else {
+            guard values.isRegularFile == true else {
                 continue
             }
-            if let source = try? String(contentsOf: file, encoding: .utf8) {
-                contents += source
+            if let data = try? Data(contentsOf: file),
+               data.range(of: needle) != nil
+            {
+                return true
             }
         }
-        return contents
+        return false
     }
 }

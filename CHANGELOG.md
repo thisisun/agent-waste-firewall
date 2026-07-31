@@ -139,6 +139,14 @@
   an explicit installed-Node.js requirement for source builds. Add an English-default,
   Korean-localized integration sheet plus transactional install, upgrade, repair, rollback, and
   conservative uninstall backed by a closed ownership ledger.
+- Add a test-only Swift lifecycle executable and dependency-free Node crash driver. The CI gate
+  covers 30 isolated install, upgrade, repair, rollback, uninstall, capacity, control, privacy, and
+  residue scenarios with 34 verified post-sync `SIGKILL` exits; neither the app nor npm package
+  ships the harness.
+- Make interrupted owned release removal retryable, prune only digest-matched non-retained
+  ledger-owned releases before capacity is exhausted, finish an uninstall interrupted after ledger
+  removal, and clean recognized stale transactions on repair/rollback while preserving unknown
+  residue.
 - Pin thin arm64/x64 Node.js `v24.18.0` release inputs and add dependency-free archive preparation
   and app finalization. The finalizer requires hardened runtime, the exact one-key
   `allow-jit=true` entitlement set, exact version, a fixed V8/JIT readiness probe, complete license,

@@ -52,6 +52,7 @@
     "check": "node scripts/check.mjs",
     "prepublishOnly": "npm run check && npm test",
     "test": "node --test",
+    "test:native-crash": "node test-support/native-integration-crash-safety.mjs",
     "test:coverage": "node --test --experimental-test-coverage"
   },
   "engines": {

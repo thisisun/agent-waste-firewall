@@ -30,7 +30,10 @@ Node.js 18 이상을 사용합니다.
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
 사용자 소유 Codex와 Claude Code의 실시간 훅 전달·대시보드 현재 활동은 검증 Mac에서
 통과했습니다. Claude 모델 API 요청은 외부 계정 인증 단계에서 종료되어 사용량은 0이었고,
-업그레이드·제거 검증은 아직 남아 있습니다.
+사용자 계정의 clean-machine 업그레이드·제거 검증은 아직 남아 있습니다. 별도의 테스트 전용
+프로세스 게이트는 설치·업그레이드·복구·rollback·제거 30개 시나리오에서 동기화 이후
+체크포인트의 자식 프로세스를 34회 실제 `SIGKILL`한 뒤 제한된 복구와 원문 비저장을
+확인했습니다. 이는 프로세스 crash 근거이며 갑작스러운 전원 차단을 증명하지는 않습니다.
 provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출하고 끝에 고정된
 `codex` 또는 `claude` 인자를 전달합니다. macOS shim은 그 인자와 해당 provider root가
 자신의 plugin root에 정확히 일치할 때만 안전한 고정 사용자 경로
@@ -433,8 +436,9 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
   Developer ID 신원과 공증은 여전히 릴리스 gate입니다.
 - x64 입력은 고정됐지만 Intel Mac 실행 검증은 아직 없습니다. 네이티브 UI 자동화,
   최소 지원 macOS 실행, Developer ID 서명, 공증, Gatekeeper, clean-machine 검증도
-  완료되지 않았습니다. 원문 없는 고정 helper/worker protocol 호환성 검사는 구현됐지만,
-  공개 베타 전에는 실제 프로세스 강제 종료 기반 crash 복구 테스트를 추가해야 합니다.
+  완료되지 않았습니다. 원문 없는 고정 helper/worker protocol 호환성과 동기화 이후 실제
+  프로세스 강제 종료 복구 gate는 구현됐습니다. 다만 갑작스러운 전원 차단 내구성을
+  주장하려면 VM·저장장치 fault injection이 더 필요합니다.
   Windows provider 훅 실행은 현재 지원하지 않으며 배포된 훅 경로는 macOS/POSIX
   우선입니다.
 

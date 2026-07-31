@@ -11,7 +11,10 @@ Claude Code.
 > SwiftUI/AppKit menu-bar shell, local `WKWebView`, transparent floating sentinel, and a
 > hardened-runtime Swift hook helper embedded at `Contents/Helpers/awf-hook`. A native
 > integration manager now validates, installs, upgrades, repairs, rolls back, and conservatively
-> uninstalls an app-sealed helper/runtime payload. The repository pins Node.js `v24.18.0` for
+> uninstalls an app-sealed helper/runtime payload. A test-only subprocess gate now covers 30
+> lifecycle scenarios by delivering 34 verified `SIGKILL`s at post-sync publication/removal
+> checkpoints, then requiring bounded recovery without raw-data persistence. This is process-crash
+> evidence, not a sudden-power-loss claim. The repository pins Node.js `v24.18.0` for
 > architecture-specific release assembly and verifies its archive, executable, license, nested
 > signature, exact version, and post-sign digest. The checked-in source build intentionally
 > contains no generated Node binary, so installation stays disabled until that release payload is
@@ -96,7 +99,9 @@ AWF is not another token dashboard. It answers three earlier questions:
   poll—and exposes closed status/result enums without displaying raw paths or underlying errors.
 - Uses a private ownership ledger, same-volume staging, process and cross-process locks,
   descriptor-relative atomic publication, digest validation, side-by-side releases, bounded
-  rollback retention, crash reconciliation, and residue-preserving uninstall.
+  rollback retention, post-sync `SIGKILL` recovery, bounded ledger-owned release pruning, and
+  residue-preserving uninstall. The crash executable is a test-only product and is not embedded in
+  the app or published npm package.
 - Validates the dashboard readiness line and status response against exact closed Swift contracts,
   refuses redirects and non-exact loopback navigation, and keeps the Node detector independent of
   the app lifecycle.
@@ -574,8 +579,8 @@ See [core architecture](docs/ARCHITECTURE.md),
 - Hook coverage is a useful guardrail, not a complete security boundary.
 - Provider detection is read-only evidence. Installation or enablement alone does not prove hook
   delivery. The dashboard requires fresh post-start audited evidence. User-owned Codex
-  install/trust/live-delivery and dashboard activity passed on the validation Mac; Claude Code and
-  clean-machine acceptance remain pending.
+  and Claude Code install/live-delivery and dashboard activity passed on the validation Mac;
+  clean-machine acceptance remains pending.
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
@@ -609,7 +614,8 @@ See [core architecture](docs/ARCHITECTURE.md),
 - The pinned x64 input has not yet passed execution on an Intel Mac. Interactive native UI
   automation, minimum-macOS runtime testing, Developer ID signing, notarization, Gatekeeper, and
   clean-machine acceptance remain unverified. The fixed raw-free helper/worker compatibility
-  contract is implemented; a true process-kill crash harness is still required before public beta.
+  contract and post-sync process-kill lifecycle gate are implemented. VM/storage fault injection
+  is still required before making a sudden-power-loss durability claim.
 - Windows provider-hook execution is currently unsupported; the shipped hook launch path is
   macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
@@ -623,8 +629,8 @@ See [core architecture](docs/ARCHITECTURE.md),
    prompts.
 4. Assemble the pinned per-architecture runtime, run the release sealing pipeline, and
    sign/notarize the [macOS shell](docs/MACOS-ARCHITECTURE.md).
-5. Add real process-kill recovery tests, clean-machine install/upgrade/rollback/uninstall
-   acceptance, and explicit provider setup.
+5. Run clean-machine install/upgrade/rollback/uninstall acceptance, VM/storage power-loss fault
+   injection, and explicit provider setup.
 
 ## License
 

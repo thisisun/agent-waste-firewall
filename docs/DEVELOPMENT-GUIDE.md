@@ -557,8 +557,13 @@ Implemented release inputs and lifecycle:
   through an atomic replacement;
 - the native manager validates the entire payload before destination mutation, publishes
   side-by-side releases and canonical activation atomically, retains verified rollback candidates,
-  reconciles definitely missing non-active crash records, and removes only digest-matched
-  ledger-owned entries;
+  reconciles definitely missing non-active crash records, prunes only digest-matched non-retained
+  ledger-owned releases before the bounded ledger fills, and makes half-completed owned removals
+  retryable;
+- `AWFLifecycleCrashHarness` is a test-only executable. The Node driver sends real `SIGKILL`s only
+  after a closed checkpoint marker, retries the lifecycle operation, scans hidden files and
+  binaries for raw canaries, requires known transactions to converge, and preserves unknown
+  transaction residue. The target is never embedded in `AWF.app` or the npm package;
 - the integration sheet shows closed English/Korean state, keeps raw errors and real paths out of
   presentation, and requires inline confirmation for every mutation.
 
@@ -566,7 +571,8 @@ Public beta work still required:
 
 - Developer ID-sign and notarize the complete per-architecture chain and exercise the documented
   release pipeline on clean supported Macs;
-- add true subprocess `SIGKILL` checkpoints and stricter power-loss/TOCTOU durability tests;
+- add VM/storage power-loss and stricter TOCTOU durability tests beyond the completed post-sync
+  subprocess `SIGKILL` gate;
 - repeat both user-owned provider delivery gates on a clean machine; and
   prove upgrade, rollback, and uninstall without silently changing either provider's trust.
 
@@ -648,6 +654,22 @@ Cover:
 - VoiceOver labels and keyboard navigation;
 - integration repair flow;
 - local data purge confirmation.
+
+### Native lifecycle crash gate
+
+The shared `AWF` test action builds the standalone `AWFLifecycleCrashHarness`, but normal run,
+profile, analyze, and archive actions do not. CI first proves that the executable is absent from
+`AWF.app`, then runs:
+
+```bash
+npm run test:native-crash -- --harness /absolute/path/to/AWFLifecycleCrashHarness
+```
+
+The gate covers fresh install, upgrade, repair, rollback, uninstall, final-ledger publication,
+repeated release-publication crashes at ledger capacity, invalid controls before mutation, known
+transaction cleanup, unknown-residue preservation, and a hidden-tree binary canary scan. A pass
+means one bounded retry converged after each emitted post-sync checkpoint. It does not simulate
+storage-controller reordering or sudden power loss.
 
 ### Failure and performance tests
 
@@ -860,6 +882,8 @@ dashboard projection, fixture-driven publication tests, and closed provider real
 implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates,
 bounded delivery witness, and reversible local integration manager are also implemented. Both
 providers now have machine-specific user-owned live-delivery/dashboard passes. The next
-integration work is a true subprocess `SIGKILL` crash-safety harness, Developer ID release
-assembly, and clean-machine lifecycle testing. It must preserve each provider's trust model and
-must not infer successful monitoring from installation or retained historical events.
+integration work is Developer ID release assembly, clean-machine lifecycle testing, and VM/storage
+power-loss fault injection beyond the completed subprocess `SIGKILL` gate. Explicit `TraceStore`
+append/metadata crash consistency is a separate follow-up before treating recorded traces as
+power-loss durable. This work must preserve each provider's trust model and must not infer
+successful monitoring from installation or retained historical events.

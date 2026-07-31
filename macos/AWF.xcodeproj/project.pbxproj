@@ -47,6 +47,11 @@
 		E00000000000000000000026 /* NativeIntegrationPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000027 /* NativeIntegrationPresentation.swift */; };
 		E00000000000000000000027 /* IntegrationManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000028 /* IntegrationManagerView.swift */; };
 		E00000000000000000000028 /* NativeIntegrationPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000029 /* NativeIntegrationPresentationTests.swift */; };
+		E00000000000000000000029 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000002A /* main.swift */; };
+		E0000000000000000000002A /* RuntimeLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000008 /* RuntimeLocator.swift */; };
+		E0000000000000000000002B /* NativeHookLauncherCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0000000000000000000001F /* NativeHookLauncherCore.swift */; };
+		E0000000000000000000002C /* NativeIntegrationFilesystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000023 /* NativeIntegrationFilesystem.swift */; };
+		E0000000000000000000002D /* NativeIntegrationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D00000000000000000000024 /* NativeIntegrationManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -92,6 +97,7 @@
 		C00000000000000000000002 /* AWFTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000003 /* AWFUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AWFUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C00000000000000000000004 /* awf-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "awf-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000005 /* AWFLifecycleCrashHarness */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AWFLifecycleCrashHarness; sourceTree = BUILT_PRODUCTS_DIR; };
 		D00000000000000000000001 /* AWFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AWFApp.swift; sourceTree = "<group>"; };
 		D00000000000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		D00000000000000000000003 /* DashboardContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardContainerView.swift; sourceTree = "<group>"; };
@@ -132,6 +138,7 @@
 		D00000000000000000000027 /* NativeIntegrationPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationPresentation.swift; sourceTree = "<group>"; };
 		D00000000000000000000028 /* IntegrationManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationManagerView.swift; sourceTree = "<group>"; };
 		D00000000000000000000029 /* NativeIntegrationPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeIntegrationPresentationTests.swift; sourceTree = "<group>"; };
+		D0000000000000000000002A /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +170,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F0000000000000000000000D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -171,6 +185,7 @@
 			children = (
 				A00000000000000000000004 /* AWF */,
 				A00000000000000000000010 /* AWFHookLauncher */,
+				A00000000000000000000011 /* AWFLifecycleCrashHarness */,
 				A0000000000000000000000C /* AWFTests */,
 				A0000000000000000000000D /* AWFUITests */,
 				A0000000000000000000000E /* Bundled Worker */,
@@ -183,6 +198,7 @@
 			children = (
 				C00000000000000000000001 /* AWF.app */,
 				C00000000000000000000004 /* awf-hook */,
+				C00000000000000000000005 /* AWFLifecycleCrashHarness */,
 				C00000000000000000000002 /* AWFTests.xctest */,
 				C00000000000000000000003 /* AWFUITests.xctest */,
 			);
@@ -327,6 +343,14 @@
 			path = AWFHookLauncher;
 			sourceTree = "<group>";
 		};
+		A00000000000000000000011 /* AWFLifecycleCrashHarness */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000002A /* main.swift */,
+			);
+			path = AWFLifecycleCrashHarness;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -401,6 +425,22 @@
 			productReference = C00000000000000000000004 /* awf-hook */;
 			productType = "com.apple.product-type.tool";
 		};
+		B00000000000000000000005 /* AWFLifecycleCrashHarness */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = K00000000000000000000006 /* Build configuration list for PBXNativeTarget "AWFLifecycleCrashHarness" */;
+			buildPhases = (
+				F0000000000000000000000E /* Sources */,
+				F0000000000000000000000D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AWFLifecycleCrashHarness;
+			productName = AWFLifecycleCrashHarness;
+			productReference = C00000000000000000000005 /* AWFLifecycleCrashHarness */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -425,6 +465,9 @@
 					B00000000000000000000004 = {
 						CreatedOnToolsVersion = 26.6;
 					};
+					B00000000000000000000005 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = K00000000000000000000001 /* Build configuration list for PBXProject "AWF" */;
@@ -443,6 +486,7 @@
 			targets = (
 				B00000000000000000000001 /* AWF */,
 				B00000000000000000000004 /* awf-hook */,
+				B00000000000000000000005 /* AWFLifecycleCrashHarness */,
 				B00000000000000000000002 /* AWFTests */,
 				B00000000000000000000003 /* AWFUITests */,
 			);
@@ -538,6 +582,18 @@
 			files = (
 				E0000000000000000000001D /* NativeHookLauncherCore.swift in Sources */,
 				E0000000000000000000001E /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0000000000000000000000E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E00000000000000000000029 /* main.swift in Sources */,
+				E0000000000000000000002A /* RuntimeLocator.swift in Sources */,
+				E0000000000000000000002B /* NativeHookLauncherCore.swift in Sources */,
+				E0000000000000000000002C /* NativeIntegrationFilesystem.swift in Sources */,
+				E0000000000000000000002D /* NativeIntegrationManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -844,6 +900,36 @@
 			};
 			name = Release;
 		};
+		O00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = AWFLifecycleCrashHarness;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		O00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_NAME = AWFLifecycleCrashHarness;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -888,6 +974,15 @@
 			buildConfigurations = (
 				N00000000000000000000001 /* Debug */,
 				N00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		K00000000000000000000006 /* Build configuration list for PBXNativeTarget "AWFLifecycleCrashHarness" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				O00000000000000000000001 /* Debug */,
+				O00000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
