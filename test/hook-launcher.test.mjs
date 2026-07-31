@@ -124,6 +124,8 @@ test("streams stdin with a spaced plugin root and explicit runtime", (context) =
     [
       "#!/bin/sh",
       'test "$1" = "$AWF_EXPECTED_WORKER" || exit 70',
+      'test "$2" = --awf-portable-protocol || exit 71',
+      'test "$3" = 1 || exit 72',
       "exec /bin/cat",
       "",
     ].join("\n"),

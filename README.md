@@ -16,8 +16,8 @@ Claude Code.
 > signature, exact version, and post-sign digest. The checked-in source build intentionally
 > contains no generated Node binary, so installation stays disabled until that release payload is
 > assembled. The app is not yet Developer ID-signed, notarized, or packaged. Exact token
-> accounting, one-command provider setup, and user-owned trust/live-delivery acceptance remain
-> pending.
+> accounting and one-command provider setup remain pending. User-owned Codex trust, live delivery,
+> and fresh dashboard activity passed on the validation Mac; Claude Code remains open.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -181,7 +181,9 @@ Real model-free evidence now covers both the current-user absent-plugin result a
 marketplace install where Codex `hooks/list` discovered all four exact hooks before their
 launchers were exercised. The isolated gate accepts exact metadata in either trusted or
 untrusted state, so it proves provider registration but is not a user-owned `ready` or live
-delivery pass.
+delivery pass. A separate user-owned Codex run completed the review/trust flow, returned `ready`
+for the exact 4/4 hooks, observed fresh delivery, and projected `active` in a dashboard that was
+already watching. See the [2026-08-01 validation report](docs/VALIDATION-REPORT-2026-08-01.md).
 
 To check live hook delivery after loading the plugin, start this command in a normal terminal:
 
@@ -555,7 +557,7 @@ See [core architecture](docs/ARCHITECTURE.md),
 [macOS runtime release sealing](docs/MACOS-RUNTIME-RELEASE.md),
 [GitHub landscape and reuse decision](docs/GITHUB-BENCHMARK-2026-07-29.md),
 [evaluation](docs/EVALUATION.md), the
-[latest local validation report](docs/VALIDATION-REPORT-2026-07-30.md), and the
+[latest local validation report](docs/VALIDATION-REPORT-2026-08-01.md), and the
 [first live pilot](docs/FIRST-PILOT.md).
 
 ## Honest limitations
@@ -568,8 +570,9 @@ See [core architecture](docs/ARCHITECTURE.md),
 - Codex hosted tools such as web search may not emit local pre/post tool hooks.
 - Hook coverage is a useful guardrail, not a complete security boundary.
 - Provider detection is read-only evidence. Installation or enablement alone does not prove hook
-  delivery. The dashboard requires fresh post-start audited evidence, and full user-owned
-  install/trust/live-delivery acceptance remains pending.
+  delivery. The dashboard requires fresh post-start audited evidence. User-owned Codex
+  install/trust/live-delivery and dashboard activity passed on the validation Mac; Claude Code and
+  clean-machine acceptance remain pending.
 - A best-effort publication can be absent if the private spool is busy or unavailable. AWF marks
   known sequence gaps and drop markers as incomplete coverage, but storage failure can also prevent
   the marker itself from being written.
@@ -602,8 +605,8 @@ See [core architecture](docs/ARCHITECTURE.md),
   set; Developer ID identity and notarization remain release gates.
 - The pinned x64 input has not yet passed execution on an Intel Mac. Interactive native UI
   automation, minimum-macOS runtime testing, Developer ID signing, notarization, Gatekeeper, and
-  clean-machine acceptance remain unverified. A fixed raw-free helper/worker protocol handshake
-  and true process-kill crash harness are also required before public beta.
+  clean-machine acceptance remain unverified. The fixed raw-free helper/worker compatibility
+  contract is implemented; a true process-kill crash harness is still required before public beta.
 - Windows provider-hook execution is currently unsupported; the shipped hook launch path is
   macOS/POSIX-first.
 - Cross-session semantic duplicate-task detection is not implemented.
@@ -617,8 +620,8 @@ See [core architecture](docs/ARCHITECTURE.md),
    prompts.
 4. Assemble the pinned per-architecture runtime, run the release sealing pipeline, and
    sign/notarize the [macOS shell](docs/MACOS-ARCHITECTURE.md).
-5. Add the helper/worker protocol handshake, real process-kill recovery tests, clean-machine
-   install/upgrade/rollback/uninstall acceptance, and explicit provider setup.
+5. Add real process-kill recovery tests, clean-machine install/upgrade/rollback/uninstall
+   acceptance, and explicit provider setup.
 
 ## License
 

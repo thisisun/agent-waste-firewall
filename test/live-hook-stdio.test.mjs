@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { runHookPayload } from "../src/hook-stdio.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "../src/helper-worker-handshake.mjs";
 import { LiveEventStore } from "../src/live-event-store.mjs";
 import { StateStore } from "../src/state-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
@@ -32,11 +33,15 @@ function setup(context) {
 }
 
 function run(env, payload) {
-  return spawnSync(process.execPath, [hook], {
-    encoding: "utf8",
-    env,
-    input: JSON.stringify(payload),
-  });
+  return spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      encoding: "utf8",
+      env,
+      input: JSON.stringify(payload),
+    },
+  );
 }
 
 test("publishes LiveEventV1 without an explicit trace recording", (context) => {

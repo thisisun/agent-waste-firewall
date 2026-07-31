@@ -166,7 +166,9 @@ must not impersonate current activity. Provider installation without fresh obser
 therefore remains `installed_unverified`, not `active`. Provider subprocesses inherit only a
 closed discovery environment. The shipped CLI/dashboard probes run providers concurrently and
 give each provider one shared three-second version/list budget. Restart policy, notifications,
-start-at-login, and a complete diagnostics bundle remain pending.
+start-at-login, and a complete diagnostics bundle remain pending. The native helper/worker
+compatibility contract is implemented as a canonical closed marker plus exact single-process
+worker arguments. An incompatible marker or runtime fails open before monitoring is claimed.
 
 The bounded `integration verify <codex|claude> --timeout 60 [--json]` command is the narrower
 live-delivery witness. It takes a read-only live-spool baseline, waits for a fresh audited prompt
@@ -179,7 +181,7 @@ than cryptographic provider attestation.
 
 Deliverables:
 
-- worker/protocol version handshake;
+- worker/protocol version handshake (implemented for the native hook path);
 - provider integration status checks;
 - spool validation, backpressure, retention, and recovery;
 - bounded dashboard restart policy;
@@ -199,8 +201,9 @@ Acceptance:
 Goal: make installation safe and reversible for non-technical users.
 
 Implementation status: read-only detection, a bounded live-delivery witness, isolated Codex and
-Claude acceptance runners, and the dormant native-helper target are available, but user-owned
-installation management and live-provider acceptance are not complete. The provider runners cover
+Claude acceptance runners, and the dormant native-helper target are available. User-owned Codex
+install, review/trust, fresh delivery, and live-dashboard projection passed on the validation Mac;
+Claude Code and app-owned installation management remain incomplete. The provider runners cover
 the supported prompt, tool, failure, and observation-only Stop paths with closed-event production,
 raw-canary exclusion, and owned temporary-tree cleanup. Productive non-nonce counterexamples are
 allowed while partial raw persistence fails the gates. The runners use private temporary provider
@@ -223,10 +226,10 @@ A pass establishes that the isolated package/install/direct-launcher path and pr
 worked on that machine. Codex additionally requires a real model-free app-server `hooks/list`
 result whose exact four hook source paths bind to the validated installed cache root. This is
 provider-registration evidence, not provider-driven delivery. Claude remains direct-launcher-only
-and reports `providerDelivery: "not_tested"` explicitly. Actual user-owned `/hooks` review/trust,
-provider-driven live delivery, upgrade, repair, rollback, and uninstall remain separate acceptance
-gates. To collect a user-controlled live-delivery witness, first complete the provider's trust
-flow.
+and reports `providerDelivery: "not_tested"` explicitly. Codex's separate user-owned trust and
+live-delivery gate is recorded in
+[the 2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md). Claude user-owned trust and
+delivery, plus app-owned upgrade, repair, rollback, and uninstall, remain open acceptance gates.
 
 For Codex, run the model-free static discovery gate before any automated live pilot:
 
@@ -281,8 +284,9 @@ Provider-specific trust and troubleshooting:
 Do not run `integration verify` from the same provider turn whose `UserPromptSubmit` event you are
 trying to witness: that event precedes the command's baseline. The watcher belongs in a terminal,
 and the qualifying prompt belongs in a separate provider conversation after the watcher starts.
-No user-owned live-delivery pass is claimed until that manual sequence is completed and recorded
-as such.
+Do not claim a user-owned live-delivery pass until that manual sequence is completed and recorded.
+Codex has one such machine-specific pass in the
+[2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md); Claude Code does not.
 
 Do not automate a provider turn merely because a temporary blocking hook was written. Project
 trust can prevent that hook layer from being discovered, allowing the prompt to reach a model.
@@ -477,9 +481,9 @@ AWFUITests/       initial app-lifecycle smoke test
 `assets/`, `bin/`, and `src/` are copied into the application as folder resources. `awf-hook` is
 copied into `Contents/Helpers` with hardened-runtime build settings and `CodeSignOnCopy`. There are
 no external Swift packages. This is signing-ready structure, not a Developer ID-signed artifact.
-The integration-management sheet and local activation lifecycle are implemented. Settings, a
-helper/worker protocol handshake, a notification sender, signed distribution, and clean-machine
-provider acceptance remain later milestones.
+The integration-management sheet, local activation lifecycle, and fixed helper/worker
+compatibility contract are implemented. Settings, a notification sender, signed distribution, and
+clean-machine provider acceptance remain later milestones.
 
 The Swift process must not read or mutate `StateStore` JSON. That state contains detector-internal
 metadata not approved for presentation and must have one writer: the Node worker.
@@ -561,10 +565,9 @@ Public beta work still required:
 
 - Developer ID-sign and notarize the complete per-architecture chain and exercise the documented
   release pipeline on clean supported Macs;
-- add a fixed raw-free helper/worker protocol handshake and incompatible-helper counterexample;
 - add true subprocess `SIGKILL` checkpoints and stricter power-loss/TOCTOU durability tests;
-- prove user-owned Codex and Claude Code provider setup, trust, delivery, upgrade, rollback, and
-  uninstall without silently changing provider trust.
+- prove Claude Code user-owned setup, trust, and delivery; repeat Codex on a clean machine; and
+  prove upgrade, rollback, and uninstall without silently changing either provider's trust.
 
 Sign from the inside out (`awf-node`, `awf-hook`, app, distribution container), never use
 `codesign --deep` for signing, and include Node's complete bundled third-party `LICENSE`.
@@ -854,9 +857,8 @@ The beta is done when a non-technical user can:
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
 dashboard projection, fixture-driven publication tests, and closed provider reality gate are
 implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates,
-bounded delivery witness, and reversible local integration manager are also implemented. No
-user-owned Codex or Claude Code live-delivery pass is claimed yet. The next integration work is
-Developer ID release assembly, a fixed helper/worker protocol handshake, clean-machine lifecycle
-testing, and actual user-owned trust/live-delivery acceptance. It must preserve each provider's
-trust model and must not infer successful monitoring from installation or retained historical
-events.
+bounded delivery witness, and reversible local integration manager are also implemented. Codex
+has a machine-specific user-owned trust/live-delivery/dashboard pass; Claude Code does not. The
+next integration work is Developer ID release assembly, clean-machine lifecycle testing, and
+Claude user-owned acceptance. It must preserve each provider's trust model and must not infer
+successful monitoring from installation or retained historical events.

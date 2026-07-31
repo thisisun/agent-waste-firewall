@@ -69,6 +69,37 @@ struct NativeHookActivation: Equatable, Sendable {
     }
 }
 
+struct NativeHookWorkerHandshake: Equatable, Sendable {
+    static let maximumBytes = 96
+    static let runtimeMajor = 24
+    static let filename = "helper-worker-handshake-v1.json"
+
+    static let workerArguments = [
+        "--awf-worker-protocol",
+        String(NativeHookActivation.workerProtocol),
+        "--awf-runtime-major",
+        String(runtimeMajor),
+    ]
+
+    static func parse(_ data: Data) throws -> Self {
+        guard
+            !data.isEmpty,
+            data.count <= maximumBytes,
+            data == Data(canonicalSource.utf8)
+        else {
+            throw NativeHookLaunchFailure.invalidActivation
+        }
+        return Self()
+    }
+
+    static var canonicalSource: String {
+        """
+        {"v":1,"workerProtocol":\(NativeHookActivation.workerProtocol),"runtime":"node","runtimeMajor":\(runtimeMajor)}
+        """
+        + "\n"
+    }
+}
+
 struct NativeHookLaunchPlan: Equatable, Sendable {
     static let protocolVersion = "1"
     static let activationFilename = "activation.json"
@@ -77,12 +108,15 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
 
     let runtimeURL: URL
     let workerURL: URL
+    let handshakeURL: URL
     let workingDirectoryURL: URL
     let environment: [String: String]
     let runtimeIdentity: NativeHookFilesystem.Identity
     let workerIdentity: NativeHookFilesystem.Identity
+    let handshakeIdentity: NativeHookFilesystem.Identity
     let workingDirectoryIdentity: NativeHookFilesystem.Identity
     let scriptsDirectoryIdentity: NativeHookFilesystem.Identity
+    let protocolDirectoryIdentity: NativeHookFilesystem.Identity
 
     static func resolve(
         arguments: [String],
@@ -146,7 +180,9 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
         ).standardizedFileURL
         let workingDirectoryIdentity: NativeHookFilesystem.Identity
         let scriptsDirectoryIdentity: NativeHookFilesystem.Identity
+        let protocolDirectoryIdentity: NativeHookFilesystem.Identity
         let workerIdentity: NativeHookFilesystem.Identity
+        let handshakeIdentity: NativeHookFilesystem.Identity
         let scripts = pluginRoot.appendingPathComponent(
             "scripts",
             isDirectory: true
@@ -154,11 +190,23 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
         let worker = scripts
             .appendingPathComponent("hook.mjs")
             .standardizedFileURL
+        let protocolDirectory = pluginRoot.appendingPathComponent(
+            "protocol",
+            isDirectory: true
+        ).standardizedFileURL
+        let handshake = protocolDirectory
+            .appendingPathComponent(NativeHookWorkerHandshake.filename)
+            .standardizedFileURL
         do {
             guard
                 scripts.deletingLastPathComponent().path == pluginRoot.path,
                 worker.deletingLastPathComponent().path == scripts.path,
-                worker.path.hasPrefix(pluginRoot.path + "/")
+                worker.path.hasPrefix(pluginRoot.path + "/"),
+                protocolDirectory.deletingLastPathComponent().path
+                    == pluginRoot.path,
+                handshake.deletingLastPathComponent().path
+                    == protocolDirectory.path,
+                handshake.path.hasPrefix(pluginRoot.path + "/")
             else {
                 throw NativeHookLaunchFailure.workerUnavailable
             }
@@ -172,12 +220,30 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
                     scripts,
                     allowRootOwner: true
                 )
+            protocolDirectoryIdentity =
+                try NativeHookFilesystem.requireSecureDirectory(
+                    protocolDirectory,
+                    allowRootOwner: true
+                )
             workerIdentity =
                 try NativeHookFilesystem.requireSecureRegularFile(
                     worker,
                     executable: false,
                     allowRootOwner: true
                 )
+            handshakeIdentity =
+                try NativeHookFilesystem.requireSecureRegularFile(
+                    handshake,
+                    executable: false,
+                    allowRootOwner: true
+                )
+            _ = try NativeHookWorkerHandshake.parse(
+                NativeHookFilesystem.readSecureFile(
+                    handshake,
+                    maximumBytes: NativeHookWorkerHandshake.maximumBytes,
+                    allowRootOwner: true
+                )
+            )
         } catch {
             throw NativeHookLaunchFailure.workerUnavailable
         }
@@ -185,6 +251,7 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
         return Self(
             runtimeURL: runtime,
             workerURL: worker,
+            handshakeURL: handshake,
             workingDirectoryURL: pluginRoot,
             environment: workerEnvironment(
                 from: environment,
@@ -192,8 +259,10 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
             ),
             runtimeIdentity: runtimeIdentity,
             workerIdentity: workerIdentity,
+            handshakeIdentity: handshakeIdentity,
             workingDirectoryIdentity: workingDirectoryIdentity,
-            scriptsDirectoryIdentity: scriptsDirectoryIdentity
+            scriptsDirectoryIdentity: scriptsDirectoryIdentity,
+            protocolDirectoryIdentity: protocolDirectoryIdentity
         )
     }
 
@@ -246,6 +315,12 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
             expected: scriptsDirectoryIdentity,
             allowRootOwner: true
         )
+        let protocolDirectory = handshakeURL.deletingLastPathComponent()
+        try NativeHookFilesystem.requireSameSecureDirectory(
+            protocolDirectory,
+            expected: protocolDirectoryIdentity,
+            allowRootOwner: true
+        )
         try NativeHookFilesystem.requireSameSecureRegularFile(
             runtimeURL,
             expected: runtimeIdentity,
@@ -257,6 +332,19 @@ struct NativeHookLaunchPlan: Equatable, Sendable {
             expected: workerIdentity,
             executable: false,
             allowRootOwner: true
+        )
+        try NativeHookFilesystem.requireSameSecureRegularFile(
+            handshakeURL,
+            expected: handshakeIdentity,
+            executable: false,
+            allowRootOwner: true
+        )
+        _ = try NativeHookWorkerHandshake.parse(
+            NativeHookFilesystem.readSecureFile(
+                handshakeURL,
+                maximumBytes: NativeHookWorkerHandshake.maximumBytes,
+                allowRootOwner: true
+            )
         )
     }
 }
@@ -572,7 +660,7 @@ private final class NativeHookSpawnedChild {
         let arguments = try NativeHookCStringVector([
             plan.runtimeURL.path,
             plan.workerURL.path,
-        ])
+        ] + NativeHookWorkerHandshake.workerArguments)
         let environment = try NativeHookCStringVector(
             plan.environment
                 .sorted { $0.key < $1.key }
@@ -768,7 +856,9 @@ enum NativeHookLauncher {
     static let childDeadlineNanoseconds: UInt64 = 2_250_000_000
     static let failOpenWarning =
         "AWF native hook failed open: this event was not checked.\n"
-    static let failOpenResponse = "{}\n"
+    static let failOpenResponse =
+        #"{"systemMessage":"AWF failed open: this event was not checked. Run `agent-waste-firewall doctor`."}"#
+        + "\n"
 
     static func run(
         arguments: [String],

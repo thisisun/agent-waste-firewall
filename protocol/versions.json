@@ -43,6 +43,13 @@
       ],
       "schema": "codex-hook-preflight-v1.schema.json"
     },
+    "helperWorkerHandshake": {
+      "current": 1,
+      "supported": [
+        1
+      ],
+      "schema": "helper-worker-handshake-v1.schema.json"
+    },
     "detectorState": {
       "current": 4,
       "supported": [

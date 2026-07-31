@@ -454,8 +454,8 @@ milestone.
 5. ~~Add explicit local install/repair/rollback/uninstall with atomic activation of the embedded
    native helper.~~ Implemented with a closed ownership ledger and fail-closed native UI.
 6. ~~Pin and verify an architecture-specific Node payload and define post-sign sealing.~~ Node
-   `v24.18.0` preparation and finalization are implemented; Developer ID signing, notarization,
-   clean-machine assembly, and protocol handshake acceptance remain.
+   `v24.18.0` preparation, finalization, and the fixed native helper/worker compatibility contract
+   are implemented; Developer ID signing, notarization, and clean-machine assembly remain.
 7. Add optional usage adapters only after the decision path is stable.
 8. Run an observe-only pilot, label results, tune thresholds, then enable `warn` by default.
 9. Consider `block` for public use only after the evaluation gates are met.

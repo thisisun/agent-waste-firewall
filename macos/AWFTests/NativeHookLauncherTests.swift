@@ -85,6 +85,56 @@ final class NativeHookLauncherTests: XCTestCase {
         XCTAssertNil(projected["AWF_TEST_SECRET"])
     }
 
+    func testCanonicalWorkerHandshakeRejectsUnknownAndIncompatibleData()
+        throws
+    {
+        let source = NativeHookWorkerHandshake.canonicalSource
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let checkedInMarker = repositoryRoot
+            .appendingPathComponent("protocol", isDirectory: true)
+            .appendingPathComponent(NativeHookWorkerHandshake.filename)
+        let checkedInData = try Data(contentsOf: checkedInMarker)
+
+        XCTAssertEqual(checkedInData, Data(source.utf8))
+        XCTAssertEqual(
+            try NativeHookWorkerHandshake.parse(checkedInData),
+            NativeHookWorkerHandshake()
+        )
+        XCTAssertEqual(
+            try NativeHookWorkerHandshake.parse(Data(source.utf8)),
+            NativeHookWorkerHandshake()
+        )
+        let unknownKeyCounterexample = source.replacingOccurrences(
+            of: #","runtimeMajor":24"#,
+            with: #","raw":"RAW-HANDSHAKE-CANARY","runtimeMajor":24"#
+        )
+        XCTAssertTrue(
+            unknownKeyCounterexample.contains("RAW-HANDSHAKE-CANARY")
+        )
+
+        for counterexample in [
+            source.replacingOccurrences(
+                of: #""workerProtocol":1"#,
+                with: #""workerProtocol":2"#
+            ),
+            source.replacingOccurrences(
+                of: #""runtimeMajor":24"#,
+                with: #""runtimeMajor":22"#
+            ),
+            unknownKeyCounterexample,
+            source.trimmingCharacters(in: .whitespacesAndNewlines),
+        ] {
+            XCTAssertThrowsError(
+                try NativeHookWorkerHandshake.parse(
+                    Data(counterexample.utf8)
+                )
+            )
+        }
+    }
+
     func testExactProviderArgumentsSynthesizeClosedPlatform() throws {
         let fixture = try makeFixture(runtimeBody: "exec /bin/cat")
 
@@ -141,13 +191,17 @@ final class NativeHookLauncherTests: XCTestCase {
     {
         let fixture = try makeFixture(
             runtimeBody: """
-            test "$#" -eq 1 || exit 70
+            test "$#" -eq 5 || exit 70
             case "$1" in
               */scripts/hook.mjs) ;;
               *) exit 71 ;;
             esac
-            test -z "${NODE_OPTIONS+x}" || exit 72
-            test -z "${AWF_TEST_SECRET+x}" || exit 73
+            test "$2" = --awf-worker-protocol || exit 72
+            test "$3" = 1 || exit 73
+            test "$4" = --awf-runtime-major || exit 74
+            test "$5" = 24 || exit 75
+            test -z "${NODE_OPTIONS+x}" || exit 76
+            test -z "${AWF_TEST_SECRET+x}" || exit 77
             exec /bin/cat
             """
         )
@@ -193,7 +247,10 @@ final class NativeHookLauncherTests: XCTestCase {
         )
 
         XCTAssertEqual(result.status, 0)
-        XCTAssertEqual(result.stdout, "{}\n")
+        XCTAssertEqual(
+            result.stdout,
+            NativeHookLauncher.failOpenResponse
+        )
         XCTAssertEqual(
             result.stderr,
             NativeHookLauncher.failOpenWarning
@@ -201,6 +258,69 @@ final class NativeHookLauncherTests: XCTestCase {
         XCTAssertFalse(result.stdout.contains("RAW-FAIL-OPEN-CANARY"))
         XCTAssertFalse(result.stderr.contains("RAW-FAIL-OPEN-CANARY"))
         XCTAssertFalse(result.stderr.contains(temporaryDirectory.path))
+    }
+
+    func testMissingOrIncompatibleHandshakeFailsOpenBeforeWorkerLaunch()
+        throws
+    {
+        for (name, source) in [
+            ("missing", nil),
+            (
+                "incompatible",
+                NativeHookWorkerHandshake.canonicalSource
+                    .replacingOccurrences(
+                        of: #""workerProtocol":1"#,
+                        with: #""workerProtocol":2"#
+                    )
+            ),
+            (
+                "unknown-key",
+                #"{"v":1,"workerProtocol":1,"runtime":"node","runtimeMajor":24,"raw":"RAW-CANARY-4827ad1f"}"#
+                    + "\n"
+            ),
+        ] {
+            let marker = temporaryDirectory.appendingPathComponent(
+                "worker-started-\(name)"
+            )
+            let fixture = try makeFixture(
+                root: temporaryDirectory.appendingPathComponent(
+                    "\(name) handshake fixture",
+                    isDirectory: true
+                ),
+                runtimeBody: """
+                /usr/bin/touch "\(marker.path)"
+                exec /bin/cat
+                """,
+                handshakeSource: source
+            )
+            let input =
+                #"{"secret":"RAW-INPUT-CANARY-62d29c4c"}"# + "\n"
+
+            let result = try runHelper(
+                fixture: fixture,
+                input: input
+            )
+
+            XCTAssertEqual(result.status, 0, name)
+            XCTAssertEqual(
+                result.stdout,
+                NativeHookLauncher.failOpenResponse,
+                name
+            )
+            XCTAssertEqual(
+                result.stderr,
+                NativeHookLauncher.failOpenWarning,
+                name
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+            XCTAssertFalse(result.stdout.contains("RAW-"), name)
+            XCTAssertFalse(result.stderr.contains("RAW-"), name)
+            XCTAssertFalse(
+                try persistedContents(in: temporaryDirectory)
+                    .contains("RAW-INPUT-CANARY-62d29c4c"),
+                name
+            )
+        }
     }
 
     func testChildFailureDoesNotAppendASecondJSONResponse() throws {
@@ -511,6 +631,7 @@ final class NativeHookLauncherTests: XCTestCase {
         let release: URL
         let scripts: URL
         let worker: URL
+        let handshake: URL
     }
 
     private struct HelperResult {
@@ -528,7 +649,8 @@ final class NativeHookLauncherTests: XCTestCase {
     private func makeFixture(
         root: URL? = nil,
         runtimeBody: String,
-        writeActivation: Bool = true
+        writeActivation: Bool = true,
+        handshakeSource: String? = NativeHookWorkerHandshake.canonicalSource
     ) throws -> Fixture {
         let root = root ?? temporaryDirectory.appendingPathComponent(
             "integration-v1",
@@ -593,6 +715,25 @@ final class NativeHookLauncherTests: XCTestCase {
         )
         try setMode(0o600, at: worker)
 
+        let protocolDirectory = pluginRoot.appendingPathComponent(
+            "protocol",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: protocolDirectory,
+            withIntermediateDirectories: true
+        )
+        let handshake = protocolDirectory.appendingPathComponent(
+            NativeHookWorkerHandshake.filename
+        )
+        if let handshakeSource {
+            try Data(handshakeSource.utf8).write(
+                to: handshake,
+                options: .atomic
+            )
+            try setMode(0o600, at: handshake)
+        }
+
         return Fixture(
             helper: helper,
             runtime: runtime,
@@ -600,7 +741,8 @@ final class NativeHookLauncherTests: XCTestCase {
             activation: activation,
             release: release,
             scripts: scripts,
-            worker: worker
+            worker: worker,
+            handshake: handshake
         )
     }
 

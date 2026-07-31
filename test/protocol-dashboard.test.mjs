@@ -15,6 +15,9 @@ import {
 import {
   validateCodexHookPreflight,
 } from "../src/codex-hook-preflight.mjs";
+import {
+  validateHelperWorkerHandshake,
+} from "../src/helper-worker-handshake.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const protocolRoot = path.join(root, "protocol");
@@ -66,6 +69,13 @@ for (const contract of [
     schema: "codex-hook-preflight-v1.schema.json",
     fixtures: "codex-hook-preflight-v1",
     validate: validateCodexHookPreflight,
+  },
+  {
+    name: "helper worker handshake",
+    registryKey: "helperWorkerHandshake",
+    schema: "helper-worker-handshake-v1.schema.json",
+    fixtures: "helper-worker-handshake-v1",
+    validate: validateHelperWorkerHandshake,
   },
 ]) {
   test(`${contract.name} public schema matches its runtime version`, () => {

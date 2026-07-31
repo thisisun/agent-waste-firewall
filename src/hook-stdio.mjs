@@ -7,8 +7,16 @@ import { configFromEnv } from "./config.mjs";
 import { handleHook } from "./engine.mjs";
 import { LiveEventStore } from "./live-event-store.mjs";
 import { hash } from "./utils.mjs";
+import { workerInvocationCompatible } from "./helper-worker-handshake.mjs";
 
 const HOOK_INPUT_MAX_BYTES = 1024 * 1024;
+const WORKER_COMPATIBILITY_WARNING =
+  "AWF worker compatibility check failed open: this event was not checked.\n";
+const FAIL_OPEN_SYSTEM_MESSAGE =
+  "AWF failed open: this event was not checked. Run `agent-waste-firewall doctor`.";
+const COMPATIBILITY_FAIL_OPEN_OUTPUT = Object.freeze({
+  systemMessage: FAIL_OPEN_SYSTEM_MESSAGE,
+});
 
 async function readStdin() {
   let input = "";
@@ -55,10 +63,7 @@ function failOpenOutput(env = process.env) {
     // If rate limiting itself fails, warning once is safer than silent disablement.
   }
   return shouldWarn
-    ? {
-        systemMessage:
-          "AWF failed open: this event was not checked. Run `agent-waste-firewall doctor`.",
-      }
+    ? { systemMessage: FAIL_OPEN_SYSTEM_MESSAGE }
     : {};
 }
 
@@ -182,6 +187,19 @@ export async function runHookPayload(payload, options = {}) {
 }
 
 export async function runHookStdio(options = {}) {
+  const workerArguments = options.arguments ?? [];
+  if (
+    !workerInvocationCompatible({
+      arguments: workerArguments,
+      nodeVersion: options.nodeVersion ?? process.versions.node,
+    })
+  ) {
+    process.stderr.write(WORKER_COMPATIBILITY_WARNING);
+    process.stdout.write(
+      `${JSON.stringify(COMPATIBILITY_FAIL_OPEN_OUTPUT)}\n`,
+    );
+    return;
+  }
   try {
     const input = await readStdin();
     const output = await runHookPayload(JSON.parse(input), options);

@@ -6,20 +6,33 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import {
+  canonicalHelperWorkerHandshake,
+  helperWorkerHandshake,
+  nativeWorkerCompatible,
+  NATIVE_WORKER_ARGUMENTS,
+  PORTABLE_WORKER_ARGUMENTS,
+  workerInvocationCompatible,
+} from "../src/helper-worker-handshake.mjs";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const hook = path.join(root, "scripts/hook.mjs");
 
 function invoke(payload, extraEnv = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "awf-hook-"));
-  return spawnSync(process.execPath, [hook], {
-    input: typeof payload === "string" ? payload : JSON.stringify(payload),
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
-      ...extraEnv,
+  return spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      input: typeof payload === "string" ? payload : JSON.stringify(payload),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+        ...extraEnv,
+      },
     },
-  });
+  );
 }
 
 test("accepts a Codex UserPromptSubmit fixture", () => {
@@ -128,4 +141,120 @@ test("rate-limits repeated fail-open warnings", () => {
     /failed open/u,
   );
   assert.deepEqual(JSON.parse(second.stdout), {});
+});
+
+test("native worker compatibility is exact and tied to the pinned runtime", () => {
+  const marker = fs.readFileSync(
+    path.join(root, "protocol", "helper-worker-handshake-v1.json"),
+    "utf8",
+  );
+  assert.equal(
+    marker,
+    canonicalHelperWorkerHandshake(
+      helperWorkerHandshake("24.18.0"),
+    ),
+  );
+  assert.equal(marker, canonicalHelperWorkerHandshake());
+  assert.equal(
+    nativeWorkerCompatible({
+      arguments: [...NATIVE_WORKER_ARGUMENTS],
+      nodeVersion: "24.18.0",
+    }),
+    true,
+  );
+  assert.equal(
+    nativeWorkerCompatible({
+      arguments: [...NATIVE_WORKER_ARGUMENTS],
+      nodeVersion: "22.22.0",
+    }),
+    false,
+  );
+  assert.equal(
+    nativeWorkerCompatible({
+      arguments: [
+        "--awf-worker-protocol",
+        "2",
+        "--awf-runtime-major",
+        "24",
+      ],
+      nodeVersion: "24.18.0",
+    }),
+    false,
+  );
+  assert.equal(
+    workerInvocationCompatible({
+      arguments: [...PORTABLE_WORKER_ARGUMENTS],
+      nodeVersion: "18.20.8",
+    }),
+    true,
+  );
+  assert.equal(
+    workerInvocationCompatible({
+      arguments: [],
+      nodeVersion: "24.18.0",
+    }),
+    false,
+  );
+});
+
+test("incompatible native arguments fail open without reading or monitoring", () => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-worker-handshake-"),
+  );
+  const canary = "RAW-HANDSHAKE-INPUT-CANARY-0f409d6a";
+  const result = spawnSync(
+    process.execPath,
+    [
+      hook,
+      "--awf-worker-protocol",
+      "2",
+      "--awf-runtime-major",
+      "24",
+      "--unknown-raw-key",
+      canary,
+    ],
+    {
+      input: `${canary}\n`,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(
+    JSON.parse(result.stdout).systemMessage,
+    /failed open: this event was not checked/u,
+  );
+  assert.match(result.stderr, /compatibility check failed open/u);
+  assert.equal(result.stdout.includes(canary), false);
+  assert.equal(result.stderr.includes(canary), false);
+  assert.deepEqual(fs.readdirSync(dataDir), []);
+});
+
+test("a zero-argument legacy invocation fails open without monitoring", () => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-worker-zero-arguments-"),
+  );
+  const canary = "RAW-ZERO-ARGUMENT-CANARY-23d85eb1";
+  const result = spawnSync(process.execPath, [hook], {
+    input: `${canary}\n`,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+    },
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(
+    JSON.parse(result.stdout).systemMessage,
+    /failed open: this event was not checked/u,
+  );
+  assert.match(result.stderr, /compatibility check failed open/u);
+  assert.equal(result.stdout.includes(canary), false);
+  assert.equal(result.stderr.includes(canary), false);
+  assert.deepEqual(fs.readdirSync(dataDir), []);
 });

@@ -2,4 +2,4 @@
 
 import { runHookStdio } from "../src/hook-stdio.mjs";
 
-await runHookStdio();
+await runHookStdio({ arguments: process.argv.slice(2) });

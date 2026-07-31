@@ -11,6 +11,7 @@ import {
   integrationStatusAsync,
   summarizeProviderMonitoring,
 } from "../src/cli.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "../src/helper-worker-handshake.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -25,6 +26,35 @@ test("prints the package version", () => {
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), packageManifest.version);
+});
+
+test("CLI hook entry supplies the portable worker protocol", (context) => {
+  const dataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "awf-cli-hook-protocol-"),
+  );
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, "bin/agent-waste-firewall.mjs"), "hook"],
+    {
+      encoding: "utf8",
+      input: JSON.stringify({
+        session_id: "cli-hook-protocol-session",
+        cwd: root,
+        hook_event_name: "UserPromptSubmit",
+        turn_id: "cli-hook-protocol-turn",
+        prompt: "Fix src/auth.ts and verify the change with npm test.",
+      }),
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(JSON.parse(result.stdout), {});
 });
 
 test("doctor verifies the incremental dashboard runtime", (context) => {
@@ -64,6 +94,17 @@ test("doctor verifies the incremental dashboard runtime", (context) => {
       (check) => check.check === "src/hook-stdio.mjs" && check.ok === true,
     ),
   );
+  for (const requiredHandshakeFile of [
+    "src/helper-worker-handshake.mjs",
+    "protocol/helper-worker-handshake-v1.json",
+    "protocol/helper-worker-handshake-v1.schema.json",
+  ]) {
+    assert.ok(
+      report.checks.some(
+        (check) => check.check === requiredHandshakeFile && check.ok === true,
+      ),
+    );
+  }
   assert.ok(
     report.checks.some(
       (check) =>
@@ -249,7 +290,10 @@ test("integration verify JSON readiness observes a real hook event without chang
       hookStarted = true;
       hookResult = spawnSync(
         process.execPath,
-        [path.join(root, "scripts/hook.mjs")],
+        [
+          path.join(root, "scripts/hook.mjs"),
+          ...PORTABLE_WORKER_ARGUMENTS,
+        ],
         {
           encoding: "utf8",
           env,
@@ -765,17 +809,21 @@ test("records, audits, exports, replays, and purges local semantic data", (conte
 
   const rawPrompt =
     "전체 저장소를 알아서 개선하고 SECRET-CLI-PROMPT 끝날 때까지 멈추지 마";
-  const hooked = spawnSync(process.execPath, [hook], {
-    encoding: "utf8",
-    env,
-    input: JSON.stringify({
-      session_id: "SECRET-CLI-SESSION",
-      cwd: workspace,
-      hook_event_name: "UserPromptSubmit",
-      turn_id: "turn-1",
-      prompt: rawPrompt,
-    }),
-  });
+  const hooked = spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      encoding: "utf8",
+      env,
+      input: JSON.stringify({
+        session_id: "SECRET-CLI-SESSION",
+        cwd: workspace,
+        hook_event_name: "UserPromptSubmit",
+        turn_id: "turn-1",
+        prompt: rawPrompt,
+      }),
+    },
+  );
   assert.equal(hooked.status, 0, hooked.stderr);
   assert.deepEqual(JSON.parse(hooked.stdout), {});
 

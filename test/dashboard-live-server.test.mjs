@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { startDashboard } from "../src/dashboard-server.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "../src/helper-worker-handshake.mjs";
 import { LiveEventStore } from "../src/live-event-store.mjs";
 import { TraceStore } from "../src/trace-store.mjs";
 
@@ -40,11 +41,15 @@ function setup(context) {
 }
 
 function runHook(env, payload) {
-  return spawnSync(process.execPath, [hook], {
-    encoding: "utf8",
-    env,
-    input: JSON.stringify(payload),
-  });
+  return spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      encoding: "utf8",
+      env,
+      input: JSON.stringify(payload),
+    },
+  );
 }
 
 function withTimeout(promise, timeoutMs, message) {

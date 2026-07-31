@@ -25,6 +25,7 @@ import { StateStore } from "./state-store.mjs";
 import { StateRetentionJanitor } from "./state-retention-janitor.mjs";
 import { TraceStore } from "./trace-store.mjs";
 import { runHookStdio } from "./hook-stdio.mjs";
+import { PORTABLE_WORKER_ARGUMENTS } from "./helper-worker-handshake.mjs";
 
 export { runHookStdio };
 
@@ -798,6 +799,7 @@ async function commandDoctor(args, env = process.env) {
     "hooks/hooks.json",
     "hooks/claude-hooks.json",
     "scripts/hook.mjs",
+    "src/helper-worker-handshake.mjs",
     "src/hook-stdio.mjs",
     "src/live-event-schema.mjs",
     "src/live-event-projection.mjs",
@@ -815,6 +817,8 @@ async function commandDoctor(args, env = process.env) {
     "src/dashboard-projection.mjs",
     "src/dashboard-trace-cursor.mjs",
     "src/dashboard-assets.mjs",
+    "protocol/helper-worker-handshake-v1.json",
+    "protocol/helper-worker-handshake-v1.schema.json",
     "protocol/provider-integration-status-v1.schema.json",
     "protocol/provider-delivery-verification-v1.schema.json",
     "protocol/codex-hook-preflight-v1.schema.json",
@@ -959,7 +963,10 @@ export async function main(args, options = {}) {
     } else if (command === "check-prompt") {
       await commandCheckPrompt(rest);
     } else if (command === "hook") {
-      await runHookStdio(options);
+      await runHookStdio({
+        ...options,
+        arguments: [...PORTABLE_WORKER_ARGUMENTS],
+      });
     } else if (command === "record") {
       await commandRecord(rest, options.env);
     } else if (command === "dashboard" || command === "monitor") {

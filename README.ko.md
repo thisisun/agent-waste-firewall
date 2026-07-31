@@ -28,7 +28,8 @@ SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패
 Node.js 18 이상을 사용합니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
-사용자 소유 provider의 훅 신뢰·실시간 전달과 업그레이드·제거 검증은 아직 남아 있습니다.
+사용자 소유 Codex의 훅 신뢰·실시간 전달·대시보드 현재 활동은 검증 Mac에서 통과했고,
+Claude Code와 업그레이드·제거 검증은 아직 남아 있습니다.
 provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출하고 끝에 고정된
 `codex` 또는 `claude` 인자를 전달합니다. macOS shim은 그 인자와 해당 provider root가
 자신의 plugin root에 정확히 일치할 때만 안전한 고정 사용자 경로
@@ -36,7 +37,9 @@ provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출하고 끝에
 먼저 호출합니다. Codex가 호환성을 위해 두 root 변수를 모두 내보내도 명시적 인자로
 provider를 잘못 판별하지 않습니다. helper가 없거나 unsafe하거나 provider/root가
 불일치하면 기존 외부 Node 알파 경로를 유지합니다. helper가 호출된 뒤 activation이
-잘못되면 fail-open하며
+잘못되면 fail-open합니다. helper는 provider stdin을 넘기기 전에 고정 protocol marker를
+검증하고, 단 한 번 실행되는 worker도 stdin을 읽기 전에 정확한 protocol/runtime 인자를
+확인합니다. 호환되지 않으면 라이브 이벤트를 만들지 않고 fail-open하며
 Node로 다시 시도하거나 두 번째 JSON을 붙이지 않습니다. 두 경로 모두 shim이 제어권을
 얻은 뒤에는 상속 `PATH`를 검색하지
 않습니다. 이 처리는 provider나 최초 interpreter/loader 시작 단계를 정리하지 못합니다.
@@ -122,6 +125,9 @@ ID는 비슷한 metadata가 있어도 의도적으로 `provider_plugin_not_found
 후 Codex `hooks/list`가 정확한 네 hook을 발견하고 launcher 실행까지 이어진 결과가 모두
 포함됩니다. 격리 gate는 정확한 metadata가 trusted 또는 untrusted인 경우를 허용하므로
 provider 등록 근거일 뿐, 사용자 소유 `ready`나 live delivery 통과는 아닙니다.
+별도로 진행한 사용자 소유 Codex 검증에서는 정확한 4/4 hook이 `ready`였고, 새 이벤트
+전달과 이미 감시 중인 대시보드의 `active` 표시까지 확인했습니다. 자세한 근거와 실제
+검증 토큰 비용은 [2026-08-01 검증 보고서](docs/VALIDATION-REPORT-2026-08-01.md)에 있습니다.
 
 플러그인을 불러온 뒤 실제 훅 전달을 읽기 전용으로 확인하려면 일반 터미널에서 다음 중
 하나를 실행합니다.
@@ -375,12 +381,12 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 `allowManagedHooksOnly` 정책이 플러그인 훅을 제외하는지 확인합니다. 관리형 설정은
 플러그인 파일이 있어도 로컬 훅 실행을 막을 수 있습니다.
 
-이 저장소를 검증한 Mac의 셸 `PATH` 기준 읽기 전용 상태는 Codex `0.146.0`
-`needs_install`, Claude Code `not_detected`입니다. 네이티브 supervisor의 닫힌 검색
-경로는 안전한 사용자 로컬 위치의 Claude Code `2.1.207`도 찾아 `needs_install`로
-표시합니다. 같은 Mac에서 Codex와 Claude의 격리 설치·launcher·프라이버시·정리 검증은
-모두 통과했습니다. 하지만 사용자 소유 설정에서 훅을 검토·신뢰했거나 실제 provider
-이벤트가 전달됐다는 뜻은 아닙니다.
+검증 Mac에는 canonical Codex 플러그인이 설치·활성화되어 있고, Codex `0.146.0`이 보고한
+정확한 4/4 hook의 신뢰 상태와 실제 새 이벤트 전달을 확인했습니다. 이벤트 전에 연결된
+대시보드는 Codex를 `active / observed`로 표시했습니다. 반면 독립 `integration status`는
+과거 이벤트를 현재 활동으로 재사용하지 않기 때문에 의도적으로 `installed_unverified`를
+표시할 수 있습니다. Claude Code 사용자 소유 전달은 아직 검증하지 않았습니다. Codex와
+Claude의 격리 설치·launcher·프라이버시·정리 검증은 모두 통과한 상태입니다.
 
 ## 한계
 
@@ -422,8 +428,8 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
   Developer ID 신원과 공증은 여전히 릴리스 gate입니다.
 - x64 입력은 고정됐지만 Intel Mac 실행 검증은 아직 없습니다. 네이티브 UI 자동화,
   최소 지원 macOS 실행, Developer ID 서명, 공증, Gatekeeper, clean-machine 검증도
-  완료되지 않았습니다. 공개 베타 전에는 원문 없는 고정 helper/worker protocol
-  handshake와 실제 프로세스 강제 종료 기반 crash 복구 테스트도 추가해야 합니다.
+  완료되지 않았습니다. 원문 없는 고정 helper/worker protocol 호환성 검사는 구현됐지만,
+  공개 베타 전에는 실제 프로세스 강제 종료 기반 crash 복구 테스트를 추가해야 합니다.
   Windows provider 훅 실행은 현재 지원하지 않으며 배포된 훅 경로는 macOS/POSIX
   우선입니다.
 
@@ -435,6 +441,6 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 [docs/MACOS-RUNTIME-RELEASE.md](docs/MACOS-RUNTIME-RELEASE.md), GitHub 경쟁·재사용 조사는
 [docs/GITHUB-BENCHMARK-2026-07-29.md](docs/GITHUB-BENCHMARK-2026-07-29.md), 평가 기준은
 [docs/EVALUATION.md](docs/EVALUATION.md), 최신 실제 검증 결과는
-[docs/VALIDATION-REPORT-2026-07-30.md](docs/VALIDATION-REPORT-2026-07-30.md)를 참고하세요.
+[docs/VALIDATION-REPORT-2026-08-01.md](docs/VALIDATION-REPORT-2026-08-01.md)를 참고하세요.
 
 Apache-2.0 라이선스입니다.

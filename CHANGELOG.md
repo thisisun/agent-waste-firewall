@@ -125,6 +125,10 @@
   per-user runtime, the plugin-root worker, and a closed child environment. It streams raw stdin
   directly, applies a 2.25-second child deadline with process-group cleanup, and preserves the
   no-retry/no-second-JSON boundary after handoff.
+- Add a closed helper/worker compatibility contract for the native hook path. The helper validates
+  the exact protocol marker before handing off provider stdin, and the single worker process checks
+  fixed protocol/runtime arguments before reading input. Missing, incompatible, or unknown fields
+  fail open without publishing a live event; the portable Node 18+ fallback remains unchanged.
 - Bundle the reviewed `assets`, `bin`, and `src` trees into the developer-preview app while retaining
   an explicit installed-Node.js requirement for source builds. Add an English-default,
   Korean-localized integration sheet plus transactional install, upgrade, repair, rollback, and

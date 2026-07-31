@@ -161,15 +161,30 @@ final class NativeIntegrationManagerTests: XCTestCase {
             "scripts",
             isDirectory: true
         )
+        let protocolDirectory = pluginRoot.appendingPathComponent(
+            "protocol",
+            isDirectory: true
+        )
         try FileManager.default.createDirectory(
             at: scripts,
             withIntermediateDirectories: true
         )
+        try FileManager.default.createDirectory(
+            at: protocolDirectory,
+            withIntermediateDirectories: true
+        )
         try setMode(0o700, at: pluginRoot)
         try setMode(0o700, at: scripts)
+        try setMode(0o700, at: protocolDirectory)
         let worker = scripts.appendingPathComponent("hook.mjs")
         try Data("export {};\n".utf8).write(to: worker)
         try setMode(0o600, at: worker)
+        let handshake = protocolDirectory.appendingPathComponent(
+            NativeHookWorkerHandshake.filename
+        )
+        try Data(NativeHookWorkerHandshake.canonicalSource.utf8)
+            .write(to: handshake)
+        try setMode(0o600, at: handshake)
 
         let input = #"{"secret":"STREAM-ONLY-CANARY"}"# + "\n"
         let result = try run(

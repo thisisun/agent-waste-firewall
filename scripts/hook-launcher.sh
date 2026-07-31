@@ -164,7 +164,9 @@ run_with() {
     return 1
   fi
 
-  "$candidate" "$worker"
+  "$candidate" \
+    "$worker" \
+    --awf-portable-protocol 1
   worker_status=$?
   if [ "$worker_status" -ne 0 ]; then
     # The worker may already have written a response. Never append a second
