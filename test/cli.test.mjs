@@ -35,7 +35,7 @@ test("CLI hook entry supplies the portable worker protocol", (context) => {
   context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   const result = spawnSync(
     process.execPath,
-    [path.join(root, "bin/agent-waste-firewall.mjs"), "hook"],
+    [path.join(root, "bin/agent-waste-firewall.mjs"), "hook", "codex"],
     {
       encoding: "utf8",
       input: JSON.stringify({
@@ -48,6 +48,50 @@ test("CLI hook entry supplies the portable worker protocol", (context) => {
       env: {
         ...process.env,
         AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(JSON.parse(result.stdout), {});
+});
+
+test("CLI hook requires explicit attribution before reading stdin", () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, "bin/agent-waste-firewall.mjs"), "hook"],
+    {
+      encoding: "utf8",
+      input: "RAW-UNATTRIBUTED-CLI-CANARY-55dbda13",
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_PLATFORM: "claude",
+      },
+    },
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /requires exactly one provider/u);
+  assert.equal(result.stderr.includes("RAW-UNATTRIBUTED"), false);
+  assert.equal(result.stdout, "");
+});
+
+test("CLI hook keeps Stop observation-only with explicit attribution", () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, "bin/agent-waste-firewall.mjs"), "hook", "claude"],
+    {
+      encoding: "utf8",
+      input: JSON.stringify({
+        session_id: "cli-stop-session",
+        cwd: root,
+        hook_event_name: "Stop",
+        stop_hook_active: false,
+      }),
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_PLATFORM: "codex",
       },
     },
   );

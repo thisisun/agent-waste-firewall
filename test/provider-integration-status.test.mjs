@@ -193,6 +193,167 @@ test("enabled but quiet providers remain unverified instead of claiming activity
   assert.equal(result.providers[1].state, "needs_install");
 });
 
+test("recognizes the current Claude installed-plugin array", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": { outcome: "not_found" },
+      "claude --version": version("2.1.207 (Claude Code)"),
+      "claude plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            id: "agent-waste-firewall@agent-waste-firewall",
+            enabled: true,
+            scope: "user",
+            installPath: RAW_PATH,
+            lastUpdated: RAW_OUTPUT,
+          },
+        ]),
+      },
+    }),
+  });
+
+  assert.equal(result.providers[1].state, "installed_unverified");
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes(RAW_PATH), false);
+  assert.equal(serialized.includes(RAW_OUTPUT), false);
+});
+
+test("does not mistake an unrelated Claude plugin array for AWF", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": { outcome: "not_found" },
+      "claude --version": version("2.1.207 (Claude Code)"),
+      "claude plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            id: "productive-unrelated-plugin@official",
+            enabled: true,
+            installPath: RAW_PATH,
+          },
+        ]),
+      },
+    }),
+  });
+
+  assert.equal(result.providers[1].state, "needs_install");
+  assert.equal(JSON.stringify(result).includes(RAW_PATH), false);
+});
+
+test("does not accept the AWF name from a different Claude marketplace", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": { outcome: "not_found" },
+      "claude --version": version("2.1.207 (Claude Code)"),
+      "claude plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            id: "agent-waste-firewall@lookalike-marketplace",
+            enabled: true,
+            installPath: RAW_PATH,
+          },
+        ]),
+      },
+    }),
+  });
+
+  assert.equal(result.providers[1].state, "needs_install");
+  assert.equal(JSON.stringify(result).includes(RAW_PATH), false);
+});
+
+test("does not let an AWF name override a conflicting Claude plugin ID", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": { outcome: "not_found" },
+      "claude --version": version("2.1.207 (Claude Code)"),
+      "claude plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            name: "agent-waste-firewall",
+            id: "agent-waste-firewall@lookalike-marketplace",
+            enabled: true,
+            installPath: RAW_PATH,
+          },
+        ]),
+      },
+    }),
+  });
+
+  assert.equal(result.providers[1].state, "needs_install");
+  assert.equal(JSON.stringify(result).includes(RAW_PATH), false);
+});
+
+test("requires a canonical ID for a name-only Claude plugin array", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": { outcome: "not_found" },
+      "claude --version": version("2.1.207 (Claude Code)"),
+      "claude plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            name: "agent-waste-firewall",
+            enabled: true,
+            installPath: RAW_PATH,
+          },
+        ]),
+      },
+    }),
+  });
+
+  assert.equal(result.providers[1].state, "needs_install");
+  assert.equal(JSON.stringify(result).includes(RAW_PATH), false);
+});
+
+test("does not treat an ambiguous Codex array as an installed collection", () => {
+  const result = providerIntegrationStatus({
+    activityByProvider: {
+      codex: "not_observed",
+      claude: "not_observed",
+    },
+    runner: runnerFrom({
+      "codex --version": version("0.146.0"),
+      "codex plugin list --json": {
+        outcome: "ok",
+        output: JSON.stringify([
+          {
+            id: "agent-waste-firewall@agent-waste-firewall",
+            enabled: true,
+            path: RAW_PATH,
+          },
+        ]),
+      },
+      "claude --version": { outcome: "not_found" },
+    }),
+  });
+
+  assert.equal(result.providers[0].state, "unknown");
+  assert.equal(JSON.stringify(result).includes(RAW_PATH), false);
+});
+
 test("sync probes preserve config discovery environment and exclude secrets", () => {
   const metadataValues = [];
   const result = providerIntegrationStatus({
@@ -316,7 +477,7 @@ test("distinguishes disabled installation from enabled unverified installation",
       "claude --version": version("claude 2.3.4"),
       "claude plugin list --json": plugins([
         {
-          id: "agent-waste-firewall",
+          id: "agent-waste-firewall@agent-waste-firewall",
           status: "installed",
         },
       ]),

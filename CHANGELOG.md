@@ -8,6 +8,12 @@
 - Add deterministic prompt preflight checks in Korean and English.
 - Add progress-aware repeat, failure, polling, and edit/revert detectors.
 - Add separate Codex and Claude Code hook registrations.
+- Require an exact provider/root match before either native or portable hook dispatch, require an
+  explicit provider for the public `hook` CLI, and reject unattributed worker input before reading
+  stdin. Debug fail-open diagnostics are now fixed strings and never include exception text.
+- Recognize Claude Code's current top-level installed-plugin array only when it contains the exact
+  canonical AWF marketplace ID. Name-only, conflicting-ID, look-alike-marketplace, unrelated
+  plugin, and ambiguous Codex-array counterexamples remain uninstalled or unknown.
 - Keep the Codex and Claude manifests on their plugin-root shell shims. Each audited manifest now
   passes its provider explicitly, and the shim accepts it only when the matching provider-root
   variable resolves to the same plugin root. This handles Codex's dual compatibility variables

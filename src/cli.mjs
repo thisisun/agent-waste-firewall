@@ -95,7 +95,7 @@ function usage() {
 Usage:
   agent-waste-firewall --version
   agent-waste-firewall check-prompt <prompt> [--json]
-  agent-waste-firewall hook
+  agent-waste-firewall hook <codex|claude>
   agent-waste-firewall record start --workspace <path> --label <safe-label> [--mode observe|warn|block] [--json]
   agent-waste-firewall record status [--json]
   agent-waste-firewall record stop [--json]
@@ -963,8 +963,16 @@ export async function main(args, options = {}) {
     } else if (command === "check-prompt") {
       await commandCheckPrompt(rest);
     } else if (command === "hook") {
+      if (rest.length !== 1 || !["codex", "claude"].includes(rest[0])) {
+        throw new Error("hook requires exactly one provider: codex or claude.");
+      }
+      const env = {
+        ...(options.env ?? process.env),
+        AGENT_WASTE_FIREWALL_PLATFORM: rest[0],
+      };
       await runHookStdio({
         ...options,
+        env,
         arguments: [...PORTABLE_WORKER_ARGUMENTS],
       });
     } else if (command === "record") {

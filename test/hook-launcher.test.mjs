@@ -46,14 +46,17 @@ function nativeLauncherPath(home) {
 
 function invoke(
   pluginRoot,
-  { input = "", env = {}, provider = undefined } = {},
+  { input = "", env = {}, provider = "claude" } = {},
 ) {
   const args = ["-p", launcher, pluginRoot];
-  if (provider !== undefined) args.push(provider);
+  args.push(provider);
+  const providerRoot = provider === "codex"
+    ? { PLUGIN_ROOT: pluginRoot }
+    : { CLAUDE_PLUGIN_ROOT: pluginRoot };
   return spawnSync("/bin/sh", args, {
     encoding: "utf8",
     input,
-    env,
+    env: { ...providerRoot, ...env },
   });
 }
 
@@ -65,6 +68,7 @@ function invokeWithLoaderEnvironmentAfterShellStartup(
   const command = [
     "launcher_path=$1",
     "plugin_root=$2",
+    'export CLAUDE_PLUGIN_ROOT="$plugin_root"',
     'export DYLD_INSERT_LIBRARIES="$3"',
     'export DYLD_LIBRARY_PATH="$4"',
     'export DYLD_FRAMEWORK_PATH="$5"',
@@ -72,7 +76,7 @@ function invokeWithLoaderEnvironmentAfterShellStartup(
     'export DYLD_FALLBACK_FRAMEWORK_PATH="$7"',
     'export LD_PRELOAD="$8"',
     'export LD_LIBRARY_PATH="$9"',
-    'set -- "$plugin_root"',
+    'set -- "$plugin_root" claude',
     '. "$launcher_path"',
   ].join("\n");
 
@@ -114,7 +118,7 @@ function readFilesRecursively(directory) {
   return contents;
 }
 
-test("streams stdin with a spaced plugin root and explicit runtime", (context) => {
+test("streams stdin only with an exact provider root and explicit runtime", (context) => {
   const pluginRoot = makeTemporaryPlugin(context, "awf hook root ");
   const explicitNode = path.join(pluginRoot, "explicit-node");
   const inheritedNode = path.join(pluginRoot, "inherited", "node");
@@ -126,6 +130,7 @@ test("streams stdin with a spaced plugin root and explicit runtime", (context) =
       'test "$1" = "$AWF_EXPECTED_WORKER" || exit 70',
       'test "$2" = --awf-portable-protocol || exit 71',
       'test "$3" = 1 || exit 72',
+      'test "$AGENT_WASTE_FIREWALL_PLATFORM" = "$AWF_EXPECTED_PROVIDER" || exit 73',
       "exec /bin/cat",
       "",
     ].join("\n"),
@@ -136,21 +141,28 @@ test("streams stdin with a spaced plugin root and explicit runtime", (context) =
   );
   const input = '{"secret":"streams-directly"}\n';
 
-  const result = invoke(pluginRoot, {
-    input,
-    env: {
-      AWF_EXPECTED_WORKER: path.join(
-        pluginRoot,
-        "scripts",
-        "hook.mjs",
-      ),
-      AWF_NODE_PATH: explicitNode,
-      PATH: path.dirname(inheritedNode),
-    },
-  });
+  for (const provider of ["codex", "claude"]) {
+    const result = invoke(pluginRoot, {
+      input,
+      provider,
+      env: {
+        AWF_EXPECTED_WORKER: path.join(
+          pluginRoot,
+          "scripts",
+          "hook.mjs",
+        ),
+        AWF_EXPECTED_PROVIDER: provider,
+        AWF_NODE_PATH: explicitNode,
+        PATH: path.dirname(inheritedNode),
+        ...(provider === "codex"
+          ? { PLUGIN_ROOT: pluginRoot }
+          : { CLAUDE_PLUGIN_ROOT: pluginRoot }),
+      },
+    });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, input);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, input);
+  }
   assert.equal(fs.existsSync(inheritedMarker), false);
 });
 
@@ -213,13 +225,13 @@ test("prefers the fixed native helper and streams stdin unchanged", (context) =>
   assert.equal(fs.existsSync(portableMarker), false);
 });
 
-test("provider and root mismatch skips native dispatch and clears a spoofed override", (context) => {
-  if (process.platform !== "darwin") return;
+test("provider and root mismatch fails open before every dispatch", (context) => {
   const pluginRoot = makeTemporaryPlugin(context);
   const home = path.join(pluginRoot, "native-home");
   const nativeLauncher = nativeLauncherPath(home);
   const nativeMarker = path.join(pluginRoot, "native-used");
   const portableNode = path.join(pluginRoot, "portable-node");
+  const portableMarker = path.join(pluginRoot, "portable-used");
   makeExecutable(
     nativeLauncher,
     `#!/bin/sh\n/usr/bin/touch "${nativeMarker}"\nexit 70\n`,
@@ -228,7 +240,7 @@ test("provider and root mismatch skips native dispatch and clears a spoofed over
     portableNode,
     [
       "#!/bin/sh",
-      'test -z "${AGENT_WASTE_FIREWALL_PLATFORM-}" || exit 78',
+      `/usr/bin/touch "${portableMarker}"`,
       "exec /bin/cat",
       "",
     ].join("\n"),
@@ -249,8 +261,12 @@ test("provider and root mismatch skips native dispatch and clears a spoofed over
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, input);
+  assert.deepEqual(JSON.parse(result.stdout), {});
+  assert.match(result.stderr, /event was not checked/u);
+  assert.equal(result.stdout.includes("provider-root-mismatch"), false);
+  assert.equal(result.stderr.includes("provider-root-mismatch"), false);
   assert.equal(fs.existsSync(nativeMarker), false);
+  assert.equal(fs.existsSync(portableMarker), false);
 });
 
 test("unsafe native helper preserves the portable fallback", (context) => {

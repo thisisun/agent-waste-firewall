@@ -285,8 +285,9 @@ Do not run `integration verify` from the same provider turn whose `UserPromptSub
 trying to witness: that event precedes the command's baseline. The watcher belongs in a terminal,
 and the qualifying prompt belongs in a separate provider conversation after the watcher starts.
 Do not claim a user-owned live-delivery pass until that manual sequence is completed and recorded.
-Codex has one such machine-specific pass in the
-[2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md); Claude Code does not.
+Codex and Claude Code each have a machine-specific user-owned live-delivery pass in the
+[2026-08-01 validation report](VALIDATION-REPORT-2026-08-01.md). The Claude prompt hook arrived
+before a later external model-account authentication failure, which reported zero usage.
 
 Do not automate a provider turn merely because a temporary blocking hook was written. Project
 trust can prevent that hook layer from being discovered, allowing the prompt to reach a model.
@@ -566,7 +567,7 @@ Public beta work still required:
 - Developer ID-sign and notarize the complete per-architecture chain and exercise the documented
   release pipeline on clean supported Macs;
 - add true subprocess `SIGKILL` checkpoints and stricter power-loss/TOCTOU durability tests;
-- prove Claude Code user-owned setup, trust, and delivery; repeat Codex on a clean machine; and
+- repeat both user-owned provider delivery gates on a clean machine; and
   prove upgrade, rollback, and uninstall without silently changing either provider's trust.
 
 Sign from the inside out (`awf-node`, `awf-hook`, app, distribution container), never use
@@ -857,8 +858,8 @@ The beta is done when a non-technical user can:
 The `LiveEventV1` schema, privacy validator, bounded spool, validated live-spool consumer, shared
 dashboard projection, fixture-driven publication tests, and closed provider reality gate are
 implemented. The isolated Codex and Claude package/install/direct-launcher acceptance gates,
-bounded delivery witness, and reversible local integration manager are also implemented. Codex
-has a machine-specific user-owned trust/live-delivery/dashboard pass; Claude Code does not. The
-next integration work is Developer ID release assembly, clean-machine lifecycle testing, and
-Claude user-owned acceptance. It must preserve each provider's trust model and must not infer
-successful monitoring from installation or retained historical events.
+bounded delivery witness, and reversible local integration manager are also implemented. Both
+providers now have machine-specific user-owned live-delivery/dashboard passes. The next
+integration work is a true subprocess `SIGKILL` crash-safety harness, Developer ID release
+assembly, and clean-machine lifecycle testing. It must preserve each provider's trust model and
+must not infer successful monitoring from installation or retained historical events.

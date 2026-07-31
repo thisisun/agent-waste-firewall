@@ -28,8 +28,9 @@ SwiftUI/AppKit 메뉴 막대, 로컬 `WKWebView`, 투명한 플로팅 감시 패
 Node.js 18 이상을 사용합니다.
 실제 훅 실행 파일은 Codex·Claude 형식의 합성 이벤트로 검증했고, 두 provider 모두
 격리된 marketplace 추가·설치·목록·설치 launcher·개인정보 검증을 통과했습니다. 다만
-사용자 소유 Codex의 훅 신뢰·실시간 전달·대시보드 현재 활동은 검증 Mac에서 통과했고,
-Claude Code와 업그레이드·제거 검증은 아직 남아 있습니다.
+사용자 소유 Codex와 Claude Code의 실시간 훅 전달·대시보드 현재 활동은 검증 Mac에서
+통과했습니다. Claude 모델 API 요청은 외부 계정 인증 단계에서 종료되어 사용량은 0이었고,
+업그레이드·제거 검증은 아직 남아 있습니다.
 provider manifest는 계속 plugin-root `/bin/sh -p` shim을 호출하고 끝에 고정된
 `codex` 또는 `claude` 인자를 전달합니다. macOS shim은 그 인자와 해당 provider root가
 자신의 plugin root에 정확히 일치할 때만 안전한 고정 사용자 경로
@@ -383,10 +384,14 @@ Claude Code는 `/hooks`에서 실제 불러온 명령을 확인하고, `disableA
 
 검증 Mac에는 canonical Codex 플러그인이 설치·활성화되어 있고, Codex `0.146.0`이 보고한
 정확한 4/4 hook의 신뢰 상태와 실제 새 이벤트 전달을 확인했습니다. 이벤트 전에 연결된
-대시보드는 Codex를 `active / observed`로 표시했습니다. 반면 독립 `integration status`는
-과거 이벤트를 현재 활동으로 재사용하지 않기 때문에 의도적으로 `installed_unverified`를
-표시할 수 있습니다. Claude Code 사용자 소유 전달은 아직 검증하지 않았습니다. Codex와
-Claude의 격리 설치·launcher·프라이버시·정리 검증은 모두 통과한 상태입니다.
+대시보드는 Codex를 `active / observed`로 표시했습니다. canonical Claude Code 플러그인도
+사용자 범위에서 설치·활성화됐고, Claude Code `2.1.220`의 새 prompt hook과
+`active / observed` 대시보드 상태를 확인했습니다. 이후 모델 API 인증 오류는 훅 전달보다
+뒤 단계에서 발생했으며, 자동화된 두 시도에서 Claude가 보고한 token·비용은 각각 0이었습니다. 반면 독립
+`integration status`는 과거 이벤트를 현재 활동으로 재사용하지 않기 때문에 의도적으로
+`installed_unverified`를
+표시할 수 있습니다. Codex와 Claude의 격리 설치·launcher·프라이버시·정리 검증도 모두
+통과한 상태입니다.
 
 ## 한계
 

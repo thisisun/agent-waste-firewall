@@ -12,6 +12,8 @@ import { workerInvocationCompatible } from "./helper-worker-handshake.mjs";
 const HOOK_INPUT_MAX_BYTES = 1024 * 1024;
 const WORKER_COMPATIBILITY_WARNING =
   "AWF worker compatibility check failed open: this event was not checked.\n";
+const HOOK_PROCESSING_WARNING =
+  "AWF hook failed open: processing failed; this event was not checked.\n";
 const FAIL_OPEN_SYSTEM_MESSAGE =
   "AWF failed open: this event was not checked. Run `agent-waste-firewall doctor`.";
 const COMPATIBILITY_FAIL_OPEN_OUTPUT = Object.freeze({
@@ -188,11 +190,14 @@ export async function runHookPayload(payload, options = {}) {
 
 export async function runHookStdio(options = {}) {
   const workerArguments = options.arguments ?? [];
+  const env = options.env ?? process.env;
+  const workerProvider = env.AGENT_WASTE_FIREWALL_PLATFORM;
   if (
     !workerInvocationCompatible({
       arguments: workerArguments,
       nodeVersion: options.nodeVersion ?? process.versions.node,
-    })
+    }) ||
+    (workerProvider !== "codex" && workerProvider !== "claude")
   ) {
     process.stderr.write(WORKER_COMPATIBILITY_WARNING);
     process.stdout.write(
@@ -202,12 +207,15 @@ export async function runHookStdio(options = {}) {
   }
   try {
     const input = await readStdin();
-    const output = await runHookPayload(JSON.parse(input), options);
+    const output = await runHookPayload(JSON.parse(input), {
+      ...options,
+      env,
+    });
     process.stdout.write(`${JSON.stringify(output)}\n`);
-  } catch (error) {
-    if (process.env.AGENT_WASTE_FIREWALL_DEBUG === "1") {
-      process.stderr.write(`AWF hook failed open: ${error.stack ?? error}\n`);
+  } catch {
+    if (env.AGENT_WASTE_FIREWALL_DEBUG === "1") {
+      process.stderr.write(HOOK_PROCESSING_WARNING);
     }
-    process.stdout.write(`${JSON.stringify(failOpenOutput(options.env))}\n`);
+    process.stdout.write(`${JSON.stringify(failOpenOutput(env))}\n`);
   }
 }

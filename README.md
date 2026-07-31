@@ -16,8 +16,9 @@ Claude Code.
 > signature, exact version, and post-sign digest. The checked-in source build intentionally
 > contains no generated Node binary, so installation stays disabled until that release payload is
 > assembled. The app is not yet Developer ID-signed, notarized, or packaged. Exact token
-> accounting and one-command provider setup remain pending. User-owned Codex trust, live delivery,
-> and fresh dashboard activity passed on the validation Mac; Claude Code remains open.
+> accounting and one-command provider setup remain pending. User-owned Codex and Claude Code live
+> hook delivery and fresh dashboard activity passed on the validation Mac. The Claude model API
+> request itself stopped at external account authentication with zero reported usage.
 
 AWF is not another token dashboard. It answers three earlier questions:
 
@@ -183,7 +184,10 @@ launchers were exercised. The isolated gate accepts exact metadata in either tru
 untrusted state, so it proves provider registration but is not a user-owned `ready` or live
 delivery pass. A separate user-owned Codex run completed the review/trust flow, returned `ready`
 for the exact 4/4 hooks, observed fresh delivery, and projected `active` in a dashboard that was
-already watching. See the [2026-08-01 validation report](docs/VALIDATION-REPORT-2026-08-01.md).
+already watching. A user-owned Claude Code run also loaded the canonical installed plugin,
+produced a fresh prompt event, and projected `active`; its later model API authentication failure
+did not invalidate the earlier provider hook dispatch. See the
+[2026-08-01 validation report](docs/VALIDATION-REPORT-2026-08-01.md).
 
 To check live hook delivery after loading the plugin, start this command in a normal terminal:
 
@@ -374,14 +378,13 @@ Claude Code, use `/hooks` to inspect the loaded command and check whether `disab
 enterprise `allowManagedHooksOnly` policy excludes plugin hooks. Managed provider settings can
 prevent a local plugin from running even when its files are present.
 
-On the validation Mac used for this repository, the shell-inherited CLI probe detects Codex
-`0.146.0` with state `needs_install`; Claude Code is `not_detected` on that shell `PATH`. The
-native supervisor's closed search path also finds Claude Code `2.1.207` in a safe user-local
-location and reports `needs_install`. These are machine-specific snapshots of the user-owned
-configuration. On the same Mac, both isolated provider acceptance gates passed marketplace
-add/install/inventory, installed-launcher execution, closed-event, raw-canary, and cleanup checks.
-Those temporary results are not claims that either user-owned provider reviewed, trusted, or
-delivered a live hook.
+On the validation Mac used for this repository, the native supervisor's closed search path finds
+Codex `0.146.0` and Claude Code `2.1.220`. Both canonical user plugins are installed and enabled.
+A dashboard started before each qualifying event projected both providers as `active / observed`;
+standalone status remains deliberately unable to reuse retained activity. Both isolated provider
+acceptance gates also passed marketplace add/install/inventory, installed-launcher execution,
+closed-event, raw-canary, and cleanup checks. Isolated results remain registration/launcher
+evidence; the separate user-owned runs provide the live-delivery evidence.
 
 The dashboard is a local sidecar web app, not a cloud service. It binds only to loopback, makes no
 outbound requests, and receives semantic events rather than raw hook payloads. Its status and SSE

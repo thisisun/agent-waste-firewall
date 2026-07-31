@@ -51,12 +51,14 @@ case "$requested_provider" in
     fi
     ;;
 esac
-if [ -n "$validated_provider" ]; then
-  AGENT_WASTE_FIREWALL_PLATFORM=$validated_provider
-  export AGENT_WASTE_FIREWALL_PLATFORM
-else
-  unset AGENT_WASTE_FIREWALL_PLATFORM
+if [ -z "$validated_provider" ]; then
+  # Both native and portable dispatch require the manifest's explicit
+  # provider-specific root. Continuing without it would let the worker infer
+  # an attribution from raw envelope shape instead of launcher evidence.
+  fail_open
 fi
+AGENT_WASTE_FIREWALL_PLATFORM=$validated_provider
+export AGENT_WASTE_FIREWALL_PLATFORM
 
 awf_darwin=false
 if [ -x /usr/bin/uname ] &&

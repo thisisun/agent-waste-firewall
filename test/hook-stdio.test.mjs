@@ -45,6 +45,8 @@ test("accepts a Codex UserPromptSubmit fixture", () => {
     permission_mode: "default",
     turn_id: "turn-1",
     prompt: "Fix the TypeError in src/auth.ts and verify with npm test.",
+  }, {
+    AGENT_WASTE_FIREWALL_PLATFORM: "codex",
   });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), {});
@@ -59,6 +61,8 @@ test("accepts a Claude UserPromptSubmit fixture and keeps unknown fields", () =>
     permission_mode: "default",
     prompt_id: "prompt-1",
     prompt: "Build everything and keep going until complete",
+  }, {
+    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
   });
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
@@ -73,6 +77,7 @@ test("handles Claude PostToolUseFailure through the real stdio hook", () => {
   const extraEnv = {
     AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
     AGENT_WASTE_FIREWALL_MODE: "block",
+    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
   };
   let result;
   for (let index = 1; index <= 2; index += 1) {
@@ -122,6 +127,7 @@ test("handles Claude PostToolUseFailure through the real stdio hook", () => {
 test("fails open with a visible, non-sensitive warning when stdin is invalid", () => {
   const result = invoke("{not-json", {
     AGENT_WASTE_FIREWALL_DEBUG: "0",
+    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
   });
   assert.equal(result.status, 0);
   assert.match(
@@ -134,6 +140,7 @@ test("fails open with a visible, non-sensitive warning when stdin is invalid", (
 test("rate-limits repeated fail-open warnings", () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "awf-fail-open-"));
   const extraEnv = { AGENT_WASTE_FIREWALL_DATA_DIR: dataDir };
+  extraEnv.AGENT_WASTE_FIREWALL_PLATFORM = "claude";
   const first = invoke("{bad-json", extraEnv);
   const second = invoke("{bad-json", extraEnv);
   assert.match(
@@ -141,6 +148,48 @@ test("rate-limits repeated fail-open warnings", () => {
     /failed open/u,
   );
   assert.deepEqual(JSON.parse(second.stdout), {});
+});
+
+test("debug fail-open diagnostics never echo malformed raw input", (context) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "awf-debug-fail-open-"));
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const canary = "RAW-CLAUDE-PROMPT-CANARY-66f0de62";
+  const result = invoke(`${canary}{`, {
+    AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+    AGENT_WASTE_FIREWALL_DEBUG: "1",
+    AGENT_WASTE_FIREWALL_PLATFORM: "claude",
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stderr, /processing failed; this event was not checked/u);
+  assert.equal(result.stdout.includes(canary), false);
+  assert.equal(result.stderr.includes(canary), false);
+  assert.deepEqual(fs.readdirSync(dataDir), []);
+});
+
+test("rootless portable worker invocation fails open without monitoring", (context) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "awf-provider-boundary-"));
+  context.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const canary = "RAW-ROOTLESS-WORKER-CANARY-a9e06f4d";
+  const result = spawnSync(
+    process.execPath,
+    [hook, ...PORTABLE_WORKER_ARGUMENTS],
+    {
+      input: `${canary}\n`,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AGENT_WASTE_FIREWALL_DATA_DIR: dataDir,
+        AGENT_WASTE_FIREWALL_PLATFORM: "",
+      },
+    },
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stderr, /compatibility check failed open/u);
+  assert.equal(result.stdout.includes(canary), false);
+  assert.equal(result.stderr.includes(canary), false);
+  assert.deepEqual(fs.readdirSync(dataDir), []);
 });
 
 test("native worker compatibility is exact and tied to the pinned runtime", () => {

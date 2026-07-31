@@ -376,27 +376,60 @@ function parseVersion(provider, output) {
     : null;
 }
 
-function pluginEntries(value) {
+function pluginEntries(value, provider) {
   if (Array.isArray(value)) {
-    return { entries: value, installedCollection: false };
+    // `claude plugin list --json` returns the installed collection directly
+    // in current releases, without repeating `installed: true` per entry.
+    return {
+      entries: value,
+      installedCollection: provider === "claude",
+      canonicalIdentityRequired: provider === "claude",
+    };
   }
   if (!isRecord(value)) return null;
   if (Array.isArray(value.installed)) {
-    return { entries: value.installed, installedCollection: true };
+    return {
+      entries: value.installed,
+      installedCollection: true,
+      canonicalIdentityRequired: false,
+    };
   }
   if (Array.isArray(value.plugins)) {
-    return { entries: value.plugins, installedCollection: false };
+    return {
+      entries: value.plugins,
+      installedCollection: false,
+      canonicalIdentityRequired: false,
+    };
   }
   return null;
 }
 
-function pluginIdentity(value) {
+function codexPluginIdentity(value) {
   return (
     value === PLUGIN_NAME ||
     (typeof value === "string" &&
       value.startsWith(`${PLUGIN_NAME}@`) &&
       value.length > PLUGIN_NAME.length + 1)
   );
+}
+
+function pluginEntryIdentity(
+  provider,
+  entry,
+  canonicalIdentityRequired,
+) {
+  if (provider === "claude") {
+    const qualifiedIdentities = [entry.id, entry.pluginId].filter(
+      (value) => typeof value === "string",
+    );
+    if (qualifiedIdentities.length > 0) {
+      return qualifiedIdentities.every(
+        (value) => value === `${PLUGIN_NAME}@${PLUGIN_NAME}`,
+      );
+    }
+    return !canonicalIdentityRequired && entry.name === PLUGIN_NAME;
+  }
+  return [entry.name, entry.id, entry.pluginId].some(codexPluginIdentity);
 }
 
 function statusFlags(status) {
@@ -416,14 +449,14 @@ function statusFlags(status) {
   }
 }
 
-function parsePluginList(output) {
+function parsePluginList(provider, output) {
   let parsed;
   try {
     parsed = JSON.parse(output);
   } catch {
     return null;
   }
-  const collection = pluginEntries(parsed);
+  const collection = pluginEntries(parsed, provider);
   if (
     collection === null ||
     collection.entries.some((entry) => !isRecord(entry))
@@ -431,7 +464,11 @@ function parsePluginList(output) {
     return null;
   }
   const matches = collection.entries.filter((entry) =>
-    [entry.name, entry.id, entry.pluginId].some(pluginIdentity)
+    pluginEntryIdentity(
+      provider,
+      entry,
+      collection.canonicalIdentityRequired,
+    )
   );
   if (matches.length === 0) {
     return { installed: false, enabled: false };
@@ -498,7 +535,7 @@ function evaluatePluginResult(provider, activity, version, listResult) {
   if (listResult.outcome !== "ok") {
     return { provider, state: "unknown", version, activity };
   }
-  const plugin = parsePluginList(listResult.output);
+  const plugin = parsePluginList(provider, listResult.output);
   if (plugin === null) {
     return { provider, state: "unknown", version, activity };
   }
