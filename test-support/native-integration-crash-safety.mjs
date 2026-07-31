@@ -97,7 +97,7 @@ const REPORT_CHECK_KEYS = [
   "rollbackRecovered",
   "uninstallRecovered",
   "capacityRecovered",
-  "invalidCheckpointRejected",
+  "invalidControlsRejected",
   "rawCanaryExcluded",
   "knownTransactionsConverged",
   "unknownTransactionPreserved",
@@ -498,6 +498,35 @@ function requireNeedsRepair(summary, reason) {
   }
 }
 
+function readCanonicalActivationReleaseID(productRoot) {
+  try {
+    const activation = path.join(
+      productRoot,
+      "integration-v1",
+      "activation.json",
+    );
+    const status = fs.lstatSync(activation);
+    if (!status.isFile() || status.isSymbolicLink()) {
+      fail("recovery_failed");
+    }
+    const data = fs.readFileSync(activation);
+    if (data.length === 0 || data.length > 128) {
+      fail("recovery_failed");
+    }
+    const source = data.toString("utf8");
+    const match = /^\{"v":1,"releaseId":"(rel_[0-9a-f]{32})","workerProtocol":1\}\n$/u.exec(
+      source,
+    );
+    if (match === null || !data.equals(Buffer.from(source, "utf8"))) {
+      fail("recovery_failed");
+    }
+    return match[1];
+  } catch (error) {
+    if (error instanceof CrashSafetyFailure) throw error;
+    fail("recovery_failed");
+  }
+}
+
 function fileContainsAnyCanary(file, canaries) {
   const data = fs.readFileSync(file);
   return canaries.some((canary) => data.indexOf(canary) !== -1);
@@ -568,6 +597,24 @@ async function runInvalidCheckpointScenario(
     result.code !== 64 ||
     result.signal !== null ||
     !result.stdout.equals(expected) ||
+    fs.existsSync(productRoot)
+  ) {
+    fail("invalid_checkpoint_failed");
+  }
+  const mismatched = await runCaptured(
+    harness,
+    harnessArguments(
+      "install",
+      "afterLedgerRemoval",
+      productRoot,
+      payload,
+    ),
+    scenarioRoot,
+  );
+  if (
+    mismatched.code !== 64 ||
+    mismatched.signal !== null ||
+    !mismatched.stdout.equals(expected) ||
     fs.existsSync(productRoot)
   ) {
     fail("invalid_checkpoint_failed");
@@ -734,7 +781,11 @@ async function runRollbackScenarios(
     const first = createPayload(scenarioRoot, 1);
     const second = createPayload(scenarioRoot, 2);
     await installHealthy(harness, productRoot, first);
+    const rollbackTarget = readCanonicalActivationReleaseID(productRoot);
     await installHealthy(harness, productRoot, second);
+    if (readCanonicalActivationReleaseID(productRoot) === rollbackTarget) {
+      fail("recovery_failed");
+    }
     await runToCheckpoint(
       harness,
       "rollback",
@@ -746,11 +797,17 @@ async function runRollbackScenarios(
     requireCanariesExcluded(productRoot, [first.canary, second.canary]);
     const recovered = await runSummary(
       harness,
-      "install",
+      "rollback",
       productRoot,
       second,
     );
     requireHealthy(recovered);
+    if (recovered.mutation !== "rolledBack" || !recovered.canRollback) {
+      fail("recovery_failed");
+    }
+    if (readCanonicalActivationReleaseID(productRoot) !== rollbackTarget) {
+      fail("recovery_failed");
+    }
     await inspectHealthy(harness, productRoot, second, "recovery_failed");
     requireCanariesExcluded(productRoot, [first.canary, second.canary]);
     counters.scenarios += 1;
@@ -911,7 +968,7 @@ async function runCrashSafety(harness, temporaryRoot, report) {
     nextScenario(),
   );
   counters.scenarios += 1;
-  report.checks.invalidCheckpointRejected = true;
+  report.checks.invalidControlsRejected = true;
   report.checks.harnessValidated = true;
 
   await runFreshInstallScenarios(

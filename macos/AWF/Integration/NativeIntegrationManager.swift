@@ -305,6 +305,67 @@ final class NativeIntegrationManager: @unchecked Sendable {
         let runtime: NativeIntegrationFilesystem.SecureFile
     }
 
+    private struct RollbackIntent {
+        static let filename = "rollback.intent"
+        static let maximumBytes = 160
+
+        let fromReleaseID: String
+        let toReleaseID: String
+
+        init(fromReleaseID: String, toReleaseID: String) throws {
+            guard
+                NativeIntegrationLedger.validReleaseID(fromReleaseID),
+                NativeIntegrationLedger.validReleaseID(toReleaseID),
+                fromReleaseID != toReleaseID
+            else {
+                throw NativeIntegrationFailure.invalidActivation
+            }
+            self.fromReleaseID = fromReleaseID
+            self.toReleaseID = toReleaseID
+        }
+
+        static func parse(_ data: Data) throws -> Self {
+            guard
+                !data.isEmpty,
+                data.count <= maximumBytes,
+                let source = String(data: data, encoding: .utf8)
+            else {
+                throw NativeIntegrationFailure.invalidActivation
+            }
+            struct Record: Decodable {
+                let v: Int
+                let fromReleaseId: String
+                let toReleaseId: String
+            }
+            let record: Record
+            do {
+                record = try JSONDecoder().decode(Record.self, from: data)
+            } catch {
+                throw NativeIntegrationFailure.invalidActivation
+            }
+            guard record.v == 1 else {
+                throw NativeIntegrationFailure.invalidActivation
+            }
+            let intent = try Self(
+                fromReleaseID: record.fromReleaseId,
+                toReleaseID: record.toReleaseId
+            )
+            guard source == intent.canonicalSource else {
+                throw NativeIntegrationFailure.invalidActivation
+            }
+            return intent
+        }
+
+        var canonicalSource: String {
+            #"{"v":1,"fromReleaseId":"\#(fromReleaseID)","toReleaseId":"\#(toReleaseID)"}"#
+                + "\n"
+        }
+
+        var canonicalData: Data {
+            Data(canonicalSource.utf8)
+        }
+    }
+
     private let layout: Layout
     private let payload: NativeIntegrationPayload?
     private let checkpointHandler: CheckpointHandler
@@ -391,7 +452,6 @@ final class NativeIntegrationManager: @unchecked Sendable {
         }
         return try withMutationLock {
             try requireInstalledStructure()
-            try cleanupKnownTransactions()
             let activationData = try NativeIntegrationFilesystem
                 .readSecureData(
                     at: layout.activation,
@@ -404,6 +464,14 @@ final class NativeIntegrationManager: @unchecked Sendable {
                 throw NativeIntegrationFailure.invalidActivation
             }
             let ledger = try readLedger()
+            if try completedRollbackTransaction(
+                activation: activation,
+                ledger: ledger
+            ) {
+                try cleanupKnownTransactions()
+                return .rolledBack
+            }
+            try cleanupKnownTransactions()
             guard
                 let candidate = ledger.releases.reversed().first(where: {
                     $0.releaseId != activation.releaseID &&
@@ -417,6 +485,16 @@ final class NativeIntegrationManager: @unchecked Sendable {
                 layout.transactions
             )
             let transaction = try createTransactionDirectory()
+            let rollbackIntent = try RollbackIntent(
+                fromReleaseID: activation.releaseID,
+                toReleaseID: candidate.releaseId
+            )
+            try NativeIntegrationFilesystem.createDataFile(
+                at: transaction.appendingPathComponent(
+                    RollbackIntent.filename
+                ),
+                data: rollbackIntent.canonicalData
+            )
             let stagedActivation = transaction.appendingPathComponent(
                 "activation.new"
             )
@@ -1420,6 +1498,52 @@ final class NativeIntegrationManager: @unchecked Sendable {
         }
     }
 
+    private func completedRollbackTransaction(
+        activation: NativeHookActivation,
+        ledger: NativeIntegrationLedger
+    ) throws -> Bool {
+        guard
+            NativeIntegrationFilesystem.entryExists(layout.transactions)
+        else {
+            return false
+        }
+        try NativeIntegrationFilesystem.requireSecureDirectory(
+            layout.transactions
+        )
+        for name in try NativeIntegrationFilesystem.childNames(
+            layout.transactions
+        ) where validTransactionName(name) {
+            let transaction = layout.transactions.appendingPathComponent(
+                name,
+                isDirectory: true
+            )
+            try NativeIntegrationFilesystem.requireSecureDirectory(
+                transaction
+            )
+            let intentURL = transaction
+                .appendingPathComponent(RollbackIntent.filename)
+            guard
+                NativeIntegrationFilesystem.entryExists(intentURL),
+                let data = try? NativeIntegrationFilesystem.readSecureData(
+                    at: intentURL,
+                    maximumBytes: RollbackIntent.maximumBytes
+                ),
+                let intent = try? RollbackIntent.parse(data),
+                intent.toReleaseID == activation.releaseID,
+                ledger.release(intent.fromReleaseID) != nil,
+                let target = ledger.release(intent.toReleaseID),
+                validActiveInstall(
+                    release: target,
+                    expectedHelperSHA256: ledger.helperSHA256
+                )
+            else {
+                continue
+            }
+            return true
+        }
+        return false
+    }
+
     private func cleanupTransaction(_ transaction: URL) throws {
         guard NativeIntegrationFilesystem.entryExists(transaction) else {
             return
@@ -1446,6 +1570,7 @@ final class NativeIntegrationManager: @unchecked Sendable {
             "ledger.new",
             "ledger.final",
             "ledger.reconcile",
+            RollbackIntent.filename,
         ] {
             try NativeIntegrationFilesystem.unlinkFileIfPresent(
                 transaction.appendingPathComponent(filename)

@@ -146,7 +146,8 @@
 - Make interrupted owned release removal retryable, prune only digest-matched non-retained
   ledger-owned releases before capacity is exhausted, finish an uninstall interrupted after ledger
   removal, and clean recognized stale transactions on repair/rollback while preserving unknown
-  residue.
+  residue. Persist a canonical release-ID-only rollback intent so retrying after publication
+  adopts the completed target rather than toggling activation back.
 - Pin thin arm64/x64 Node.js `v24.18.0` release inputs and add dependency-free archive preparation
   and app finalization. The finalizer requires hardened runtime, the exact one-key
   `allow-jit=true` entitlement set, exact version, a fixed V8/JIT readiness probe, complete license,

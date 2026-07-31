@@ -53,7 +53,7 @@ arguments fail open with a fixed provider-visible warning before stdin is read, 
 is published. The native path still starts the Node worker only once per event.
 
 The current candidate passed `npm run check` across 74 JavaScript and 61 JSON files, all 357
-JavaScript tests, and all 101 native unit
+JavaScript tests, and all 102 native unit
 tests. A real Debug helper plus an explicit Node.js `v24.18.0` runtime then processed all 55
 expected semantic events in each 5-warmup/50-sample run:
 
@@ -91,11 +91,12 @@ validates that exact marker, sends `SIGKILL`, verifies the signal exit, and retr
 process. The complete local run passed 30 isolated scenarios and 34 killed child processes:
 
 - fresh install, upgrade, and repair at all six staging/publication/validation checkpoints;
-- final-ledger publication, rollback at three checkpoints, and uninstall at five removal
-  checkpoints;
+- final-ledger publication, rollback at three checkpoints with exact target-activation retention,
+  and uninstall at five removal checkpoints;
 - six consecutive release-publication crashes beyond the four-record transient ledger capacity,
   followed by a healthy bounded recovery;
-- invalid checkpoint rejection before product-root mutation; and
+- unknown checkpoints and mismatched operation/checkpoint pairs rejected before product-root
+  mutation; and
 - known transaction cleanup, unknown transaction preservation, and binary/hidden-file raw-canary
   exclusion throughout the product tree.
 

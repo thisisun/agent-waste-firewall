@@ -28,6 +28,51 @@ private enum HarnessCheckpoint: String {
     case afterReleaseRemoval
     case afterLedgerRemoval
 
+    func isAllowed(for operation: HarnessOperation) -> Bool {
+        if self == .none {
+            return true
+        }
+        switch operation {
+        case .install, .repair:
+            switch self {
+            case .afterStagingComplete,
+                 .afterLedgerPublish,
+                 .afterReleasePublish,
+                 .afterHelperPublish,
+                 .afterActivationPublish,
+                 .afterValidation,
+                 .afterFinalLedgerPublish,
+                 .afterRuntimeRemoval,
+                 .afterReleaseRemoval:
+                return true
+            default:
+                return false
+            }
+        case .rollback:
+            switch self {
+            case .afterStagingComplete,
+                 .afterActivationPublish,
+                 .afterValidation:
+                return true
+            default:
+                return false
+            }
+        case .uninstall:
+            switch self {
+            case .afterHelperRemoval,
+                 .afterActivationRemoval,
+                 .afterRuntimeRemoval,
+                 .afterReleaseRemoval,
+                 .afterLedgerRemoval:
+                return true
+            default:
+                return false
+            }
+        case .inspect:
+            return false
+        }
+    }
+
     var nativeValue: NativeIntegrationCheckpoint? {
         switch self {
         case .none:
@@ -73,7 +118,8 @@ private struct HarnessArguments {
         guard
             arguments.count == 6,
             let operation = HarnessOperation(rawValue: arguments[1]),
-            let checkpoint = HarnessCheckpoint(rawValue: arguments[2])
+            let checkpoint = HarnessCheckpoint(rawValue: arguments[2]),
+            checkpoint.isAllowed(for: operation)
         else {
             throw HarnessFailure.invalidArguments
         }

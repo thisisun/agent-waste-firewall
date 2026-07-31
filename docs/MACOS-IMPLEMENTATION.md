@@ -101,7 +101,8 @@ plugin/CLI package and intentionally excludes `macos/`.
   ownership ledger, same-volume staging, process and `flock` locking, descriptor-relative atomic
   publication, side-by-side releases, three retained verified releases plus one bounded transient
   slot, crash reconciliation, capacity-safe digest-matched owned-release pruning, and retryable
-  owned deletion after interruption.
+  owned deletion after interruption. A canonical release-ID-only rollback intent lets the same
+  operation adopt an already published target after restart instead of toggling activation back.
 - A standalone test-only `AWFLifecycleCrashHarness` exposes closed post-sync checkpoints without
   entering the app bundle. Its dependency-free Node driver verifies 30 isolated lifecycle
   scenarios with 34 real `SIGKILL` exits, bounded retry convergence, hidden-tree raw-canary
@@ -216,7 +217,7 @@ xcodebuild \
 This command verifies source compilation, the embedded executable
 `Contents/Helpers/awf-hook`, guardian-mark app icon, Info.plist processing, localization, and
 folder-resource assembly. It does not create a signed release. The local `AWFTests` target passed
-101/101 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
+102/102 tests with no failures or skips, including Node 18+ probe boundaries, inherited-`PATH` rejection,
 bounded Finder-style NVM discovery, a real bundled-worker launch, exact native provider and
 activation contracts, raw stdin streaming, filesystem identity revalidation, timeout/signal
 process-group cleanup, closed status/provider fetches, exact protocol decoding, navigation

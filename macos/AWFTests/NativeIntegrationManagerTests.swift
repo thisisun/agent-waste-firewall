@@ -916,6 +916,59 @@ final class NativeIntegrationManagerTests: XCTestCase {
         XCTAssertEqual(second.inspect().condition, .healthy)
     }
 
+    func testRollbackRetryAdoptsCompletedIntentWithoutToggling()
+        throws
+    {
+        let firstPayload = try makePayload(label: "rollback-intent-first")
+        let first = makeManager(payload: firstPayload)
+        XCTAssertEqual(try first.install(), .installed)
+        let firstReleaseID = try XCTUnwrap(first.inspect().activeReleaseID)
+
+        let secondPayload = try makePayload(label: "rollback-intent-second")
+        let second = makeManager(payload: secondPayload)
+        XCTAssertEqual(try second.install(), .upgraded)
+        let secondReleaseID = try XCTUnwrap(second.inspect().activeReleaseID)
+
+        let interrupted = transactionsURL.appendingPathComponent(
+            "txn_11111111111111111111111111111111",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: interrupted,
+            withIntermediateDirectories: false
+        )
+        try setMode(0o700, at: interrupted)
+        let intent =
+            #"{"v":1,"fromReleaseId":"\#(secondReleaseID)","toReleaseId":"\#(firstReleaseID)"}"#
+            + "\n"
+        let intentURL = interrupted.appendingPathComponent(
+            "rollback.intent"
+        )
+        try Data(intent.utf8).write(to: intentURL)
+        try setMode(0o600, at: intentURL)
+        let swappedActivation = interrupted.appendingPathComponent(
+            "activation.new"
+        )
+        try Data(
+            NativeHookActivation.canonicalSource(
+                releaseID: secondReleaseID
+            ).utf8
+        ).write(to: swappedActivation)
+        try setMode(0o600, at: swappedActivation)
+        try Data(
+            NativeHookActivation.canonicalSource(
+                releaseID: firstReleaseID
+            ).utf8
+        ).write(to: activationURL, options: .atomic)
+        try setMode(0o600, at: activationURL)
+
+        XCTAssertEqual(try second.rollback(), .rolledBack)
+        XCTAssertEqual(second.inspect().activeReleaseID, firstReleaseID)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: interrupted.path)
+        )
+    }
+
     func testHealthyRepairCleansARecognizedInterruptedTransaction()
         throws
     {

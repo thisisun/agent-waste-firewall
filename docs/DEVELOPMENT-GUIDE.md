@@ -559,7 +559,8 @@ Implemented release inputs and lifecycle:
   side-by-side releases and canonical activation atomically, retains verified rollback candidates,
   reconciles definitely missing non-active crash records, prunes only digest-matched non-retained
   ledger-owned releases before the bounded ledger fills, and makes half-completed owned removals
-  retryable;
+  retryable. Rollback persists a canonical release-ID-only intent so a retry adopts an already
+  published target instead of toggling back;
 - `AWFLifecycleCrashHarness` is a test-only executable. The Node driver sends real `SIGKILL`s only
   after a closed checkpoint marker, retries the lifecycle operation, scans hidden files and
   binaries for raw canaries, requires known transactions to converge, and preserves unknown
